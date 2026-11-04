@@ -6,6 +6,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from stdio_utf8 import configure_stdio
+
+configure_stdio()
+
 
 def die(message: str) -> None:
     print(message)

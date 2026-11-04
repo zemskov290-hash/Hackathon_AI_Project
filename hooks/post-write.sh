@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# После правки файлов агентом: проверить текущий проект, если он есть.
-# Вход хука IDE — JSON в stdin. Из терминала stdin не читаем, чтобы не ждать ввода.
+# Unix wrapper. On Windows run: python hooks/post_write.py
+# python3 on Windows is often the Microsoft Store stub, so python comes first.
 if [ ! -t 0 ]; then
   cat >/dev/null || true
 fi
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT"
-if ! python3 scripts/strat.py status >/dev/null 2>&1; then
-  exit 0
+if command -v python >/dev/null 2>&1; then
+  exec python "$ROOT/hooks/post_write.py"
 fi
-python3 scripts/strat.py check
+if command -v python3 >/dev/null 2>&1; then
+  exec python3 "$ROOT/hooks/post_write.py"
+fi
+exit 0

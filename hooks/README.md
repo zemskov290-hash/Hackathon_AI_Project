@@ -2,7 +2,9 @@
 
 Хуки не включены. Без них агент всё равно обязан вызывать `strat check` и `strat log` по `AGENTS.md`. Включите хуки, когда ведёте боевой проект и хотите напоминание.
 
-Скрипты лежат здесь, а не внутри каталога IDE: и Cursor, и Claude Code вызывают одну и ту же команду. Оба скрипта сначала опустошают stdin, если их запустил хук.
+Рабочие скрипты — `hooks/post_write.py` и `hooks/stage_end.py`. Их запускает тот же интерпретатор, что и CLI (`sys.executable` внутри, снаружи — команда `python`). Оболочки `post-write.sh` и `stage-end.sh` только ищут сначала `python`, потом `python3`: на Windows `python3` часто является заглушкой Store.
+
+Оба скрипта сначала опустошают stdin, если их запустил хук.
 
 ## Cursor
 
@@ -14,11 +16,12 @@
 
 Фрагмент из `hooks/claude-settings.json.example` добавьте в `.claude/settings.json`, не затирая другие ключи. `PostToolUse` с матчером `Edit|Write` гоняет проверку. `Stop` печатает напоминание. Не возвращайте код 2: это удержало бы ход.
 
-Проверка ищет проект через `projects/.current` или единственный боевой проект. Папка `projects/_example` сама по себе текущей не становится. Пока боевого проекта нет, `post-write.sh` ничего не ломает и выходит с кодом 0.
+Проверка ищет проект через `projects/.current` или единственный боевой проект. Папка `projects/_example` сама по себе текущей не становится. Пока боевого проекта нет, `post_write.py` ничего не ломает и выходит с кодом 0.
 
-Ручной запуск тот же:
+Ручной запуск:
 
-```text
-python3 scripts/strat.py check
-python3 scripts/strat.py status
+```powershell
+python scripts/strat.py check
+python scripts/strat.py status
+python hooks/post_write.py
 ```

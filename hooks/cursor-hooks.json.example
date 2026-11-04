@@ -1,7 +1,7 @@
 {
   "version": 1,
   "hooks": {
-    "afterFileEdit": [{ "command": "hooks/post-write.sh", "timeout": 60 }],
-    "stop": [{ "command": "hooks/stage-end.sh", "timeout": 15 }]
+    "afterFileEdit": [{ "command": "python hooks/post_write.py", "timeout": 60 }],
+    "stop": [{ "command": "python hooks/stage_end.py", "timeout": 15 }]
   }
 }

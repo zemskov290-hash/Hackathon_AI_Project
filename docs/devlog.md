@@ -1,5 +1,17 @@
 # Журнал разработки
 
+## 2026-11-04 — ошибка на Windows, нашёл человек на своей машине
+
+Клон ветки на Windows, PowerShell, git 2.45.1.windows.1, `core.autocrlf=true`. Python 3.13.1 доступен как `python`. `python3` — заглушка Microsoft Store и падает.
+
+Что сломалось:
+
+- `python -m unittest discover -s tests` — 14 тестов, 3 падения и 10 ошибок. В образце `test_read_material_explains_missing_pdf_package` stdout пустой, строки `pypdf` нет: сообщение по-русски не записывалось в поток с кодировкой консоли. Тесты, которые читали вывод дочернего процесса, спотыкались об ту же кодировку. В хуках был зашит `python3`.
+- `python scripts/strat.py check projects/_example` — код 1, `[hash] S001..S004`: перевод строк LF стал CRLF при выгрузке, байты файла разошлись с записанным sha256.
+- `init`, `status` и `resume` отработали, когда в окружении стояло `PYTHONIOENCODING=utf-8`.
+
+Починка в ADR 0005: `.gitattributes` с `eol=lf`, хеш текста после снятия CR, stdout и stderr принудительно UTF-8, хуки на `sys.executable`, команды в README через `python`, CI матрицей `ubuntu-latest` и `windows-latest`. Локально после починки 15 тестов зелёные, включая файл с CRLF и запуск `read_material.py` при `PYTHONIOENCODING=cp1251`.
+
 ## 2026-11-04 — первая рабочая версия
 
 Собрано за одну сессию реализации. Точные минуты сессии заранее не засекались, поэтому цифра времени здесь не ставится: в продукт не кладём неснятое измерение.

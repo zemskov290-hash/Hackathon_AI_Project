@@ -1,0 +1,11 @@
+# Working copies stay LF, including on Windows with core.autocrlf=true.
+# sha256 of text sources is also computed after CR is stripped; see ADR 0005.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.pdf binary
+*.docx binary
+*.xlsx binary

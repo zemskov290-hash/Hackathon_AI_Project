@@ -18,9 +18,16 @@ BROKEN = ROOT / "tests" / "fixtures" / "broken_project"
 
 def run(*args: str, env: dict | None = None, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     merged = os.environ.copy()
-    for key in ("STRAT_LLM_API_KEY", "OPENROUTER_API_KEY", "STRAT_PROJECTS_DIR", "STRAT_MODEL_CHEAP", "STRAT_MODEL_STRONG"):
+    for key in (
+        "STRAT_LLM_API_KEY",
+        "OPENROUTER_API_KEY",
+        "STRAT_PROJECTS_DIR",
+        "STRAT_MODEL_CHEAP",
+        "STRAT_MODEL_STRONG",
+        "PYTHONIOENCODING",
+        "PYTHONUTF8",
+    ):
         merged.pop(key, None)
-    merged["PYTHONIOENCODING"] = "utf-8"
     if env:
         merged.update(env)
     return subprocess.run(
@@ -28,6 +35,8 @@ def run(*args: str, env: dict | None = None, cwd: Path | None = None) -> subproc
         cwd=cwd or ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         env=merged,
         timeout=30,
     )
@@ -88,6 +97,7 @@ class ExampleAndHelpTests(unittest.TestCase):
         doctor = run("doctor")
         assert_code(doctor)
         self.assertIn("ручной режим", doctor.stdout)
+        self.assertIn("utf-8", doctor.stdout.casefold())
         complete = run("complete", "--role", "cheap", "--prompt", "ping")
         assert_code(complete)
         self.assertIn("MODE: manual", complete.stdout)
@@ -111,6 +121,9 @@ class ExampleAndHelpTests(unittest.TestCase):
         self.assertIn("MODE: error", result.stdout)
 
     def test_read_material_explains_missing_pdf_package(self) -> None:
+        env = os.environ.copy()
+        env.pop("PYTHONUTF8", None)
+        env["PYTHONIOENCODING"] = "cp1251"
         with tempfile.TemporaryDirectory() as tmp:
             pdf = Path(tmp) / "empty.pdf"
             pdf.write_bytes(b"%PDF-1.4\n")
@@ -118,22 +131,29 @@ class ExampleAndHelpTests(unittest.TestCase):
                 [sys.executable, str(ROOT / "scripts" / "read_material.py"), str(pdf)],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="strict",
+                env=env,
                 timeout=30,
             )
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("pypdf", result.stdout)
+        self.assertIn("нужен", result.stdout)
 
     def test_hooks_do_not_block_without_a_project(self) -> None:
-        for name in ("post-write.sh", "stage-end.sh"):
+        for name in ("post_write.py", "stage_end.py"):
             result = subprocess.run(
-                ["bash", str(ROOT / "hooks" / name)],
+                [sys.executable, str(ROOT / "hooks" / name)],
                 cwd=ROOT,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 stdin=subprocess.DEVNULL,
                 timeout=30,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("advance", result.stdout)
 
 
 class WorkflowTests(unittest.TestCase):
@@ -372,6 +392,20 @@ class WorkflowTests(unittest.TestCase):
         assert_code(impact)
         self.assertIn("E001", impact.stdout)
         self.assertIn("E002", impact.stdout)
+
+    def test_crlf_text_matches_lf_hash(self) -> None:
+        dest = Path(self.tmp.name) / "_example"
+        shutil.copytree(ROOT / "projects" / "_example", dest)
+        converted = 0
+        for path in dest.rglob("*"):
+            if path.is_file() and path.suffix.lower() in {".md", ".json", ".jsonl"}:
+                data = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+                path.write_bytes(data)
+                converted += 1
+        self.assertGreater(converted, 0)
+        checked = self.cli("check", str(dest))
+        assert_code(checked)
+        self.assertIn("OK", checked.stdout)
 
     def test_current_project_resolution(self) -> None:
         assert_code(self.cli("init", "one", "--title", "Первый"))

@@ -6,12 +6,22 @@
 
 ## Запуск за пять минут
 
-Нужен Python 3.10+ и агентная IDE. Ключ API, облако и платные пакеты не нужны.
+Нужен Python 3.10+ и агентная IDE. Ключ API, облако и платные пакеты не нужны. Команда ниже — `python`: так интерпретатор называется и в PowerShell на Windows, и после установки с python.org. `python3` на Windows часто оказывается заглушкой Microsoft Store и не запускает этот репозиторий.
 
-```text
-python3 --version
-python3 scripts/strat.py check projects/_example
-python3 scripts/strat.py resume projects/_example
+PowerShell или cmd, из корня репозитория:
+
+```powershell
+python --version
+python scripts/strat.py check projects/_example
+python scripts/strat.py resume projects/_example
+```
+
+Тот же смысл в bash, если `python` есть в PATH:
+
+```bash
+python --version
+python scripts/strat.py check projects/_example
+python scripts/strat.py resume projects/_example
 ```
 
 Дальше откройте папку репозитория в Cursor и напишите в чат:
@@ -26,7 +36,7 @@ python3 scripts/strat.py resume projects/_example
 
 ## Что должно быть под рукой
 
-Обязательно: этот репозиторий на диске и Python 3.10+. Сеть нужна только если агент ищет открытые источники средствами IDE.
+Обязательно: этот репозиторий на диске и Python 3.10+ под именем `python`. Сеть нужна только если агент ищет открытые источники средствами IDE. На Windows не используйте заглушку `python3` из Store.
 
 Не кладите в репозиторий секреты, ключи и закрытые выгрузки. `.env` в `.gitignore`.
 
@@ -35,7 +45,7 @@ python3 scripts/strat.py resume projects/_example
 - файл `.env` по образцу `.env.example` — совместимый с OpenRouter API, если нужна маршрутизация дешёвой и сильной модели и точный расход. Без ключа `strat complete` отвечает `MODE: manual` и денег не тратит;
 - пакеты `pypdf`, `python-docx`, `openpyxl` — только чтобы `scripts/read_material.py` читал pdf, docx и xlsx. Без них ядро работает, цитату переносят вручную.
 
-Проверка окружения: `python3 scripts/strat.py doctor`.
+Проверка окружения: `python scripts/strat.py doctor`. В строке «Вывод» должно быть `utf-8`: CLI само переключает stdout, отдельная переменная `PYTHONIOENCODING` не нужна.
 
 ## Как устроена работа
 
@@ -62,7 +72,7 @@ decisions.md  log.md  log.jsonl
 | `resume [проект]` | краткий бриф, чтобы продолжить в новом чате |
 | `status [проект]` | этап, контрольные точки, пробелы, затраты |
 | `use <проект>` | сделать проект текущим |
-| `add-source [проект] <url\|файл>` | зарегистрировать источник, для файла посчитать sha256; повтор не создаёт дубль |
+| `add-source [проект] <url\|файл>` | зарегистрировать источник и посчитать sha256; у текста перевод строк перед хешем приводится к LF; повтор не создаёт дубль |
 | `add-evidence [проект] --claim ... --type fact --source S001 --quote "..."` | добавить свидетельство; строку можно дописать в JSONL и проверить `check` |
 | `check [проект]` | дыры в фактах, ссылках, вариантах и обещаниях; код выхода ненулевой, текст по-русски |
 | `impact [проект] <S001\|E001>` | какие записи и строки зависят от источника, включая `depends_on` |
@@ -74,7 +84,7 @@ decisions.md  log.md  log.jsonl
 | `complete --role cheap\|strong` | необязательный API-вызов |
 | `doctor` | версия Python, режим модели, необязательные пакеты |
 
-Полный список: `python3 scripts/strat.py --help`.
+Полный список: `python scripts/strat.py --help`.
 
 ## Карта репозитория
 
@@ -100,4 +110,4 @@ tests/                            unittest и сломанная фикстур�
 
 ## Ограничения
 
-Проверка текстов — эвристика по разделам «Факты», заголовкам вариантов и маркерам обещаний, а не понимание смысла. Цитату на веб-странице CLI не сверяет с живым сайтом: для URL нет файла. Подробности и что делать дальше — в [`docs/devlog.md`](docs/devlog.md).
+Проверка текстов — эвристика по разделам «Факты», заголовкам вариантов и маркерам обещаний, а не понимание смысла. Цитату на веб-странице CLI не сверяет с живым сайтом: для URL нет файла. sha256 текстового источника считается после приведения перевода строк к LF, поэтому он не равен хешу сырых байт, если в файле остались CR. Подробности — в [`docs/decisions/0005-line-endings-and-utf8.md`](docs/decisions/0005-line-endings-and-utf8.md) и [`docs/devlog.md`](docs/devlog.md).
