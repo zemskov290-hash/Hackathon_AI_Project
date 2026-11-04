@@ -75,8 +75,26 @@ python scripts/strat.py resume
 В ответе человеку отделяй факт, гипотезу и прогноз. На спорный тезис ставь `[E..]`. Журнал:
 
 ```text
-python scripts/strat.py log <проект> <этап> "<действие>" --grounds "..." --minutes N --tokens N --cost X --model "..."
+python scripts/strat.py log <проект> <этап> --message-file action.txt --grounds-file grounds.txt --minutes N --tokens N --cost X --model "..."
 ```
+
+Латинский текст можно оставить в команде. Русский — нет, см. ниже.
+
+## Русский текст в аргументах на Windows
+
+PowerShell 5.1 портит кириллицу в аргументах процесса: в файлы попадают знаки вопроса. Не передавай русский `--title`, сообщение журнала, `--grounds`, `--reason`, `--claim`, `--quote` и `--note` в кавычках командной строки.
+
+Запиши текст в файл UTF-8 и вызови парный флаг: `--title-file`, `--message-file`, `--grounds-file`, `--reason-file`, `--claim-file`, `--quote-file`, `--note-file`. Значение `-` читает этот один аргумент из stdin. Годятся переменные `STRAT_TITLE`, `STRAT_LOG_MESSAGE`, `STRAT_GROUNDS`, `STRAT_REASON`, `STRAT_CLAIM`, `STRAT_QUOTE`, `STRAT_NOTE`.
+
+Если аргумент всё же нужен в командной строке, сначала в том же окне PowerShell:
+
+```powershell
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+chcp 65001
+```
+
+Строку из одних «?» или с символом U+FFFD CLI не записывает.
 
 Без ключа API пиши `model=ide/subscription` и не выдумывай счёт. `cost` показывает накопленное. `impact` показывает, какие выводы зависят от источника. `retract` снимает свидетельство и заставляет поправить текст.
 

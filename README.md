@@ -16,6 +16,23 @@ python scripts/strat.py check projects/_example
 python scripts/strat.py resume projects/_example
 ```
 
+PowerShell 5.1 портит кириллицу в аргументах программы: в `state.json` и журнале остаются знаки вопроса. Русское название, действие, основания, причину отзыва, тезис и цитату передавайте файлом UTF-8 или через stdin, а не в кавычках:
+
+```powershell
+python scripts/strat.py init family --title-file title.txt
+python scripts/strat.py log family 1 --message-file action.txt --grounds-file grounds.txt
+```
+
+Значение `-` читает один аргумент из stdin (`--title -`). Те же тексты можно положить в переменные `STRAT_TITLE`, `STRAT_LOG_MESSAGE`, `STRAT_GROUNDS`, `STRAT_REASON`, `STRAT_CLAIM`, `STRAT_QUOTE`, `STRAT_NOTE`. Если аргумент всё же нужен в командной строке, сначала в этом окне:
+
+```powershell
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+chcp 65001
+```
+
+Строку из одних «?» или с символом замены CLI не записывает и объясняет, что делать.
+
 Тот же смысл в bash, если `python` есть в PATH:
 
 ```bash

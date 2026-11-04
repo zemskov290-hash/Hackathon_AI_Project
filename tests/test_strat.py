@@ -17,7 +17,12 @@ STRAT = ROOT / "scripts" / "strat.py"
 BROKEN = ROOT / "tests" / "fixtures" / "broken_project"
 
 
-def run(*args: str, env: dict | None = None, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+def run(
+    *args: str,
+    env: dict | None = None,
+    cwd: Path | None = None,
+    input: str | None = None,
+) -> subprocess.CompletedProcess[str]:
     merged = os.environ.copy()
     for key in (
         "STRAT_LLM_API_KEY",
@@ -39,6 +44,7 @@ def run(*args: str, env: dict | None = None, cwd: Path | None = None) -> subproc
         encoding="utf-8",
         errors="replace",
         env=merged,
+        input=input,
         timeout=30,
     )
 
@@ -84,11 +90,13 @@ class ExampleAndHelpTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
-    def cli(self, *args: str, env: dict | None = None) -> subprocess.CompletedProcess[str]:
+    def cli(
+        self, *args: str, env: dict | None = None, input: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
         merged = dict(self.env)
         if env:
             merged.update(env)
-        return run(*args, env=merged)
+        return run(*args, env=merged, input=input)
 
     def test_help(self) -> None:
         result = self.cli("--help")
@@ -140,6 +148,62 @@ class ExampleAndHelpTests(unittest.TestCase):
         doctor = self.cli("doctor")
         assert_code(doctor)
         self.assertIn("smoke-local", doctor.stdout)
+
+    def test_corrupted_title_is_refused(self) -> None:
+        broken = self.cli("init", "broken-title", "--title", "???? ?????? ? ????????? ??????????")
+        assert_code(broken, 1)
+        self.assertIn("испорчен", broken.stdout)
+        self.assertIn("chcp 65001", broken.stdout)
+        self.assertFalse((self.projects / "broken-title").exists())
+        replaced = self.cli("init", "replaced-title", "--title", "Тариф\ufffd")
+        assert_code(replaced, 1)
+        self.assertIn("U+FFFD", replaced.stdout)
+        self.assertFalse((self.projects / "replaced-title").exists())
+
+    def test_title_file_keeps_cyrillic(self) -> None:
+        title_path = self.projects / "title.txt"
+        title_path.write_text("Семейные тарифы в мобильном приложении\n", encoding="utf-8")
+        created = self.cli("init", "family", "--title-file", str(title_path))
+        assert_code(created)
+        state = json.loads((self.projects / "family" / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(state["title"], "Семейные тарифы в мобильном приложении")
+        via_stdin = self.cli("init", "family-stdin", "--title", "-", input="Семейные тарифы\n")
+        assert_code(via_stdin)
+        state_stdin = json.loads((self.projects / "family-stdin" / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(state_stdin["title"], "Семейные тарифы")
+        via_env = self.cli("init", "family-env", env={"STRAT_TITLE": "Семейные тарифы"})
+        assert_code(via_env)
+        state_env = json.loads((self.projects / "family-env" / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(state_env["title"], "Семейные тарифы")
+
+    def test_log_grounds_file_and_rejects_question_marks(self) -> None:
+        assert_code(self.cli("init", "journ", "--title", "Latin title"))
+        project = self.projects / "journ"
+        bad = self.cli("log", "journ", "1", "Step", "--grounds", "???")
+        assert_code(bad, 1)
+        self.assertIn("испорчен", bad.stdout)
+        log_text = (project / "log.jsonl").read_text(encoding="utf-8")
+        self.assertNotIn('"grounds":"???"', log_text)
+        grounds_path = self.projects / "grounds.txt"
+        grounds_path.write_text("Основание на русском\n", encoding="utf-8")
+        message_path = self.projects / "action.txt"
+        message_path.write_text("Зафиксирован бриф\n", encoding="utf-8")
+        ok = self.cli(
+            "log",
+            "journ",
+            "1",
+            "--message-file",
+            str(message_path),
+            "--grounds-file",
+            str(grounds_path),
+        )
+        assert_code(ok)
+        markdown = (project / "log.md").read_text(encoding="utf-8")
+        payload = (project / "log.jsonl").read_text(encoding="utf-8")
+        self.assertIn("Зафиксирован бриф", markdown)
+        self.assertIn("Основание на русском", markdown)
+        self.assertIn("Зафиксирован бриф", payload)
+        self.assertIn("Основание на русском", payload)
 
     def test_broken_fixture_fails_with_expected_codes(self) -> None:
         result = self.cli("check", str(BROKEN))
@@ -245,8 +309,13 @@ class WorkflowTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
-    def cli(self, *args: str) -> subprocess.CompletedProcess[str]:
-        return run(*args, env=self.env)
+    def cli(
+        self, *args: str, env: dict | None = None, input: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        merged = dict(self.env)
+        if env:
+            merged.update(env)
+        return run(*args, env=merged, input=input)
 
     def test_init_source_evidence_and_gates(self) -> None:
         created = self.cli("init", "happy", "--title", "Проверка ворот")

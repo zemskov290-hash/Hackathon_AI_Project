@@ -18,7 +18,7 @@ def configure_stdio() -> None:
             ctypes.windll.kernel32.SetConsoleCP(65001)
         except (AttributeError, OSError):
             pass
-    for stream in (sys.stdout, sys.stderr):
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is None:
             continue

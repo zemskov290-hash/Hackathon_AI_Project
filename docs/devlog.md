@@ -1,5 +1,13 @@
 # Журнал разработки
 
+## 2026-11-04 — кириллица в аргументах PowerShell 5.1
+
+Ручной тест на компьютере пользователя: Windows, PowerShell 5.1, Cursor Agent CLI. Человеческой помощи при разборе не было: агент сам выполнил команду.
+
+Команда была `python scripts/strat.py init family-tariffs-app --title "Семейные тарифы в мобильном приложении"`. В `projects/family-tariffs-app/state.json` поле `title` сохранилось как строка из знаков вопроса. Кодировка аргументов PowerShell 5.1 не доносит кириллицу до Python. Тот же путь ломает `log --grounds` и другие текстовые аргументы: и `log.md`, и `log.jsonl` получили бы уже испорченную строку.
+
+CLI теперь не записывает такую строку. Если аргумент состоит из «?» и пробелов или содержит U+FFFD, команда завершается с ошибкой и подсказкой. Безопасный путь: файл UTF-8 (`--title-file` и парные `*-file` для сообщения журнала, оснований, причины, тезиса, цитаты и заметки), значение `-` (stdin) или переменная `STRAT_TITLE`, `STRAT_LOG_MESSAGE`, `STRAT_GROUNDS`, `STRAT_REASON`, `STRAT_CLAIM`, `STRAT_QUOTE`, `STRAT_NOTE`. В `AGENTS.md`, README и адаптерах Cursor, Claude Code и Copilot сказано выполнить перед аргументом в командной строке `[Console]::InputEncoding` / `OutputEncoding` как UTF-8 без BOM и `chcp 65001`.
+
 ## 2026-11-04 — повторная проверка коммита 81029aa на Windows
 
 Та же машина: PowerShell, Python 3.13.1, кодировка stdout cp1252, без `PYTHONIOENCODING`. `check projects/_example` — OK, сломанная фикстура — код 1 и 12 ошибок, init/status и русский вывод в порядке.
