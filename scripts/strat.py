@@ -296,9 +296,35 @@ def list_user_projects() -> list[Path]:
     for path in sorted(root.iterdir()):
         if path.name.startswith(".") or path.name.startswith("_"):
             continue
-        if path.is_dir() and (path / "state.json").is_file():
-            found.append(path.resolve())
+        if not path.is_dir() or not (path / "state.json").is_file():
+            continue
+        try:
+            state = json.loads((path / "state.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            state = {}
+        if isinstance(state, dict) and state.get("example"):
+            continue
+        found.append(path.resolve())
     return found
+
+
+def logged_stages(project: Path) -> set[int]:
+    stages: set[int] = set()
+    for entry in load_log(project):
+        if entry.get("stage") is None:
+            continue
+        stages.add(int(entry["stage"]))
+    return stages
+
+
+def require_stage_log(project: Path, stage: int) -> None:
+    if stage in logged_stages(project):
+        return
+    die(
+        f"Для этапа {stage} ({STAGES.get(stage, '?')}) в журнале нет ни одной записи. "
+        f"Сначала: python scripts/strat.py log <проект> {stage} \"что сделано\" --grounds \"почему\". "
+        "Автоматическая запись о закрытии этапа её не заменяет."
+    )
 
 
 def current_pointer() -> tuple[str, Path | None]:
@@ -667,6 +693,42 @@ def cmd_retract(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_supersede(args: argparse.Namespace) -> int:
+    project, tokens = take_project(args.rest, 1)
+    old_id = tokens[0]
+    new_id = args.by
+    if not re.fullmatch(r"E\d{3,}", old_id) or not re.fullmatch(r"E\d{3,}", new_id or ""):
+        die("Укажите идентификаторы вида E015 и --by E019.")
+    if old_id == new_id:
+        die("Нельзя заместить запись самой собой.")
+    reason = resolve_text(
+        args.reason, args.reason_file, label="причина замещения", env_name="STRAT_REASON", required=True
+    )
+    evidence, errors = load_jsonl(project / "evidence.jsonl")
+    if errors:
+        die("evidence.jsonl повреждён:\n" + "\n".join(errors))
+    old = next((row for row in evidence if row.get("id") == old_id), None)
+    new = next((row for row in evidence if row.get("id") == new_id), None)
+    if old is None or new is None:
+        missing = old_id if old is None else new_id
+        die(f"Запись не найдена: {missing}. Новую сначала добавьте через add-evidence.")
+    if old.get("status") == "superseded" and old.get("superseded_by") == new_id:
+        print(f"{old_id} уже замещено записью {new_id}")
+        return 0
+    if old.get("status") == "retracted":
+        die(f"{old_id} отозвано. Замещение не заменяет отзыв.")
+    old["status"] = "superseded"
+    old["superseded_by"] = new_id
+    old["superseded_reason"] = reason
+    old["superseded_at"] = now_iso()
+    save_jsonl(project / "evidence.jsonl", evidence)
+    state = load_state(project)
+    append_log(project, int(state.get("stage") or 0), f"Замещено {old_id} записью {new_id}", grounds=reason)
+    save_state(project, state)
+    print(f"Замещено {old_id} → {new_id}. Текст со ссылкой [{old_id}] check пометит.")
+    return 0
+
+
 def content_units(body: str) -> list[str]:
     body = re.sub(r"<!--.*?-->", "", body, flags=re.S)
     units: list[str] = []
@@ -988,6 +1050,10 @@ def check_project(project: Path, state: dict | None = None) -> list[dict]:
         message = str(entry.get("message") or "")
         if message and message not in log_md:
             add("log", f"запись журнала не отражена в log.md: {message[:80]}")
+    logged = {int(entry["stage"]) for entry in logs if entry.get("stage") is not None}
+    for number in state.get("completed_stages") or []:
+        if int(number) not in logged:
+            add("log", f"этап {number} закрыт, но в журнале нет записи этого этапа")
     return errors
 
 
@@ -1080,23 +1146,42 @@ def aggregate(entries: list[dict]) -> tuple[dict[int, dict], dict]:
     return by_stage, total
 
 
+def usage_was_measured(entries: list[dict]) -> bool:
+    for entry in entries:
+        tokens = entry.get("tokens")
+        cost = entry.get("cost")
+        if tokens not in (None, 0) or cost not in (None, 0, 0.0):
+            return True
+    return False
+
+
+def format_usage(entries: list[dict], total: dict) -> str:
+    minutes = f"минуты {fmt_num(total['minutes'])}"
+    if not usage_was_measured(entries):
+        return f"{minutes}. Токены не учитываются в режиме подписки IDE."
+    return (
+        f"{minutes}, токены {fmt_num(total['tokens'])}, стоимость {fmt_num(total['cost'])}"
+    )
+
+
 def format_cost(project: Path, entries: list[dict]) -> str:
     by_stage, total = aggregate(entries)
     lines = [f"Проект: {project.name}"]
     if not entries:
         lines.append("Затраты не записаны.")
         return "\n".join(lines)
+    measured = usage_was_measured(entries)
     for stage in sorted(by_stage):
         bucket = by_stage[stage]
         name = STAGES.get(stage, str(stage))
-        lines.append(
-            f"Этап {stage} {name}: минуты {fmt_num(bucket['minutes'])}, "
-            f"токены {fmt_num(bucket['tokens'])}, стоимость {fmt_num(bucket['cost'])}"
-        )
-    lines.append(
-        f"Итого: минуты {fmt_num(total['minutes'])}, токены {fmt_num(total['tokens'])}, "
-        f"стоимость {fmt_num(total['cost'])}"
-    )
+        if measured:
+            lines.append(
+                f"Этап {stage} {name}: минуты {fmt_num(bucket['minutes'])}, "
+                f"токены {fmt_num(bucket['tokens'])}, стоимость {fmt_num(bucket['cost'])}"
+            )
+        else:
+            lines.append(f"Этап {stage} {name}: минуты {fmt_num(bucket['minutes'])}")
+    lines.append(f"Итого: {format_usage(entries, total)}")
     return "\n".join(lines)
 
 
@@ -1143,12 +1228,26 @@ def cmd_status(args: argparse.Namespace) -> int:
     evidence, _errors = load_jsonl(project / "evidence.jsonl")
     active = [row for row in evidence if row.get("status") == "active"]
     retracted = [row for row in evidence if row.get("status") == "retracted"]
-    print(f"Свидетельства: {len(active)} активных, {len(retracted)} отозвано")
-    _by_stage, total = aggregate(load_log(project))
+    superseded = [row for row in evidence if row.get("status") == "superseded"]
     print(
-        f"Затраты: минуты {fmt_num(total['minutes'])}, токены {fmt_num(total['tokens'])}, "
-        f"стоимость {fmt_num(total['cost'])}"
+        f"Свидетельства: {len(active)} активных, {len(retracted)} отозвано, {len(superseded)} замещено"
     )
+    entries = load_log(project)
+    _by_stage, total = aggregate(entries)
+    print(f"Затраты: {format_usage(entries, total)}")
+    revision = state.get("revision") or {}
+    if revision.get("status") == "pending":
+        current_choice = (state.get("checkpoints") or {}).get("options", {}).get("choice") or "—"
+        print(
+            f"Пересмотр: ожидает решения — {revision.get('decision')}, "
+            f"предложен {revision.get('proposed_option')} (в контрольной точке сейчас {current_choice})"
+        )
+    elif revision.get("status") == "accepted":
+        print(
+            f"Пересмотр: принят {revision.get('decision')}, выбор {revision.get('accepted_option')}"
+        )
+    else:
+        print("Пересмотр: нет")
     print("Пробелы:")
     gaps = []
     for row in active:
@@ -1179,7 +1278,14 @@ def cmd_resume(args: argparse.Namespace) -> int:
     project, _tokens = take_project(args.rest, 0)
     state = load_state(project)
     stage = int(state.get("stage") or 0)
-    if state.get("stage_status") == "done" and stage == 8:
+    revision = state.get("revision") or {}
+    if revision.get("status") == "pending":
+        nxt = (
+            f"Пересмотр {revision.get('decision')} ждёт человека: предложен {revision.get('proposed_option')}. "
+            "Не считай старый выбор контрольной точки окончательным. "
+            "После явного согласия: python scripts/strat.py accept-revision <проект> --choice <O#>."
+        )
+    elif state.get("stage_status") == "done" and stage == 8:
         nxt = "Сопровождение: дата пересмотра в decisions.md. Новые данные не подмешивайте молча — impact и навык revise-on-new-data."
     else:
         nxt = NEXT_ACTION.get(stage, "Прочитайте state.json")
@@ -1194,6 +1300,14 @@ def cmd_resume(args: argparse.Namespace) -> int:
         extra = f":{choice}" if choice else ""
         points.append(f"{name}={payload.get('status')}{extra}")
     print("контрольные точки: " + "; ".join(points))
+    if revision.get("status") == "pending":
+        print(
+            f"пересмотр: pending {revision.get('decision')} -> {revision.get('proposed_option')}"
+        )
+    elif revision.get("status") == "accepted":
+        print(f"пересмотр: accepted {revision.get('decision')} -> {revision.get('accepted_option')}")
+    else:
+        print("пересмотр: нет")
     questions = read_text(project / "questions.md") or ""
     bullets = [] if is_template(questions) else section_bullets(questions, "Открытые вопросы")
     print("открытые вопросы:")
@@ -1263,6 +1377,7 @@ def cmd_confirm(args: argparse.Namespace) -> int:
     key = CHECKPOINTS.get(tokens[0].casefold())
     if key is None:
         die("Контрольная точка: brief, options или validation.")
+    require_stage_log(project, {"brief": 1, "options": 5, "validation": 7}[key])
     if key == "options" and not args.choice:
         die("Для вариантов укажите --choice O2 (идентификатор выбранного варианта).")
     state = load_state(project)
@@ -1282,6 +1397,79 @@ def cmd_confirm(args: argparse.Namespace) -> int:
     )
     save_state(project, state)
     print(f"Подтверждено: {key}" + (f", выбор {args.choice}" if args.choice else ""))
+    return 0
+
+
+def cmd_propose_revision(args: argparse.Namespace) -> int:
+    project, _tokens = take_project(args.rest, 0)
+    decision = args.decision
+    choice = args.choice
+    if not re.fullmatch(r"D\d+", decision or "") or not re.fullmatch(r"O\d+", choice or ""):
+        die("Форма: propose-revision [проект] --decision D2 --choice O3 --reason \"...\"")
+    reason = resolve_text(
+        args.reason, args.reason_file, label="причина пересмотра", env_name="STRAT_REASON", required=True
+    )
+    state = load_state(project)
+    previous = (state.get("checkpoints") or {}).get("options", {}).get("choice")
+    state["revision"] = {
+        "status": "pending",
+        "decision": decision,
+        "proposed_option": choice,
+        "previous_option": previous,
+        "reason": reason,
+        "opened_at": now_iso(),
+        "accepted_at": None,
+        "accepted_option": None,
+    }
+    append_log(
+        project,
+        int(state.get("stage") or 0),
+        f"Предложен пересмотр {decision}: выбор {choice} вместо {previous or '—'}",
+        grounds=reason,
+    )
+    save_state(project, state)
+    print(f"Пересмотр ожидает человека: {decision}, предложен {choice}, сейчас в контрольной точке {previous or '—'}.")
+    print("После явного согласия: python scripts/strat.py accept-revision <проект> --choice " + choice)
+    return 0
+
+
+def cmd_accept_revision(args: argparse.Namespace) -> int:
+    project, _tokens = take_project(args.rest, 0)
+    state = load_state(project)
+    revision = state.get("revision") or {}
+    if revision.get("status") != "pending":
+        die("Нет ожидающего пересмотра. Сначала propose-revision.")
+    choice = args.choice or revision.get("proposed_option")
+    if not re.fullmatch(r"O\d+", choice or ""):
+        die("Укажите --choice O3. Это выбор человека, не подстановка агента.")
+    note = resolve_text(args.note, args.note_file, label="заметка", env_name="STRAT_NOTE")
+    checkpoint = state["checkpoints"]["options"]
+    history = list(checkpoint.get("history") or [])
+    history.append(
+        {
+            "choice": checkpoint.get("choice"),
+            "at": checkpoint.get("at"),
+            "note": checkpoint.get("note"),
+            "until": now_iso(),
+        }
+    )
+    checkpoint["history"] = history
+    checkpoint["status"] = "confirmed"
+    checkpoint["choice"] = choice
+    checkpoint["at"] = now_iso()
+    checkpoint["note"] = note or revision.get("reason")
+    revision["status"] = "accepted"
+    revision["accepted_option"] = choice
+    revision["accepted_at"] = now_iso()
+    state["revision"] = revision
+    append_log(
+        project,
+        int(state.get("stage") or 0),
+        f"Принят пересмотр {revision.get('decision')}: выбор {choice}",
+        grounds=note or revision.get("reason"),
+    )
+    save_state(project, state)
+    print(f"Контрольная точка options обновлена: {choice}. Предыдущий выбор сохранён в history.")
     return 0
 
 
@@ -1334,6 +1522,7 @@ def cmd_advance(args: argparse.Namespace) -> int:
         if state.get("stage_status") == "done" and current == stage:
             die(f"Этап {stage} уже закрыт.")
         die(f"Сейчас открыт этап {current} ({STAGES.get(current, '?')}). Закрывать можно только его.")
+    require_stage_log(project, stage)
     failure = gate_failure(project, state, stage)
     if failure:
         die(failure)
@@ -1501,6 +1690,28 @@ def build_parser() -> argparse.ArgumentParser:
     retract.add_argument("--reason", help="причина; «-» читает stdin")
     retract.add_argument("--reason-file", help="причина из файла UTF-8")
     retract.set_defaults(func=cmd_retract)
+
+    supersede = sub.add_parser("supersede", help="заместить свидетельство новой записью")
+    supersede.add_argument("rest", nargs="+", help="[проект] <старый E>")
+    supersede.add_argument("--by", required=True, help="новый id, например E019")
+    supersede.add_argument("--reason", help="почему старая запись больше не опора")
+    supersede.add_argument("--reason-file")
+    supersede.set_defaults(func=cmd_supersede)
+
+    propose = sub.add_parser("propose-revision", help="поставить решение на пересмотр, не меняя выбор")
+    propose.add_argument("rest", nargs="*", help="необязательный проект")
+    propose.add_argument("--decision", required=True, help="D2")
+    propose.add_argument("--choice", required=True, help="предложенный вариант, например O3")
+    propose.add_argument("--reason")
+    propose.add_argument("--reason-file")
+    propose.set_defaults(func=cmd_propose_revision)
+
+    accept = sub.add_parser("accept-revision", help="принять пересмотр и обновить выбор с историей")
+    accept.add_argument("rest", nargs="*", help="необязательный проект")
+    accept.add_argument("--choice", help="если не задан, берётся предложенный вариант")
+    accept.add_argument("--note")
+    accept.add_argument("--note-file")
+    accept.set_defaults(func=cmd_accept_revision)
 
     impact = sub.add_parser("impact", help="что зависит от источника или свидетельства")
     impact.add_argument("rest", nargs="+", help="[проект] <S001|E001>")

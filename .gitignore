@@ -10,6 +10,7 @@ __pycache__/
 # Учебный пример projects/_example остаётся в git.
 projects/*
 !projects/_example/
+!projects/demo-family-tariffs/
 projects/.current
 *.log
 .claude/settings.local.json
