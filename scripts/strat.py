@@ -13,6 +13,8 @@ import os
 import re
 import subprocess
 import sys
+from html.parser import HTMLParser
+from urllib.parse import urlparse
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -652,6 +654,182 @@ def cmd_add_source(args: argparse.Namespace) -> int:
     save_state(project, state)
     print(f"id: {source_id}")
     print(f"Источник зарегистрирован: {source_id} {stored}")
+    return 0
+
+
+FETCH_LIMIT_BYTES = 2_000_000
+FETCH_TIMEOUT_SECONDS = 20
+FETCH_USER_AGENT = "strat-factory/1.0 (open desk research)"
+
+
+class PageTextExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self.title_parts: list[str] = []
+        self._skip = 0
+        self._in_title = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in {"script", "style", "noscript"}:
+            self._skip += 1
+        if tag == "title":
+            self._in_title = True
+        if tag in {"p", "br", "div", "li", "h1", "h2", "h3", "tr", "section"}:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"script", "style", "noscript"} and self._skip:
+            self._skip -= 1
+        if tag == "title":
+            self._in_title = False
+        if tag in {"p", "div", "li", "h1", "h2", "h3", "tr", "section"}:
+            self.parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if self._in_title:
+            self.title_parts.append(data)
+        if self._skip:
+            return
+        text = data.strip()
+        if text:
+            self.parts.append(text)
+
+
+def html_to_text(html: str) -> tuple[str, str]:
+    parser = PageTextExtractor()
+    parser.feed(html)
+    parser.close()
+    title = re.sub(r"\s+", " ", "".join(parser.title_parts)).strip()
+    body = re.sub(r"[ \t]+\n", "\n", "\n".join(parser.parts))
+    body = re.sub(r"\n{3,}", "\n\n", body).strip()
+    return title, body
+
+
+def slug_from_url(url: str) -> str:
+    parsed = urlparse(url)
+    raw = f"{parsed.netloc}{parsed.path}".lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", raw).strip("-")
+    return (slug or "page")[:60]
+
+
+def download_url(url: str) -> tuple[str, str]:
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": FETCH_USER_AGENT, "Accept": "text/html,text/plain;q=0.9,*/*;q=0.1"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT_SECONDS) as response:
+            chunks: list[bytes] = []
+            total = 0
+            truncated = False
+            while True:
+                block = response.read(65536)
+                if not block:
+                    break
+                if total + len(block) > FETCH_LIMIT_BYTES:
+                    chunks.append(block[: FETCH_LIMIT_BYTES - total])
+                    truncated = True
+                    break
+                chunks.append(block)
+                total += len(block)
+            charset = response.headers.get_content_charset() or "utf-8"
+            content_type = (response.headers.get("Content-Type") or "").lower()
+    except urllib.error.HTTPError as exc:
+        die(f"Страница не открылась: HTTP {exc.code} для {url}.")
+    except urllib.error.URLError as exc:
+        die(f"Сеть недоступна или адрес не открылся: {url}. {exc.reason}")
+    except TimeoutError:
+        die(f"Таймаут при загрузке {url}.")
+    raw = b"".join(chunks)
+    try:
+        text = raw.decode(charset, errors="replace")
+    except LookupError:
+        text = raw.decode("utf-8", errors="replace")
+    if "html" in content_type or text.lstrip().lower().startswith("<!doctype html") or "<html" in text[:500].lower():
+        page_title, body = html_to_text(text)
+    else:
+        page_title, body = "", text.strip()
+    if truncated:
+        body += "\n\n[страница обрезана по лимиту размера]"
+    return page_title, body
+
+
+def find_fetched_source(project: Path, url: str) -> tuple[str, str] | None:
+    sources_dir = project / "sources"
+    if not sources_dir.is_dir():
+        return None
+    marker = f"- url: {url}"
+    for path in sorted(sources_dir.glob("*.md")):
+        try:
+            head = path.read_text(encoding="utf-8")[:2000]
+        except OSError:
+            continue
+        if marker not in head:
+            continue
+        try:
+            stored = path.resolve().relative_to(project.resolve()).as_posix()
+        except ValueError:
+            stored = str(path.resolve())
+        return stored, content_digest(path)
+    return None
+
+
+def cmd_fetch(args: argparse.Namespace) -> int:
+    project, tokens = take_project(args.rest, 1)
+    url = tokens[0].strip()
+    if not re.match(r"https?://", url):
+        die("Нужен полный адрес http:// или https://.")
+    title = resolve_text(None, args.title_file, label="название страницы", env_name="STRAT_SOURCE_TITLE")
+    existing = find_fetched_source(project, url)
+    if existing:
+        stored, digest = existing
+        sources, parse_errors = load_jsonl(project / "sources.jsonl")
+        if parse_errors:
+            die("sources.jsonl повреждён:\n" + "\n".join(parse_errors))
+        for row in sources:
+            if row.get("url_or_path") == stored:
+                print(f"id: {row['id']}")
+                print(f"Уже загружено: {row['id']} {stored}")
+                return 0
+    else:
+        page_title, body = download_url(url)
+        if not title:
+            title = page_title or slug_from_url(url)
+        filename = f"{slug_from_url(url)}-{today()}.md"
+        dest = project / "sources" / filename
+        if dest.exists():
+            filename = f"{slug_from_url(url)}-{today()}-{abs(hash(url)) % 10000}.md"
+            dest = project / "sources" / filename
+        write_utf8(
+            dest,
+            f"# {title}\n\n- url: {url}\n- загружено: {today()}\n\n{body}\n",
+        )
+        stored, digest = locate_local_file(project, dest.as_posix())
+    sources, parse_errors = load_jsonl(project / "sources.jsonl")
+    if parse_errors:
+        die("sources.jsonl повреждён:\n" + "\n".join(parse_errors))
+    for row in sources:
+        if row.get("url_or_path") == stored:
+            print(f"id: {row['id']}")
+            print(f"Уже зарегистрирован: {row['id']} {stored}")
+            return 0
+    source_id = next_serial(sources, "S")
+    sources.append(
+        {
+            "id": source_id,
+            "url_or_path": stored,
+            "title": title or slug_from_url(url),
+            "accessed": today(),
+            "kind": "web",
+            "sha256": digest,
+            "reliability": "med",
+        }
+    )
+    save_jsonl(project / "sources.jsonl", sources)
+    save_state(project, load_state(project))
+    print(f"id: {source_id}")
+    print(f"Страница сохранена и зарегистрирована: {source_id} {stored}")
     return 0
 
 
@@ -1837,6 +2015,11 @@ def build_parser() -> argparse.ArgumentParser:
     show.add_argument("--id", help="одна запись E001 или S001")
     show.add_argument("--last", type=int, help="для log: последние N записей jsonl")
     show.set_defaults(func=cmd_show)
+
+    fetch = sub.add_parser("fetch", help="скачать открытую страницу и зарегистрировать её")
+    fetch.add_argument("rest", nargs="+", help="[проект] <url>")
+    fetch.add_argument("--title-file", help="название из файла UTF-8")
+    fetch.set_defaults(func=cmd_fetch)
 
     add_source = sub.add_parser("add-source", help="зарегистрировать источник")
     add_source.add_argument("rest", nargs="+", help="[проект] <url|файл>")

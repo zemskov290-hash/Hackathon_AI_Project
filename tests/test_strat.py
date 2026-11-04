@@ -814,6 +814,58 @@ class WorkflowTests(unittest.TestCase):
         assert_code(status)
         self.assertIn("предварительные", status.stdout)
 
+    def test_fetch_saves_page_and_reports_network_errors(self) -> None:
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                body = (
+                    "<html><head><title>Витрина eSIM</title></head><body>"
+                    "<p>Пакет для поездки стоит 5 долларов.</p>"
+                    "<script>secret-token</script></body></html>"
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, fmt: str, *args: object) -> None:
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            assert_code(self.cli("init", "pages", "--title", "Pages"))
+            url = f"http://127.0.0.1:{port}/plans"
+            fetched = self.cli("fetch", "pages", url)
+            assert_code(fetched)
+            self.assertIn("id: S001", fetched.stdout)
+            project = Path(self.tmp.name) / "pages"
+            saved = list((project / "sources").glob("*.md"))
+            saved = [path for path in saved if path.name != "README.md"]
+            self.assertEqual(len(saved), 1)
+            text = saved[0].read_text(encoding="utf-8")
+            self.assertIn(url, text)
+            self.assertIn("Пакет для поездки стоит 5 долларов.", text)
+            self.assertNotIn("secret-token", text)
+            rows = [json.loads(line) for line in (project / "sources.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+            self.assertEqual(rows[0]["kind"], "web")
+            self.assertTrue(rows[0]["sha256"])
+            again = self.cli("fetch", "pages", url)
+            assert_code(again)
+            self.assertIn("Уже загружено", again.stdout)
+            self.assertEqual(len([path for path in (project / "sources").glob("*.md") if path.name != "README.md"]), 1)
+        finally:
+            server.shutdown()
+            server.server_close()
+        refused = self.cli("fetch", "pages", "http://127.0.0.1:9/closed")
+        assert_code(refused, 1)
+        self.assertIn("не открыл", refused.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
