@@ -149,6 +149,52 @@ def reject_corrupted(text: str, label: str) -> None:
         )
 
 
+QUOTE_HINT = (
+    "Цитата должна быть дословным непрерывным фрагментом источника. "
+    "Не склеивайте куски через многоточие: добавьте два свидетельства или укоротите цитату."
+)
+
+
+def normalize_for_quote(text: str) -> str:
+    """Compare quotes loosely on spacing and lookalikes, never on skipped text.
+
+    Line breaks and repeated spaces collapse. Guillemets and straight quotes match.
+    The non-breaking hyphen U+2011 matches '-'. An ellipsis is kept, so two
+    fragments joined by «…» still fail unless that exact span is in the file.
+    """
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("\u2011", "-").replace("\u2010", "-")
+    for fancy in ("«", "»", "“", "”", "„", "‟"):
+        text = text.replace(fancy, '"')
+    text = text.replace("\u00a0", " ").replace("\u202f", " ")
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def quote_in_source_text(quote: str, file_text: str) -> bool:
+    return normalize_for_quote(quote) in normalize_for_quote(file_text)
+
+
+def source_file_for_quote(project: Path, source: dict) -> Path | None:
+    ref = str(source.get("url_or_path") or "")
+    if not ref or re.match(r"https?://", ref):
+        return None
+    file_path = Path(ref)
+    if not file_path.is_absolute():
+        file_path = project / file_path
+    if file_path.is_file() and file_path.suffix.lower() in TEXT_SUFFIXES:
+        return file_path
+    return None
+
+
+def quote_matches_source(project: Path, source: dict, quote: str) -> bool | None:
+    """True/False when a local text file can be checked, None when it cannot."""
+    file_path = source_file_for_quote(project, source)
+    if file_path is None or not quote.strip():
+        return None
+    file_text = file_path.read_text(encoding="utf-8", errors="replace")
+    return quote_in_source_text(quote, file_text)
+
+
 def read_stdin_text() -> str:
     global _STDIN_TEXT
     if _STDIN_TEXT is not None:
@@ -638,6 +684,10 @@ def cmd_add_evidence(args: argparse.Namespace) -> int:
     ) or ""
     if args.etype == "fact" and not quote.strip():
         die("У факта должна быть дословная цитата (--quote или --quote-file).")
+    matched = quote_matches_source(project, by_source[args.source], quote)
+    if matched is False:
+        ref = by_source[args.source].get("url_or_path")
+        die(f"Цитата не найдена в {ref}. {QUOTE_HINT}")
     depends = [item.strip() for item in args.depends_on.split(",") if item.strip()]
     known = {row["id"] for row in evidence}
     missing = [item for item in depends if item not in known]
@@ -877,16 +927,8 @@ def check_project(project: Path, state: dict | None = None) -> list[dict]:
             if row.get("type") == "fact" and not quote.strip():
                 add("quote", f"{evidence_id}: у факта пустая цитата")
             ref = str(source.get("url_or_path") or "")
-            if quote.strip() and not re.match(r"https?://", ref):
-                file_path = Path(ref)
-                if not file_path.is_absolute():
-                    file_path = project / file_path
-                if file_path.is_file() and file_path.suffix.lower() in TEXT_SUFFIXES:
-                    file_text = file_path.read_text(encoding="utf-8", errors="replace")
-                    file_text = file_text.replace("\r\n", "\n").replace("\r", "\n")
-                    quote_norm = quote.replace("\r\n", "\n").replace("\r", "\n")
-                    if quote_norm not in file_text:
-                        add("quote-mismatch", f"{evidence_id}: цитата не найдена в {ref}")
+            if quote_matches_source(project, source, quote) is False:
+                add("quote-mismatch", f"{evidence_id}: цитата не найдена в {ref}. {QUOTE_HINT}")
         if row.get("status") == "superseded" and not row.get("superseded_by"):
             add("evidence", f"{evidence_id}: status=superseded без superseded_by")
         successor = row.get("superseded_by")
@@ -1183,6 +1225,40 @@ def format_cost(project: Path, entries: list[dict]) -> str:
             lines.append(f"Этап {stage} {name}: минуты {fmt_num(bucket['minutes'])}")
     lines.append(f"Итого: {format_usage(entries, total)}")
     return "\n".join(lines)
+
+
+def cmd_show(args: argparse.Namespace) -> int:
+    project, tokens = take_project(args.rest, 1)
+    kind = tokens[0]
+    files = {
+        "evidence": "evidence.jsonl",
+        "sources": "sources.jsonl",
+        "log": "log.md",
+        "state": "state.json",
+        "decisions": "decisions.md",
+    }
+    if kind not in files:
+        die("Что показать: evidence, sources, log, state или decisions.")
+    if kind == "evidence" and args.id:
+        rows, errors = load_jsonl(project / "evidence.jsonl")
+        if errors:
+            die("evidence.jsonl повреждён:\n" + "\n".join(errors))
+        found = next((row for row in rows if row.get("id") == args.id), None)
+        if found is None:
+            die(f"Запись не найдена: {args.id}")
+        print(json.dumps(found, ensure_ascii=False, indent=2))
+        return 0
+    if kind == "log" and args.last:
+        entries = load_log(project)[-args.last :]
+        for entry in entries:
+            print(json.dumps(entry, ensure_ascii=False))
+        return 0
+    path = project / files[kind]
+    if not path.is_file():
+        die(f"Нет файла {files[kind]}")
+    text = path.read_text(encoding="utf-8")
+    sys.stdout.write(text if text.endswith("\n") else text + "\n")
+    return 0
 
 
 def cmd_cost(args: argparse.Namespace) -> int:
@@ -1661,6 +1737,12 @@ def build_parser() -> argparse.ArgumentParser:
         command = sub.add_parser(name, help=help_text)
         command.add_argument("rest", nargs="*", help="необязательный id или путь проекта")
         command.set_defaults(func=handler)
+
+    show = sub.add_parser("show", help="прочитать файл проекта в UTF-8")
+    show.add_argument("rest", nargs="+", help="[проект] evidence|sources|log|state|decisions")
+    show.add_argument("--id", help="одна запись E001 или S001")
+    show.add_argument("--last", type=int, help="для log: последние N записей jsonl")
+    show.set_defaults(func=cmd_show)
 
     add_source = sub.add_parser("add-source", help="зарегистрировать источник")
     add_source.add_argument("rest", nargs="+", help="[проект] <url|файл>")
