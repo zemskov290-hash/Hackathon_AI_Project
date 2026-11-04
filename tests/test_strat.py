@@ -221,19 +221,41 @@ class ExampleAndHelpTests(unittest.TestCase):
         self.assertIn("MODE: manual", complete.stdout)
 
     def test_api_error_does_not_leak_the_key(self) -> None:
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self) -> None:  # noqa: N802
+                length = int(self.headers.get("Content-Length") or 0)
+                self.rfile.read(length)
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(b"nope")
+
+            def log_message(self, fmt: str, *args: object) -> None:
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
         secret = "secret-test-key-should-not-leak"
-        result = self.cli(
-            "complete",
-            "--role",
-            "cheap",
-            "--prompt",
-            "ping",
-            env={
-                "STRAT_LLM_API_KEY": secret,
-                "STRAT_MODEL_CHEAP": "dummy",
-                "STRAT_LLM_BASE_URL": "http://127.0.0.1:9/v1",
-            },
-        )
+        try:
+            result = self.cli(
+                "complete",
+                "--role",
+                "cheap",
+                "--prompt",
+                "ping",
+                env={
+                    "STRAT_LLM_API_KEY": secret,
+                    "STRAT_MODEL_CHEAP": "dummy",
+                    "STRAT_LLM_BASE_URL": f"http://127.0.0.1:{port}/v1",
+                },
+            )
+        finally:
+            server.shutdown()
+            server.server_close()
         assert_code(result, 1)
         self.assertNotIn(secret, result.stdout + result.stderr)
         self.assertIn("MODE: error", result.stdout)
@@ -862,7 +884,13 @@ class WorkflowTests(unittest.TestCase):
         finally:
             server.shutdown()
             server.server_close()
-        refused = self.cli("fetch", "pages", "http://127.0.0.1:9/closed")
+        import socket
+
+        closed = socket.socket()
+        closed.bind(("127.0.0.1", 0))
+        closed_port = closed.getsockname()[1]
+        closed.close()
+        refused = self.cli("fetch", "pages", f"http://127.0.0.1:{closed_port}/closed")
         assert_code(refused, 1)
         self.assertIn("не открыл", refused.stdout)
 
