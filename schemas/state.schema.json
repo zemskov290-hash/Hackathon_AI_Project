@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/state.schema.json",
+  "title": "Состояние проекта",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "title", "stage", "stage_status", "completed_stages", "checkpoints", "created_at", "updated_at"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": { "type": "string" },
+    "title": { "type": "string" },
+    "example": { "type": "boolean" },
+    "stage": { "type": "integer", "minimum": 1, "maximum": 8 },
+    "stage_status": { "enum": ["in_progress", "done"] },
+    "completed_stages": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 1, "maximum": 8 }
+    },
+    "checkpoints": {
+      "type": "object",
+      "required": ["brief", "options", "validation"],
+      "properties": {
+        "brief": { "$ref": "#/$defs/checkpoint" },
+        "options": { "$ref": "#/$defs/checkpoint" },
+        "validation": { "$ref": "#/$defs/checkpoint" }
+      }
+    },
+    "created_at": { "type": "string" },
+    "updated_at": { "type": "string" }
+  },
+  "$defs": {
+    "checkpoint": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["open", "confirmed"] },
+        "at": { "type": ["string", "null"] },
+        "note": { "type": ["string", "null"] },
+        "choice": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

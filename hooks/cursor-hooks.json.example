@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [{ "command": "hooks/post-write.sh", "timeout": 60 }],
+    "stop": [{ "command": "hooks/stage-end.sh", "timeout": 15 }]
+  }
+}

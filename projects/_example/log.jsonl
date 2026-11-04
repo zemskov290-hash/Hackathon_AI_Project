@@ -1,0 +1,8 @@
+{"ts":"2026-11-04T09:00:00Z","stage":1,"message":"Бриф учебного примера зафиксирован","grounds":"Текст выдуман, чтобы показать формат","minutes":12,"tokens":800,"cost":0,"model":"ide/subscription"}
+{"ts":"2026-11-04T09:20:00Z","stage":2,"message":"План вопросов, которые меняют выбор","grounds":"Q1 разделяет цену и незамеченную ценность","minutes":8,"tokens":400,"cost":0,"model":"ide/subscription"}
+{"ts":"2026-11-04T09:40:00Z","stage":3,"message":"Зарегистрированы учебные источники и свидетельства","grounds":"Цитаты взяты дословно из файлов проекта","minutes":20,"tokens":1500,"cost":0,"model":"ide/subscription"}
+{"ts":"2026-11-04T10:00:00Z","stage":4,"message":"Собрана картина ситуации","grounds":"Факты только E001 и E002","minutes":10,"tokens":600,"cost":0,"model":"ide/subscription"}
+{"ts":"2026-11-04T10:20:00Z","stage":5,"message":"Три варианта и возражения, выбран O2","grounds":"Контрольная точка options","minutes":15,"tokens":2000,"cost":0.02,"model":"example/strong"}
+{"ts":"2026-11-04T10:40:00Z","stage":6,"message":"Стратегия продукта и коммуникации","grounds":"Обещания P1 и P2 связаны с PP1 и PP2","minutes":12,"tokens":900,"cost":0,"model":"ide/subscription"}
+{"ts":"2026-11-04T11:00:00Z","stage":7,"message":"План проверки принят","grounds":"База — E001, эффект не выдаётся за обязательство","minutes":8,"tokens":500,"cost":0,"model":"ide/subscription"}
+{"ts":"2026-11-04T11:10:00Z","stage":8,"message":"Решение D1 поставлено на пересмотр","grounds":"review_date 2026-12-16","minutes":5,"tokens":300,"cost":0,"model":"ide/subscription"}

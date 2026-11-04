@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "_example",
+  "title": "Учебный пример: продление подписки «Пример»",
+  "example": true,
+  "stage": 8,
+  "stage_status": "done",
+  "completed_stages": [1, 2, 3, 4, 5, 6, 7, 8],
+  "checkpoints": {
+    "brief": {
+      "status": "confirmed",
+      "at": "2026-11-04T09:05:00Z",
+      "note": "Переформулировка учебного брифа принята",
+      "choice": null
+    },
+    "options": {
+      "status": "confirmed",
+      "at": "2026-11-04T10:25:00Z",
+      "note": "Берём момент продления, не скидку и не закрытие",
+      "choice": "O2"
+    },
+    "validation": {
+      "status": "confirmed",
+      "at": "2026-11-04T11:05:00Z",
+      "note": "План проверки принят как учебный",
+      "choice": null
+    }
+  },
+  "created_at": "2026-11-04T09:00:00Z",
+  "updated_at": "2026-11-04T11:10:00Z"
+}

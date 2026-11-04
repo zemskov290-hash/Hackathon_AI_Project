@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/evidence.schema.json",
+  "title": "Свидетельство",
+  "description": "Одна строка evidence.jsonl.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["id", "claim", "type", "source", "quote", "locator", "confidence", "date", "status"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^E\\d{3,}$" },
+    "claim": { "type": "string", "minLength": 1 },
+    "type": { "enum": ["fact", "hypothesis", "forecast", "synthetic"] },
+    "source": { "type": "string", "pattern": "^S\\d{3,}$" },
+    "quote": { "type": "string" },
+    "locator": { "type": "string" },
+    "confidence": { "enum": ["high", "med", "low"] },
+    "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "status": { "enum": ["active", "retracted", "superseded"] },
+    "superseded_by": { "type": ["string", "null"] },
+    "depends_on": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^E\\d{3,}$" }
+    },
+    "retracted_reason": { "type": "string" },
+    "retracted_at": { "type": "string" }
+  }
+}
