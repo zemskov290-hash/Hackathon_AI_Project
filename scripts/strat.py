@@ -213,26 +213,44 @@ def list_user_projects() -> list[Path]:
     return found
 
 
+def current_pointer() -> tuple[str, Path | None]:
+    """Return the name stored in projects/.current and the project, if it exists."""
+    current = projects_root() / ".current"
+    if not current.is_file():
+        return "", None
+    name = current.read_text(encoding="utf-8").strip()
+    if not name:
+        return "", None
+    return name, project_dir_if_any(name)
+
+
+def stale_current_hint(name: str) -> str:
+    return (
+        f"Подсказка: projects/.current указывает на отсутствующий проект «{name}». "
+        "Команды с явным путём проекта это не останавливает. "
+        "Удалите projects/.current или выполните: python scripts/strat.py use <id>"
+    )
+
+
 def resolve_project(explicit: str | None) -> Path:
     if explicit:
         found = project_dir_if_any(explicit)
         if found is None:
             die(f"Проект не найден: {explicit}")
         return found
-    current = projects_root() / ".current"
-    if current.is_file():
-        name = current.read_text(encoding="utf-8").strip()
-        found = project_dir_if_any(name)
-        if found is None:
-            die(f"projects/.current указывает на отсутствующий проект: {name}")
+    name, found = current_pointer()
+    if found is not None:
         return found
+    hint = (stale_current_hint(name) + "\n") if name else ""
     projects = list_user_projects()
     if len(projects) == 1:
+        if hint:
+            print(hint.rstrip())
         return projects[0]
     if not projects:
-        die("Нет проекта. Создайте: python scripts/strat.py init <id> --title \"...\"")
+        die(hint + "Нет проекта. Создайте: python scripts/strat.py init <id> --title \"...\"")
     names = ", ".join(path.name for path in projects)
-    die(f"Несколько проектов ({names}). Укажите id или выполните: python scripts/strat.py use <id>")
+    die(hint + f"Несколько проектов ({names}). Укажите id или выполните: python scripts/strat.py use <id>")
 
 
 def take_project(tokens: list[str], expected: int) -> tuple[Path, list[str]]:
@@ -1292,6 +1310,9 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
         print("Проекты: " + ", ".join(path.name for path in projects))
     else:
         print("Проекты: боевых нет. Учебный пример: python scripts/strat.py check projects/_example")
+    pointed, found = current_pointer()
+    if pointed and found is None:
+        print(stale_current_hint(pointed))
     return 0
 
 
