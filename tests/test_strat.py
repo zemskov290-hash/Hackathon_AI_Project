@@ -647,6 +647,58 @@ class WorkflowTests(unittest.TestCase):
         assert_code(resumed)
         self.assertIn("accepted D2", resumed.stdout)
 
+    def test_quote_must_be_continuous_and_env_is_checked(self) -> None:
+        refused = self.cli("init", "envbad", env={"STRAT_TITLE": "???? ??????"})
+        assert_code(refused, 1)
+        self.assertIn("испорчен", refused.stdout)
+        self.assertFalse((Path(self.tmp.name) / "envbad").exists())
+
+        assert_code(self.cli("init", "span", "--title", "Span"))
+        project = Path(self.tmp.name) / "span"
+        (project / "sources" / "note.md").write_text(
+            "расход интернета, иначе они выжигают пакет за два дня.\n\n"
+            "Сообщение «акция» звучит нормально. Но если после «добавить» ничего не видно.\n"
+            "Тариф\u2011лайт держит пакет.\n",
+            encoding="utf-8",
+        )
+        assert_code(self.cli("add-source", "span", "sources/note.md", "--kind", "synthetic"))
+        spliced = self.cli(
+            "add-evidence",
+            "span",
+            "--claim",
+            "Склейка двух кусков.",
+            "--type",
+            "synthetic",
+            "--source",
+            "S001",
+            "--quote",
+            "расход интернета… если после «добавить» ничего не видно",
+            "--confidence",
+            "low",
+        )
+        assert_code(spliced, 1)
+        self.assertIn("многоточие", spliced.stdout)
+        self.assertEqual((project / "evidence.jsonl").read_text(encoding="utf-8").strip(), "")
+        accepted = self.cli(
+            "add-evidence",
+            "span",
+            "--claim",
+            "Непрерывный фрагмент с другими кавычками и дефисом.",
+            "--type",
+            "synthetic",
+            "--source",
+            "S001",
+            "--quote",
+            'Тариф-лайт   держит\nпакет.',
+            "--confidence",
+            "low",
+        )
+        assert_code(accepted)
+        assert_code(self.cli("check", "span"))
+        shown = self.cli("show", "span", "evidence", "--id", "E001")
+        assert_code(shown)
+        self.assertIn("Тариф", shown.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
