@@ -783,6 +783,37 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("[quote-mismatch]", failed.stdout)
         self.assertIn("E002", failed.stdout)
 
+    def test_early_options_must_be_marked_preliminary(self) -> None:
+        assert_code(self.cli("init", "early", "--title", "Early"))
+        assert_code(self.cli("log", "early", "1", "Brief", "--grounds", "ready"))
+        project = Path(self.tmp.name) / "early"
+        bare = (
+            "# Варианты\n\n"
+            "### O1. Оставить как есть\n<!-- role: status-quo -->\n\n"
+            "Ничего не менять.\n\nВозражение: можно упустить окно.\n\n"
+            "### O2. Снизить цену\n<!-- role: change -->\n\n"
+            "Урезать тариф.\n\nВозражение: маржа не посчитана.\n\n"
+            "### O3. Закрыть направление\n<!-- role: close -->\n\n"
+            "Не запускать.\n\nВозражение: запрос руководства останется.\n"
+        )
+        (project / "options.md").write_text(bare, encoding="utf-8")
+        unmarked = self.cli("check", "early")
+        assert_code(unmarked, 1)
+        self.assertIn("[preliminary]", unmarked.stdout)
+        refused = self.cli("confirm", "early", "options", "--choice", "O2", "--note", "рано")
+        assert_code(refused, 1)
+        self.assertIn("ещё не открыт", refused.stdout)
+        (project / "options.md").write_text(
+            "<!-- preliminary -->\n\nгипотезы, не подтверждены, свидетельств 0\n\n" + bare,
+            encoding="utf-8",
+        )
+        marked = self.cli("check", "early")
+        assert_code(marked)
+        self.assertIn("OK", marked.stdout)
+        status = self.cli("status", "early")
+        assert_code(status)
+        self.assertIn("предварительные", status.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

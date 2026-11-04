@@ -1067,6 +1067,14 @@ def check_project(project: Path, state: dict | None = None) -> list[dict]:
                 add("options", "нет варианта «оставить как есть» (маркер <!-- role: status-quo -->)")
             if not has_close:
                 add("options", "нет варианта «закрыть направление» (маркер <!-- role: close -->)")
+    stage_now = int(state.get("stage") or 0)
+    if options_started and stage_now < 5 and not stage_required(state, 5):
+        body = options_text or ""
+        if "<!-- preliminary -->" not in body or "гипотезы, не подтверждены" not in body.casefold():
+            add(
+                "preliminary",
+                "варианты написаны до этапа 5 без пометки <!-- preliminary --> и фразы «гипотезы, не подтверждены»",
+            )
 
     strategy = texts.get("strategy.md")
     promises = []
@@ -1382,6 +1390,9 @@ def cmd_status(args: argparse.Namespace) -> int:
         )
     else:
         print("Пересмотр: нет")
+    options_body = read_text(project / "options.md") or ""
+    if "<!-- preliminary -->" in options_body:
+        print(f"Варианты: предварительные, свидетельств {len(active)}. Контрольная точка не закрыта.")
     print("Пробелы:")
     gaps = []
     for row in active:
@@ -1518,10 +1529,20 @@ def cmd_confirm(args: argparse.Namespace) -> int:
     key = CHECKPOINTS.get(tokens[0].casefold())
     if key is None:
         die("Контрольная точка: brief, options или validation.")
+    state = load_state(project)
+    stage_now = int(state.get("stage") or 0)
+    if key == "options" and stage_now < 5:
+        die(
+            "Этап вариантов ещё не открыт. Черновик можно показать с фразой «гипотезы, не подтверждены» "
+            "и маркером <!-- preliminary -->. Контрольную точку не закрывай."
+        )
+    if key == "validation" and stage_now < 7:
+        die(
+            "Этап плана проверки ещё не открыт. Черновик пометь как предварительный и не закрывай контрольную точку."
+        )
     require_stage_log(project, {"brief": 1, "options": 5, "validation": 7}[key])
     if key == "options" and not args.choice:
         die("Для вариантов укажите --choice O2 (идентификатор выбранного варианта).")
-    state = load_state(project)
     checkpoint = state["checkpoints"][key]
     checkpoint["status"] = "confirmed"
     checkpoint["at"] = now_iso()
