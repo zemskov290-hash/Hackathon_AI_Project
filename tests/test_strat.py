@@ -699,6 +699,90 @@ class WorkflowTests(unittest.TestCase):
         assert_code(shown)
         self.assertIn("Тариф", shown.stdout)
 
+    def test_inactive_bad_quote_does_not_fail_check(self) -> None:
+        assert_code(self.cli("init", "oldq", "--title", "Old quote"))
+        project = Path(self.tmp.name) / "oldq"
+        (project / "sources" / "note.md").write_text("Только эта фраза есть в файле.\n", encoding="utf-8")
+        assert_code(self.cli("add-source", "oldq", "sources/note.md", "--kind", "own"))
+        quote = "Только эта фраза есть в файле."
+        assert_code(
+            self.cli(
+                "add-evidence",
+                "oldq",
+                "--claim",
+                "Живой факт до замены.",
+                "--type",
+                "fact",
+                "--source",
+                "S001",
+                "--quote",
+                quote,
+                "--confidence",
+                "high",
+            )
+        )
+        assert_code(
+            self.cli(
+                "add-evidence",
+                "oldq",
+                "--claim",
+                "Новая опора.",
+                "--type",
+                "hypothesis",
+                "--source",
+                "S001",
+                "--quote",
+                quote,
+                "--confidence",
+                "med",
+            )
+        )
+        assert_code(self.cli("supersede", "oldq", "E001", "--by", "E002", "--reason", "заменено"))
+        rows = [
+            json.loads(line)
+            for line in (project / "evidence.jsonl").read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        for row in rows:
+            if row["id"] == "E001":
+                row["quote"] = "первая часть… вторая часть"
+        rows.append(
+            {
+                "id": "E003",
+                "claim": "Отозванный факт без цитаты.",
+                "type": "fact",
+                "source": "S001",
+                "quote": "",
+                "locator": "note.md",
+                "confidence": "low",
+                "date": "2026-11-04",
+                "status": "retracted",
+                "superseded_by": None,
+                "depends_on": [],
+            }
+        )
+        (project / "evidence.jsonl").write_text(
+            "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n",
+            encoding="utf-8",
+        )
+        warned = self.cli("check", "oldq")
+        assert_code(warned, 0)
+        self.assertIn("Предупреждения", warned.stdout)
+        self.assertIn("E001", warned.stdout)
+        self.assertIn("E003", warned.stdout)
+        self.assertNotIn("ОШИБКИ", warned.stdout)
+        for row in rows:
+            if row["id"] == "E002":
+                row["quote"] = "нет такого фрагмента… совсем"
+        (project / "evidence.jsonl").write_text(
+            "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n",
+            encoding="utf-8",
+        )
+        failed = self.cli("check", "oldq")
+        assert_code(failed, 1)
+        self.assertIn("[quote-mismatch]", failed.stdout)
+        self.assertIn("E002", failed.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

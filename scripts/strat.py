@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -828,15 +829,39 @@ def fact_sections(text: str) -> list[dict]:
     return sections
 
 
+def uncommitted_tool_files() -> list[str]:
+    """Paths under scripts/ or tests/ that git reports as dirty. Empty if git is absent."""
+    try:
+        proc = subprocess.run(
+            ["git", "status", "--porcelain", "--", "scripts", "tests"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if proc.returncode != 0:
+        return []
+    paths = []
+    for line in proc.stdout.splitlines():
+        path = line[3:].strip() if len(line) > 3 else line.strip()
+        if path:
+            paths.append(path)
+    return paths
+
+
 def check_project(project: Path, state: dict | None = None) -> list[dict]:
     errors: list[dict] = []
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, bool]] = set()
 
-    def add(code: str, message: str) -> None:
-        item = (code, message)
+    def add(code: str, message: str, warning: bool = False) -> None:
+        item = (code, message, warning)
         if item not in seen:
             seen.add(item)
-            errors.append({"code": code, "message": message})
+            errors.append({"code": code, "message": message, "warning": warning})
 
     state_path = project / "state.json"
     if state is None:
@@ -924,11 +949,22 @@ def check_project(project: Path, state: dict | None = None) -> list[dict]:
             if row.get("type") == "synthetic" and source.get("kind") != "synthetic":
                 add("type", f"{evidence_id}: type=synthetic, но источник {source_id} не kind=synthetic")
             quote = str(row.get("quote") or "")
+            active = row.get("status") == "active"
             if row.get("type") == "fact" and not quote.strip():
-                add("quote", f"{evidence_id}: у факта пустая цитата")
+                if active:
+                    add("quote", f"{evidence_id}: у факта пустая цитата")
+                else:
+                    add("quote", f"{evidence_id}: у неактивного факта пустая цитата", warning=True)
             ref = str(source.get("url_or_path") or "")
             if quote_matches_source(project, source, quote) is False:
-                add("quote-mismatch", f"{evidence_id}: цитата не найдена в {ref}. {QUOTE_HINT}")
+                if active:
+                    add("quote-mismatch", f"{evidence_id}: цитата не найдена в {ref}. {QUOTE_HINT}")
+                else:
+                    add(
+                        "quote-mismatch",
+                        f"{evidence_id}: неактивная запись, цитата не найдена в {ref}",
+                        warning=True,
+                    )
         if row.get("status") == "superseded" and not row.get("superseded_by"):
             add("evidence", f"{evidence_id}: status=superseded без superseded_by")
         successor = row.get("superseded_by")
@@ -1096,23 +1132,45 @@ def check_project(project: Path, state: dict | None = None) -> list[dict]:
     for number in state.get("completed_stages") or []:
         if int(number) not in logged:
             add("log", f"этап {number} закрыт, но в журнале нет записи этого этапа")
+    dirty = uncommitted_tool_files()
+    if dirty:
+        shown = ", ".join(dirty[:8])
+        add(
+            "tooling",
+            "незакоммиченные изменения в scripts/ или tests/: "
+            f"{shown}. В проектной сессии эти папки не правят.",
+            warning=True,
+        )
     return errors
 
 
-def format_report(project: Path, errors: list[dict]) -> str:
+def hard_findings(findings: list[dict]) -> list[dict]:
+    return [item for item in findings if not item.get("warning")]
+
+
+def format_report(project: Path, findings: list[dict]) -> str:
     label = project.name if project.parent == projects_root() else str(project)
-    if not errors:
+    errors = hard_findings(findings)
+    warnings = [item for item in findings if item.get("warning")]
+    if not errors and not warnings:
         return f"Проверка {label}: OK\nЗамечаний нет."
-    lines = [f"Проверка {label}: ОШИБКИ ({len(errors)})"]
-    lines.extend(f"- [{item['code']}] {item['message']}" for item in errors)
+    lines = []
+    if errors:
+        lines.append(f"Проверка {label}: ОШИБКИ ({len(errors)})")
+        lines.extend(f"- [{item['code']}] {item['message']}" for item in errors)
+    else:
+        lines.append(f"Проверка {label}: OK")
+    if warnings:
+        lines.append(f"Предупреждения ({len(warnings)}):")
+        lines.extend(f"- [{item['code']}] {item['message']}" for item in warnings)
     return "\n".join(lines)
 
 
 def cmd_check(args: argparse.Namespace) -> int:
     project, _tokens = take_project(args.rest, 0)
-    errors = check_project(project)
-    print(format_report(project, errors))
-    return 1 if errors else 0
+    findings = check_project(project)
+    print(format_report(project, findings))
+    return 1 if hard_findings(findings) else 0
 
 
 def affected_evidence(evidence: list[dict], token: str) -> list[dict]:
@@ -1345,8 +1403,15 @@ def cmd_status(args: argparse.Namespace) -> int:
             print(f"- {gap}")
     else:
         print("- нет")
-    errors = check_project(project)
-    print("Проверка: OK" if not errors else f"Проверка: ОШИБКИ ({len(errors)})")
+    findings = check_project(project)
+    errors = hard_findings(findings)
+    warnings = [item for item in findings if item.get("warning")]
+    if errors:
+        print(f"Проверка: ОШИБКИ ({len(errors)})")
+    elif warnings:
+        print(f"Проверка: OK, предупреждения ({len(warnings)})")
+    else:
+        print("Проверка: OK")
     return 0
 
 
@@ -1578,9 +1643,10 @@ def gate_failure(project: Path, state: dict, stage: int) -> str | None:
         virtual = json.loads(json.dumps(state))
         if stage not in virtual["completed_stages"]:
             virtual["completed_stages"].append(stage)
-        errors = check_project(project, state=virtual)
+        findings = check_project(project, state=virtual)
+        errors = hard_findings(findings)
         if errors:
-            return "Проверка не пройдена:\n" + format_report(project, errors)
+            return "Проверка не пройдена:\n" + format_report(project, findings)
     return None
 
 
@@ -1698,6 +1764,13 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     pointed, found = current_pointer()
     if pointed and found is None:
         print(stale_current_hint(pointed))
+    dirty = uncommitted_tool_files()
+    if dirty:
+        print(
+            "Предупреждение: незакоммиченные изменения в scripts/ или tests/: "
+            + ", ".join(dirty[:8])
+            + ". В проектной сессии эти папки не правят."
+        )
     return 0
 
 
