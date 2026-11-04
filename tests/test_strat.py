@@ -221,19 +221,41 @@ class ExampleAndHelpTests(unittest.TestCase):
         self.assertIn("MODE: manual", complete.stdout)
 
     def test_api_error_does_not_leak_the_key(self) -> None:
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self) -> None:  # noqa: N802
+                length = int(self.headers.get("Content-Length") or 0)
+                self.rfile.read(length)
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(b"nope")
+
+            def log_message(self, fmt: str, *args: object) -> None:
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
         secret = "secret-test-key-should-not-leak"
-        result = self.cli(
-            "complete",
-            "--role",
-            "cheap",
-            "--prompt",
-            "ping",
-            env={
-                "STRAT_LLM_API_KEY": secret,
-                "STRAT_MODEL_CHEAP": "dummy",
-                "STRAT_LLM_BASE_URL": "http://127.0.0.1:9/v1",
-            },
-        )
+        try:
+            result = self.cli(
+                "complete",
+                "--role",
+                "cheap",
+                "--prompt",
+                "ping",
+                env={
+                    "STRAT_LLM_API_KEY": secret,
+                    "STRAT_MODEL_CHEAP": "dummy",
+                    "STRAT_LLM_BASE_URL": f"http://127.0.0.1:{port}/v1",
+                },
+            )
+        finally:
+            server.shutdown()
+            server.server_close()
         assert_code(result, 1)
         self.assertNotIn(secret, result.stdout + result.stderr)
         self.assertIn("MODE: error", result.stdout)
@@ -782,6 +804,95 @@ class WorkflowTests(unittest.TestCase):
         assert_code(failed, 1)
         self.assertIn("[quote-mismatch]", failed.stdout)
         self.assertIn("E002", failed.stdout)
+
+    def test_early_options_must_be_marked_preliminary(self) -> None:
+        assert_code(self.cli("init", "early", "--title", "Early"))
+        assert_code(self.cli("log", "early", "1", "Brief", "--grounds", "ready"))
+        project = Path(self.tmp.name) / "early"
+        bare = (
+            "# Варианты\n\n"
+            "### O1. Оставить как есть\n<!-- role: status-quo -->\n\n"
+            "Ничего не менять.\n\nВозражение: можно упустить окно.\n\n"
+            "### O2. Снизить цену\n<!-- role: change -->\n\n"
+            "Урезать тариф.\n\nВозражение: маржа не посчитана.\n\n"
+            "### O3. Закрыть направление\n<!-- role: close -->\n\n"
+            "Не запускать.\n\nВозражение: запрос руководства останется.\n"
+        )
+        (project / "options.md").write_text(bare, encoding="utf-8")
+        unmarked = self.cli("check", "early")
+        assert_code(unmarked, 1)
+        self.assertIn("[preliminary]", unmarked.stdout)
+        refused = self.cli("confirm", "early", "options", "--choice", "O2", "--note", "рано")
+        assert_code(refused, 1)
+        self.assertIn("ещё не открыт", refused.stdout)
+        (project / "options.md").write_text(
+            "<!-- preliminary -->\n\nгипотезы, не подтверждены, свидетельств 0\n\n" + bare,
+            encoding="utf-8",
+        )
+        marked = self.cli("check", "early")
+        assert_code(marked)
+        self.assertIn("OK", marked.stdout)
+        status = self.cli("status", "early")
+        assert_code(status)
+        self.assertIn("предварительные", status.stdout)
+
+    def test_fetch_saves_page_and_reports_network_errors(self) -> None:
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                body = (
+                    "<html><head><title>Витрина eSIM</title></head><body>"
+                    "<p>Пакет для поездки стоит 5 долларов.</p>"
+                    "<script>secret-token</script></body></html>"
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, fmt: str, *args: object) -> None:
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            assert_code(self.cli("init", "pages", "--title", "Pages"))
+            url = f"http://127.0.0.1:{port}/plans"
+            fetched = self.cli("fetch", "pages", url)
+            assert_code(fetched)
+            self.assertIn("id: S001", fetched.stdout)
+            project = Path(self.tmp.name) / "pages"
+            saved = list((project / "sources").glob("*.md"))
+            saved = [path for path in saved if path.name != "README.md"]
+            self.assertEqual(len(saved), 1)
+            text = saved[0].read_text(encoding="utf-8")
+            self.assertIn(url, text)
+            self.assertIn("Пакет для поездки стоит 5 долларов.", text)
+            self.assertNotIn("secret-token", text)
+            rows = [json.loads(line) for line in (project / "sources.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+            self.assertEqual(rows[0]["kind"], "web")
+            self.assertTrue(rows[0]["sha256"])
+            again = self.cli("fetch", "pages", url)
+            assert_code(again)
+            self.assertIn("Уже загружено", again.stdout)
+            self.assertEqual(len([path for path in (project / "sources").glob("*.md") if path.name != "README.md"]), 1)
+        finally:
+            server.shutdown()
+            server.server_close()
+        import socket
+
+        closed = socket.socket()
+        closed.bind(("127.0.0.1", 0))
+        closed_port = closed.getsockname()[1]
+        closed.close()
+        refused = self.cli("fetch", "pages", f"http://127.0.0.1:{closed_port}/closed")
+        assert_code(refused, 1)
+        self.assertIn("не открыл", refused.stdout)
 
 
 if __name__ == "__main__":
