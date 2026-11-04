@@ -1,0 +1,7 @@
+# Ядро (scripts/strat.py) не требует пакетов. Нужен Python 3.10+.
+# Раскомментируйте только если нужно читать pdf, docx или xlsx
+# через scripts/read_material.py. Без них агент просит цитату вручную.
+
+# pypdf>=4.0
+# python-docx>=1.1
+# openpyxl>=3.1

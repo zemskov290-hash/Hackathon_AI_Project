@@ -1,0 +1,15 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.DS_Store
+# Боевые проекты и указатель текущего — только на машине.
+# Учебный пример projects/_example остаётся в git.
+projects/*
+!projects/_example/
+projects/.current
+*.log
+.claude/settings.local.json

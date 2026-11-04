@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/decisions.schema.json",
+  "title": "Решение",
+  "description": "Поля, которые markdown-запись решения в decisions.md обязана содержать. Отдельный decisions.jsonl не ведётся, чтобы не плодить второй источник правды.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "owner", "metric", "review_date", "revisit_if", "evidence", "option", "status"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^D\\d+$" },
+    "title": { "type": "string" },
+    "owner": { "type": "string", "description": "Роль, не выдуманное личное имя" },
+    "metric": { "type": "string" },
+    "review_date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "revisit_if": { "type": "string" },
+    "evidence": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^E\\d{3,}$" }
+    },
+    "option": { "type": "string", "pattern": "^O\\d+$" },
+    "status": { "enum": ["open", "kept", "revised", "dropped"] }
+  }
+}

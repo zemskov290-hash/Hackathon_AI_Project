@@ -1,0 +1,4 @@
+{"id":"S001","url_or_path":"sources/brief-note.md","title":"Учебная заметка заказчика","accessed":"2026-11-04","kind":"own","sha256":"65dfba0090cc598d6dc5ea6ab14d70eda69f8301394a1fd514573e3c24b1883c","reliability":"med"}
+{"id":"S002","url_or_path":"sources/renewals.md","title":"Учебная выгрузка продлений","accessed":"2026-11-04","kind":"table","sha256":"b5f805f9cefe80a417462e8220fbc4003e2c035f61b15ad60c0bd54030c0831c","reliability":"low"}
+{"id":"S003","url_or_path":"sources/synthetic-interview.md","title":"Синтетическое интервью, не наблюдение","accessed":"2026-11-04","kind":"synthetic","sha256":"abc2926ddc28ce5a4577f25ae30170ef88a75eb3aef9ba1d649e5b488587eb8f","reliability":"low"}
+{"id":"S004","url_or_path":"sources/forecast-note.md","title":"Учебный прогноз","accessed":"2026-11-04","kind":"own","sha256":"ab8e3dba898a93ec10ad66e87e1bd50d84c692ce5d1d3ec23f488a90d578bb83","reliability":"low"}

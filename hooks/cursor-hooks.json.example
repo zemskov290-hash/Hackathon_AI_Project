@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [{ "command": "python hooks/post_write.py", "timeout": 60 }],
+    "stop": [{ "command": "python hooks/stage_end.py", "timeout": 15 }]
+  }
+}
