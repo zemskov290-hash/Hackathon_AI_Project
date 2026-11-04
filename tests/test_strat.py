@@ -17,7 +17,12 @@ STRAT = ROOT / "scripts" / "strat.py"
 BROKEN = ROOT / "tests" / "fixtures" / "broken_project"
 
 
-def run(*args: str, env: dict | None = None, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+def run(
+    *args: str,
+    env: dict | None = None,
+    cwd: Path | None = None,
+    input: str | None = None,
+) -> subprocess.CompletedProcess[str]:
     merged = os.environ.copy()
     for key in (
         "STRAT_LLM_API_KEY",
@@ -39,6 +44,7 @@ def run(*args: str, env: dict | None = None, cwd: Path | None = None) -> subproc
         encoding="utf-8",
         errors="replace",
         env=merged,
+        input=input,
         timeout=30,
     )
 
@@ -84,11 +90,13 @@ class ExampleAndHelpTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
-    def cli(self, *args: str, env: dict | None = None) -> subprocess.CompletedProcess[str]:
+    def cli(
+        self, *args: str, env: dict | None = None, input: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
         merged = dict(self.env)
         if env:
             merged.update(env)
-        return run(*args, env=merged)
+        return run(*args, env=merged, input=input)
 
     def test_help(self) -> None:
         result = self.cli("--help")
@@ -140,6 +148,62 @@ class ExampleAndHelpTests(unittest.TestCase):
         doctor = self.cli("doctor")
         assert_code(doctor)
         self.assertIn("smoke-local", doctor.stdout)
+
+    def test_corrupted_title_is_refused(self) -> None:
+        broken = self.cli("init", "broken-title", "--title", "???? ?????? ? ????????? ??????????")
+        assert_code(broken, 1)
+        self.assertIn("испорчен", broken.stdout)
+        self.assertIn("chcp 65001", broken.stdout)
+        self.assertFalse((self.projects / "broken-title").exists())
+        replaced = self.cli("init", "replaced-title", "--title", "Тариф\ufffd")
+        assert_code(replaced, 1)
+        self.assertIn("U+FFFD", replaced.stdout)
+        self.assertFalse((self.projects / "replaced-title").exists())
+
+    def test_title_file_keeps_cyrillic(self) -> None:
+        title_path = self.projects / "title.txt"
+        title_path.write_text("Семейные тарифы в мобильном приложении\n", encoding="utf-8")
+        created = self.cli("init", "family", "--title-file", str(title_path))
+        assert_code(created)
+        state = json.loads((self.projects / "family" / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(state["title"], "Семейные тарифы в мобильном приложении")
+        via_stdin = self.cli("init", "family-stdin", "--title", "-", input="Семейные тарифы\n")
+        assert_code(via_stdin)
+        state_stdin = json.loads((self.projects / "family-stdin" / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(state_stdin["title"], "Семейные тарифы")
+        via_env = self.cli("init", "family-env", env={"STRAT_TITLE": "Семейные тарифы"})
+        assert_code(via_env)
+        state_env = json.loads((self.projects / "family-env" / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(state_env["title"], "Семейные тарифы")
+
+    def test_log_grounds_file_and_rejects_question_marks(self) -> None:
+        assert_code(self.cli("init", "journ", "--title", "Latin title"))
+        project = self.projects / "journ"
+        bad = self.cli("log", "journ", "1", "Step", "--grounds", "???")
+        assert_code(bad, 1)
+        self.assertIn("испорчен", bad.stdout)
+        log_text = (project / "log.jsonl").read_text(encoding="utf-8")
+        self.assertNotIn('"grounds":"???"', log_text)
+        grounds_path = self.projects / "grounds.txt"
+        grounds_path.write_text("Основание на русском\n", encoding="utf-8")
+        message_path = self.projects / "action.txt"
+        message_path.write_text("Зафиксирован бриф\n", encoding="utf-8")
+        ok = self.cli(
+            "log",
+            "journ",
+            "1",
+            "--message-file",
+            str(message_path),
+            "--grounds-file",
+            str(grounds_path),
+        )
+        assert_code(ok)
+        markdown = (project / "log.md").read_text(encoding="utf-8")
+        payload = (project / "log.jsonl").read_text(encoding="utf-8")
+        self.assertIn("Зафиксирован бриф", markdown)
+        self.assertIn("Основание на русском", markdown)
+        self.assertIn("Зафиксирован бриф", payload)
+        self.assertIn("Основание на русском", payload)
 
     def test_broken_fixture_fails_with_expected_codes(self) -> None:
         result = self.cli("check", str(BROKEN))
@@ -245,8 +309,13 @@ class WorkflowTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
-    def cli(self, *args: str) -> subprocess.CompletedProcess[str]:
-        return run(*args, env=self.env)
+    def cli(
+        self, *args: str, env: dict | None = None, input: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        merged = dict(self.env)
+        if env:
+            merged.update(env)
+        return run(*args, env=merged, input=input)
 
     def test_init_source_evidence_and_gates(self) -> None:
         created = self.cli("init", "happy", "--title", "Проверка ворот")
@@ -256,12 +325,14 @@ class WorkflowTests(unittest.TestCase):
 
         blocked = self.cli("advance", "1")
         assert_code(blocked, 1)
-        self.assertIn("не подтверждена", blocked.stdout)
+        self.assertIn("журнале", blocked.stdout)
 
         project = Path(self.tmp.name) / "happy"
         (project / "brief.md").write_text("# Бриф\n\nЛюди с подпиской решают, оставлять ли её.\n", encoding="utf-8")
+        assert_code(self.cli("log", "happy", "1", "Brief drafted", "--grounds", "ready for confirm"))
         still = self.cli("advance", "happy", "1")
         assert_code(still, 1)
+        self.assertIn("не подтверждена", still.stdout)
         assert_code(self.cli("confirm", "happy", "brief", "--note", "согласовано"))
         assert_code(self.cli("advance", "happy", "1"))
 
@@ -286,6 +357,7 @@ class WorkflowTests(unittest.TestCase):
 ## Открытые вопросы
 """
         (project / "questions.md").write_text(questions, encoding="utf-8")
+        assert_code(self.cli("log", "happy", "2", "Research questions", "--grounds", "Q1 changes the choice"))
         assert_code(self.cli("advance", "happy", "2"))
 
         no_sources = self.cli("advance", "happy", "3")
@@ -333,12 +405,14 @@ class WorkflowTests(unittest.TestCase):
         )
         assert_code(evidence)
         self.assertIn("id: E001", evidence.stdout)
+        assert_code(self.cli("log", "happy", "3", "Source and fact recorded", "--grounds", "S001 E001"))
         assert_code(self.cli("advance", "happy", "3"))
 
         (project / "situation.md").write_text(
             "# Ситуация\n\n## Факты\n\nЛюди уходят, это точно известно всем.\n\n## Противоречия\n\nНет.\n\n## Неизвестно\n\n## Гипотезы\n\n## Прогнозы\n",
             encoding="utf-8",
         )
+        assert_code(self.cli("log", "happy", "4", "Situation draft", "--grounds", "facts still wrong"))
         bad_facts = self.cli("advance", "happy", "4")
         assert_code(bad_facts, 1)
         self.assertIn("[facts]", bad_facts.stdout)
@@ -361,6 +435,7 @@ class WorkflowTests(unittest.TestCase):
             "Возражение: одного упоминания доли [E001] мало, чтобы закрыть направление.\n",
             encoding="utf-8",
         )
+        assert_code(self.cli("log", "happy", "5", "Three options", "--grounds", "status quo and close included"))
         no_choice = self.cli("advance", "happy", "5")
         assert_code(no_choice, 1)
         assert_code(self.cli("confirm", "happy", "options", "--choice", "O2"))
@@ -377,6 +452,7 @@ class WorkflowTests(unittest.TestCase):
             "<!-- product: PP1 -->\n",
             encoding="utf-8",
         )
+        assert_code(self.cli("log", "happy", "6", "Strategy written", "--grounds", "P1 maps to PP1"))
         assert_code(self.cli("advance", "happy", "6"))
 
         (project / "validation.md").write_text(
@@ -387,6 +463,7 @@ class WorkflowTests(unittest.TestCase):
             "- **Нежелательные эффекты:** исследование затянется и решение не будет принято в срок\n",
             encoding="utf-8",
         )
+        assert_code(self.cli("log", "happy", "7", "Validation plan", "--grounds", "baseline and guardrail"))
         assert_code(self.cli("confirm", "happy", "validation"))
         assert_code(self.cli("advance", "happy", "7"))
         (project / "decisions.md").write_text(
@@ -400,6 +477,7 @@ class WorkflowTests(unittest.TestCase):
             "- status: open\n",
             encoding="utf-8",
         )
+        assert_code(self.cli("log", "happy", "8", "Decision D1", "--grounds", "review date set"))
         assert_code(self.cli("advance", "happy", "8"))
         status = self.cli("status", "happy")
         assert_code(status)
@@ -498,6 +576,76 @@ class WorkflowTests(unittest.TestCase):
         switched = self.cli("resume")
         assert_code(switched)
         self.assertIn("проект: two", switched.stdout)
+
+    def test_supersede_revision_and_subscription_cost(self) -> None:
+        assert_code(self.cli("init", "rev", "--title", "Revision"))
+        project = Path(self.tmp.name) / "rev"
+        (project / "sources" / "note.md").write_text("Первая фраза.\nВторая фраза.\n", encoding="utf-8")
+        assert_code(self.cli("add-source", "rev", "sources/note.md", "--kind", "own"))
+        assert_code(
+            self.cli(
+                "add-evidence",
+                "rev",
+                "--claim",
+                "Старая гипотеза.",
+                "--type",
+                "hypothesis",
+                "--source",
+                "S001",
+                "--quote",
+                "Первая фраза.",
+                "--confidence",
+                "low",
+            )
+        )
+        assert_code(
+            self.cli(
+                "add-evidence",
+                "rev",
+                "--claim",
+                "Новая гипотеза.",
+                "--type",
+                "hypothesis",
+                "--source",
+                "S001",
+                "--quote",
+                "Вторая фраза.",
+                "--confidence",
+                "med",
+            )
+        )
+        done = self.cli("supersede", "rev", "E001", "--by", "E002", "--reason", "новые данные")
+        assert_code(done)
+        rows = [json.loads(line) for line in (project / "evidence.jsonl").read_text(encoding="utf-8").splitlines()]
+        old = next(row for row in rows if row["id"] == "E001")
+        self.assertEqual(old["status"], "superseded")
+        self.assertEqual(old["superseded_by"], "E002")
+        self.assertIn("Замещено E001", (project / "log.md").read_text(encoding="utf-8"))
+        proposed = self.cli(
+            "propose-revision",
+            "rev",
+            "--decision",
+            "D2",
+            "--choice",
+            "O3",
+            "--reason",
+            "ворота не пройдены",
+        )
+        assert_code(proposed)
+        status = self.cli("status", "rev")
+        assert_code(status)
+        self.assertIn("ожидает решения", status.stdout)
+        self.assertIn("Токены не учитываются в режиме подписки IDE", status.stdout)
+        self.assertNotIn("токены 0", status.stdout)
+        accepted = self.cli("accept-revision", "rev", "--choice", "O3", "--note", "лид выбрал O3")
+        assert_code(accepted)
+        state = json.loads((project / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(state["checkpoints"]["options"]["choice"], "O3")
+        self.assertEqual(state["checkpoints"]["options"]["history"][0]["choice"], None)
+        self.assertEqual(state["revision"]["status"], "accepted")
+        resumed = self.cli("resume", "rev")
+        assert_code(resumed)
+        self.assertIn("accepted D2", resumed.stdout)
 
 
 if __name__ == "__main__":

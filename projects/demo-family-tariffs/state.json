@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "id": "demo-family-tariffs",
+  "title": "Семейные тарифы в мобильном приложении",
+  "example": true,
+  "stage": 8,
+  "stage_status": "done",
+  "completed_stages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "checkpoints": {
+    "brief": {
+      "status": "confirmed",
+      "at": "2026-11-04T12:51:28Z",
+      "note": "Accepted with edits: offer exists, salon/support channel; success=family retention; audience=multi-line payer; scope=app+offer terms no billing; deadline=end of quarter",
+      "choice": null
+    },
+    "options": {
+      "status": "confirmed",
+      "at": "2026-11-04T12:56:30Z",
+      "note": "O2 self-serve in app, no billing change; first cheap check that barrier is channel not price; no churn export yet",
+      "choice": "O2"
+    },
+    "validation": {
+      "status": "confirmed",
+      "at": "2026-11-04T12:58:58Z",
+      "note": "Validation plan accepted: channel-vs-price gate then O2 metrics; no churn base",
+      "choice": null
+    }
+  },
+  "created_at": "2026-11-04T12:46:09Z",
+  "updated_at": "2026-11-04T13:01:58Z"
+}

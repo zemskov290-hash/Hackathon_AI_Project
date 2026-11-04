@@ -16,6 +16,23 @@ python scripts/strat.py check projects/_example
 python scripts/strat.py resume projects/_example
 ```
 
+Вывод консоли PowerShell может показать кириллицу знаками вопроса, хотя в файле лежит нормальный UTF-8. Прежде чем решать, что текст сломался, прочитайте файл из Python (`Path.read_text(encoding='utf-8')`). Если испорчен сам аргумент — строка из одних «?» или символ U+FFFD — CLI её не запишет. Тогда передайте текст файлом UTF-8 или через stdin:
+
+```powershell
+python scripts/strat.py init family --title-file title.txt
+python scripts/strat.py log family 1 --message-file action.txt --grounds-file grounds.txt
+```
+
+Значение `-` читает один аргумент из stdin (`--title -`). Те же тексты можно положить в переменные `STRAT_TITLE`, `STRAT_LOG_MESSAGE`, `STRAT_GROUNDS`, `STRAT_REASON`, `STRAT_CLAIM`, `STRAT_QUOTE`, `STRAT_NOTE`. Если аргумент всё же нужен в командной строке, сначала в этом окне:
+
+```powershell
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+chcp 65001
+```
+
+Строку из одних «?» или с символом замены CLI не записывает и объясняет, что делать.
+
 Тот же смысл в bash, если `python` есть в PATH:
 
 ```bash
@@ -79,6 +96,9 @@ decisions.md  log.md  log.jsonl
 | `check [проект]` | дыры в фактах, ссылках, вариантах и обещаниях; код выхода ненулевой, текст по-русски |
 | `impact [проект] <S001\|E001>` | какие записи и строки зависят от источника, включая `depends_on` |
 | `retract [проект] <E001> --reason "..."` | отозвать свидетельство |
+| `supersede [проект] <E015> --by E019 --reason "..."` | заместить свидетельство; `*.jsonl` руками не правят |
+| `propose-revision [проект] --decision D2 --choice O3` | пометить, что принятый выбор на пересмотре |
+| `accept-revision [проект] --choice O3` | записать новый выбор и сохранить прежний в истории |
 | `log [проект] <этап> <сообщение> --minutes --tokens --cost --model` | дописать `log.md` и `log.jsonl` |
 | `cost [проект]` | сумма минут, токенов и стоимости по этапам |
 | `confirm [проект] brief\|options\|validation` | записать согласие человека; для вариантов нужен `--choice O2` |

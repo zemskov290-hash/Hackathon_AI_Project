@@ -26,7 +26,8 @@
       }
     },
     "created_at": { "type": "string" },
-    "updated_at": { "type": "string" }
+    "updated_at": { "type": "string" },
+    "revision": { "$ref": "#/$defs/revision" }
   },
   "$defs": {
     "checkpoint": {
@@ -36,7 +37,32 @@
         "status": { "enum": ["open", "confirmed"] },
         "at": { "type": ["string", "null"] },
         "note": { "type": ["string", "null"] },
-        "choice": { "type": ["string", "null"] }
+        "choice": { "type": ["string", "null"] },
+        "history": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "choice": { "type": ["string", "null"] },
+              "at": { "type": ["string", "null"] },
+              "note": { "type": ["string", "null"] },
+              "until": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "revision": {
+      "type": ["object", "null"],
+      "properties": {
+        "status": { "enum": ["pending", "accepted"] },
+        "decision": { "type": "string" },
+        "proposed_option": { "type": "string" },
+        "previous_option": { "type": ["string", "null"] },
+        "accepted_option": { "type": ["string", "null"] },
+        "reason": { "type": ["string", "null"] },
+        "opened_at": { "type": "string" },
+        "accepted_at": { "type": ["string", "null"] }
       }
     }
   }

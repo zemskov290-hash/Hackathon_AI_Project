@@ -117,6 +117,94 @@ def die(message: str, code: int = 1) -> None:
     raise SystemExit(code)
 
 
+WINDOWS_TEXT_HINT = (
+    "На Windows PowerShell 5.1 не передавайте русский текст аргументом командной строки: "
+    "кириллица превращается в знаки вопроса.\n"
+    "Запишите текст в файл UTF-8 и укажите парный флаг с суффиксом -file "
+    "(--title-file, --message-file, --grounds-file, --reason-file, --claim-file, --quote-file, --note-file).\n"
+    "Либо передайте значение «-» и подайте UTF-8 в stdin (так можно только для одного аргумента за вызов).\n"
+    "Либо задайте переменную окружения: STRAT_TITLE, STRAT_LOG_MESSAGE, STRAT_GROUNDS, "
+    "STRAT_REASON, STRAT_CLAIM, STRAT_QUOTE, STRAT_NOTE. Python читает её в Unicode.\n"
+    "Если нужен именно аргумент в командной строке, сначала в том же окне PowerShell:\n"
+    "  [Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)\n"
+    "  [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)\n"
+    "  chcp 65001"
+)
+
+_STDIN_TEXT: str | None = None
+
+
+def looks_corrupted(text: str) -> bool:
+    """True when a command-line argument lost its characters on the way in."""
+    if "\ufffd" in text:
+        return True
+    return bool(text.strip()) and all(char == "?" or char.isspace() for char in text)
+
+
+def reject_corrupted(text: str, label: str) -> None:
+    if looks_corrupted(text):
+        die(
+            f"Аргумент «{label}» испорчен: в строке только «?» или символ замены U+FFFD. Текст не записан.\n"
+            + WINDOWS_TEXT_HINT
+        )
+
+
+def read_stdin_text() -> str:
+    global _STDIN_TEXT
+    if _STDIN_TEXT is not None:
+        die("Стандартный ввод уже прочитан для другого аргумента. Остальной текст передайте файлом UTF-8.")
+    _STDIN_TEXT = sys.stdin.read()
+    return _STDIN_TEXT
+
+
+def read_utf8_arg_file(path_str: str) -> str:
+    path = Path(path_str)
+    if not path.is_file():
+        die(f"Файл не найден: {path}")
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        die(f"Файл {path} не в кодировке UTF-8. Сохраните его как UTF-8.")
+
+
+def strip_one_trailing_newline(text: str) -> str:
+    if text.endswith("\r\n"):
+        return text[:-2]
+    if text.endswith("\n"):
+        return text[:-1]
+    return text
+
+
+def resolve_text(
+    value: str | None,
+    file_value: str | None,
+    *,
+    label: str,
+    env_name: str | None = None,
+    required: bool = False,
+) -> str | None:
+    """Pick argv, a UTF-8 file, stdin ('-'), or an environment variable.
+
+    A corrupted argv value is refused. It is not replaced silently from the environment.
+    """
+    if value is not None and file_value is not None:
+        die(f"Для «{label}» укажите либо аргумент, либо файл, не оба сразу.")
+    if file_value is not None:
+        text = strip_one_trailing_newline(read_utf8_arg_file(file_value))
+    elif value == "-":
+        text = strip_one_trailing_newline(read_stdin_text())
+    elif value is not None:
+        text = value
+    elif env_name and os.environ.get(env_name) is not None:
+        text = os.environ[env_name]
+    elif required:
+        die(f"Не задано поле «{label}».\n" + WINDOWS_TEXT_HINT)
+    else:
+        return None
+    reject_corrupted(text, label)
+    return text
+
+
 def load_dotenv() -> None:
     path = ROOT / ".env"
     if not path.is_file():
@@ -208,9 +296,35 @@ def list_user_projects() -> list[Path]:
     for path in sorted(root.iterdir()):
         if path.name.startswith(".") or path.name.startswith("_"):
             continue
-        if path.is_dir() and (path / "state.json").is_file():
-            found.append(path.resolve())
+        if not path.is_dir() or not (path / "state.json").is_file():
+            continue
+        try:
+            state = json.loads((path / "state.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            state = {}
+        if isinstance(state, dict) and state.get("example"):
+            continue
+        found.append(path.resolve())
     return found
+
+
+def logged_stages(project: Path) -> set[int]:
+    stages: set[int] = set()
+    for entry in load_log(project):
+        if entry.get("stage") is None:
+            continue
+        stages.add(int(entry["stage"]))
+    return stages
+
+
+def require_stage_log(project: Path, stage: int) -> None:
+    if stage in logged_stages(project):
+        return
+    die(
+        f"Для этапа {stage} ({STAGES.get(stage, '?')}) в журнале нет ни одной записи. "
+        f"Сначала: python scripts/strat.py log <проект> {stage} \"что сделано\" --grounds \"почему\". "
+        "Автоматическая запись о закрытии этапа её не заменяет."
+    )
 
 
 def current_pointer() -> tuple[str, Path | None]:
@@ -400,6 +514,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     project_id = args.project_id
     if not re.fullmatch(r"[a-z][a-z0-9_-]{0,48}", project_id):
         die("Идентификатор: с латинской буквы, дальше строчные латиница, цифры, _ и -.")
+    title = resolve_text(args.title, args.title_file, label="название", env_name="STRAT_TITLE") or project_id
     dest = projects_root() / project_id
     if dest.exists():
         die(f"Проект уже существует: {dest}")
@@ -424,7 +539,6 @@ def cmd_init(args: argparse.Namespace) -> int:
         dest / "log.md",
         "# Журнал\n\nЗаписи добавляет `python scripts/strat.py log`. Историю не стирайте.\n",
     )
-    title = args.title or project_id
     save_state(dest, fresh_state(project_id, title))
     current = projects_root() / ".current"
     if not current.exists():
@@ -471,7 +585,9 @@ def cmd_add_source(args: argparse.Namespace) -> int:
         die(f"Неизвестная надёжность: {reliability}. Допустимо: high, med, low")
     if kind == "synthetic" and reliability != "low":
         die("Источник kind=synthetic всегда reliability=low: это не наблюдение.")
-    title = args.title or (stored if digest is None else Path(stored).name)
+    title = resolve_text(
+        args.title, args.title_file, label="название источника", env_name="STRAT_SOURCE_TITLE"
+    ) or (stored if digest is None else Path(stored).name)
     source_id = next_serial(sources, "S")
     sources.append(
         {
@@ -507,8 +623,21 @@ def cmd_add_evidence(args: argparse.Namespace) -> int:
         die(f"Нет источника {args.source}. Сначала add-source.")
     if args.etype == "synthetic" and by_source[args.source].get("kind") != "synthetic":
         die("type=synthetic допустим только вместе с источником kind=synthetic.")
-    if args.etype == "fact" and not args.quote.strip():
-        die("У факта должна быть дословная цитата (--quote).")
+    claim = resolve_text(args.claim, args.claim_file, label="тезис", env_name="STRAT_CLAIM", required=True)
+    quote = resolve_text(
+        args.quote if args.quote else None,
+        args.quote_file,
+        label="цитата",
+        env_name="STRAT_QUOTE",
+    ) or ""
+    locator = resolve_text(
+        args.locator if args.locator else None,
+        args.locator_file,
+        label="locator",
+        env_name="STRAT_LOCATOR",
+    ) or ""
+    if args.etype == "fact" and not quote.strip():
+        die("У факта должна быть дословная цитата (--quote или --quote-file).")
     depends = [item.strip() for item in args.depends_on.split(",") if item.strip()]
     known = {row["id"] for row in evidence}
     missing = [item for item in depends if item not in known]
@@ -518,11 +647,11 @@ def cmd_add_evidence(args: argparse.Namespace) -> int:
     evidence.append(
         {
             "id": evidence_id,
-            "claim": args.claim,
+            "claim": claim,
             "type": args.etype,
             "source": args.source,
-            "quote": args.quote,
-            "locator": args.locator,
+            "quote": quote,
+            "locator": locator,
             "confidence": args.confidence,
             "date": args.date or today(),
             "status": "active",
@@ -549,15 +678,54 @@ def cmd_retract(args: argparse.Namespace) -> int:
     if found.get("status") == "retracted":
         print(f"{evidence_id} уже отозвано")
         return 0
+    reason = resolve_text(
+        args.reason, args.reason_file, label="причина отзыва", env_name="STRAT_REASON", required=True
+    )
     found["status"] = "retracted"
-    found["retracted_reason"] = args.reason
+    found["retracted_reason"] = reason
     found["retracted_at"] = now_iso()
     save_jsonl(project / "evidence.jsonl", evidence)
     state = load_state(project)
-    append_log(project, int(state.get("stage") or 0), f"Отозвано {evidence_id}", grounds=args.reason)
+    append_log(project, int(state.get("stage") or 0), f"Отозвано {evidence_id}", grounds=reason)
     save_state(project, state)
-    print(f"Отозвано {evidence_id}: {args.reason}")
+    print(f"Отозвано {evidence_id}: {reason}")
     print("Дальше: python scripts/strat.py check — зависимый текст будет помечен.")
+    return 0
+
+
+def cmd_supersede(args: argparse.Namespace) -> int:
+    project, tokens = take_project(args.rest, 1)
+    old_id = tokens[0]
+    new_id = args.by
+    if not re.fullmatch(r"E\d{3,}", old_id) or not re.fullmatch(r"E\d{3,}", new_id or ""):
+        die("Укажите идентификаторы вида E015 и --by E019.")
+    if old_id == new_id:
+        die("Нельзя заместить запись самой собой.")
+    reason = resolve_text(
+        args.reason, args.reason_file, label="причина замещения", env_name="STRAT_REASON", required=True
+    )
+    evidence, errors = load_jsonl(project / "evidence.jsonl")
+    if errors:
+        die("evidence.jsonl повреждён:\n" + "\n".join(errors))
+    old = next((row for row in evidence if row.get("id") == old_id), None)
+    new = next((row for row in evidence if row.get("id") == new_id), None)
+    if old is None or new is None:
+        missing = old_id if old is None else new_id
+        die(f"Запись не найдена: {missing}. Новую сначала добавьте через add-evidence.")
+    if old.get("status") == "superseded" and old.get("superseded_by") == new_id:
+        print(f"{old_id} уже замещено записью {new_id}")
+        return 0
+    if old.get("status") == "retracted":
+        die(f"{old_id} отозвано. Замещение не заменяет отзыв.")
+    old["status"] = "superseded"
+    old["superseded_by"] = new_id
+    old["superseded_reason"] = reason
+    old["superseded_at"] = now_iso()
+    save_jsonl(project / "evidence.jsonl", evidence)
+    state = load_state(project)
+    append_log(project, int(state.get("stage") or 0), f"Замещено {old_id} записью {new_id}", grounds=reason)
+    save_state(project, state)
+    print(f"Замещено {old_id} → {new_id}. Текст со ссылкой [{old_id}] check пометит.")
     return 0
 
 
@@ -882,6 +1050,10 @@ def check_project(project: Path, state: dict | None = None) -> list[dict]:
         message = str(entry.get("message") or "")
         if message and message not in log_md:
             add("log", f"запись журнала не отражена в log.md: {message[:80]}")
+    logged = {int(entry["stage"]) for entry in logs if entry.get("stage") is not None}
+    for number in state.get("completed_stages") or []:
+        if int(number) not in logged:
+            add("log", f"этап {number} закрыт, но в журнале нет записи этого этапа")
     return errors
 
 
@@ -974,23 +1146,42 @@ def aggregate(entries: list[dict]) -> tuple[dict[int, dict], dict]:
     return by_stage, total
 
 
+def usage_was_measured(entries: list[dict]) -> bool:
+    for entry in entries:
+        tokens = entry.get("tokens")
+        cost = entry.get("cost")
+        if tokens not in (None, 0) or cost not in (None, 0, 0.0):
+            return True
+    return False
+
+
+def format_usage(entries: list[dict], total: dict) -> str:
+    minutes = f"минуты {fmt_num(total['minutes'])}"
+    if not usage_was_measured(entries):
+        return f"{minutes}. Токены не учитываются в режиме подписки IDE."
+    return (
+        f"{minutes}, токены {fmt_num(total['tokens'])}, стоимость {fmt_num(total['cost'])}"
+    )
+
+
 def format_cost(project: Path, entries: list[dict]) -> str:
     by_stage, total = aggregate(entries)
     lines = [f"Проект: {project.name}"]
     if not entries:
         lines.append("Затраты не записаны.")
         return "\n".join(lines)
+    measured = usage_was_measured(entries)
     for stage in sorted(by_stage):
         bucket = by_stage[stage]
         name = STAGES.get(stage, str(stage))
-        lines.append(
-            f"Этап {stage} {name}: минуты {fmt_num(bucket['minutes'])}, "
-            f"токены {fmt_num(bucket['tokens'])}, стоимость {fmt_num(bucket['cost'])}"
-        )
-    lines.append(
-        f"Итого: минуты {fmt_num(total['minutes'])}, токены {fmt_num(total['tokens'])}, "
-        f"стоимость {fmt_num(total['cost'])}"
-    )
+        if measured:
+            lines.append(
+                f"Этап {stage} {name}: минуты {fmt_num(bucket['minutes'])}, "
+                f"токены {fmt_num(bucket['tokens'])}, стоимость {fmt_num(bucket['cost'])}"
+            )
+        else:
+            lines.append(f"Этап {stage} {name}: минуты {fmt_num(bucket['minutes'])}")
+    lines.append(f"Итого: {format_usage(entries, total)}")
     return "\n".join(lines)
 
 
@@ -1037,12 +1228,26 @@ def cmd_status(args: argparse.Namespace) -> int:
     evidence, _errors = load_jsonl(project / "evidence.jsonl")
     active = [row for row in evidence if row.get("status") == "active"]
     retracted = [row for row in evidence if row.get("status") == "retracted"]
-    print(f"Свидетельства: {len(active)} активных, {len(retracted)} отозвано")
-    _by_stage, total = aggregate(load_log(project))
+    superseded = [row for row in evidence if row.get("status") == "superseded"]
     print(
-        f"Затраты: минуты {fmt_num(total['minutes'])}, токены {fmt_num(total['tokens'])}, "
-        f"стоимость {fmt_num(total['cost'])}"
+        f"Свидетельства: {len(active)} активных, {len(retracted)} отозвано, {len(superseded)} замещено"
     )
+    entries = load_log(project)
+    _by_stage, total = aggregate(entries)
+    print(f"Затраты: {format_usage(entries, total)}")
+    revision = state.get("revision") or {}
+    if revision.get("status") == "pending":
+        current_choice = (state.get("checkpoints") or {}).get("options", {}).get("choice") or "—"
+        print(
+            f"Пересмотр: ожидает решения — {revision.get('decision')}, "
+            f"предложен {revision.get('proposed_option')} (в контрольной точке сейчас {current_choice})"
+        )
+    elif revision.get("status") == "accepted":
+        print(
+            f"Пересмотр: принят {revision.get('decision')}, выбор {revision.get('accepted_option')}"
+        )
+    else:
+        print("Пересмотр: нет")
     print("Пробелы:")
     gaps = []
     for row in active:
@@ -1073,7 +1278,14 @@ def cmd_resume(args: argparse.Namespace) -> int:
     project, _tokens = take_project(args.rest, 0)
     state = load_state(project)
     stage = int(state.get("stage") or 0)
-    if state.get("stage_status") == "done" and stage == 8:
+    revision = state.get("revision") or {}
+    if revision.get("status") == "pending":
+        nxt = (
+            f"Пересмотр {revision.get('decision')} ждёт человека: предложен {revision.get('proposed_option')}. "
+            "Не считай старый выбор контрольной точки окончательным. "
+            "После явного согласия: python scripts/strat.py accept-revision <проект> --choice <O#>."
+        )
+    elif state.get("stage_status") == "done" and stage == 8:
         nxt = "Сопровождение: дата пересмотра в decisions.md. Новые данные не подмешивайте молча — impact и навык revise-on-new-data."
     else:
         nxt = NEXT_ACTION.get(stage, "Прочитайте state.json")
@@ -1088,6 +1300,14 @@ def cmd_resume(args: argparse.Namespace) -> int:
         extra = f":{choice}" if choice else ""
         points.append(f"{name}={payload.get('status')}{extra}")
     print("контрольные точки: " + "; ".join(points))
+    if revision.get("status") == "pending":
+        print(
+            f"пересмотр: pending {revision.get('decision')} -> {revision.get('proposed_option')}"
+        )
+    elif revision.get("status") == "accepted":
+        print(f"пересмотр: accepted {revision.get('decision')} -> {revision.get('accepted_option')}")
+    else:
+        print("пересмотр: нет")
     questions = read_text(project / "questions.md") or ""
     bullets = [] if is_template(questions) else section_bullets(questions, "Открытые вопросы")
     print("открытые вопросы:")
@@ -1110,27 +1330,38 @@ def cmd_resume(args: argparse.Namespace) -> int:
 
 def cmd_log(args: argparse.Namespace) -> int:
     tokens = args.rest
-    if tokens and project_dir_if_any(tokens[0]) is not None and len(tokens) >= 3:
+    message_elsewhere = bool(args.message_file or os.environ.get("STRAT_LOG_MESSAGE"))
+    if tokens and project_dir_if_any(tokens[0]) is not None and (
+        len(tokens) >= 3 or (len(tokens) >= 2 and message_elsewhere)
+    ):
         project = project_dir_if_any(tokens[0])
         body = tokens[1:]
-    elif len(tokens) >= 2:
+    elif len(tokens) >= 2 or (len(tokens) >= 1 and message_elsewhere):
         project = resolve_project(None)
         body = tokens
     else:
-        die("Форма: log [проект] <этап> <сообщение>")
+        die("Форма: log [проект] <этап> <сообщение>. Русский текст — через --message-file или «-».")
     assert project is not None
     try:
         stage = int(body[0])
     except ValueError:
         die("Этап должен быть числом от 0 до 8.")
-    message = " ".join(body[1:]).strip()
-    if not message:
+    raw_message = " ".join(body[1:]).strip()
+    message = resolve_text(
+        raw_message or None,
+        args.message_file,
+        label="сообщение журнала",
+        env_name="STRAT_LOG_MESSAGE",
+        required=True,
+    )
+    if not message or not message.strip():
         die("Пустое сообщение в журнал не пишется.")
+    grounds = resolve_text(args.grounds, args.grounds_file, label="основания", env_name="STRAT_GROUNDS")
     append_log(
         project,
         stage,
         message,
-        grounds=args.grounds,
+        grounds=grounds,
         minutes=args.minutes,
         tokens=args.tokens,
         cost=args.cost,
@@ -1146,22 +1377,99 @@ def cmd_confirm(args: argparse.Namespace) -> int:
     key = CHECKPOINTS.get(tokens[0].casefold())
     if key is None:
         die("Контрольная точка: brief, options или validation.")
+    require_stage_log(project, {"brief": 1, "options": 5, "validation": 7}[key])
     if key == "options" and not args.choice:
         die("Для вариантов укажите --choice O2 (идентификатор выбранного варианта).")
     state = load_state(project)
     checkpoint = state["checkpoints"][key]
     checkpoint["status"] = "confirmed"
     checkpoint["at"] = now_iso()
-    checkpoint["note"] = args.note
+    note = resolve_text(args.note, args.note_file, label="заметка", env_name="STRAT_NOTE")
+    if args.choice:
+        reject_corrupted(args.choice, "выбор")
+    checkpoint["note"] = note
     checkpoint["choice"] = args.choice
     append_log(
         project,
         int(state.get("stage") or 0),
         f"Человек подтвердил контрольную точку {key}",
-        grounds=args.note or args.choice,
+        grounds=note or args.choice,
     )
     save_state(project, state)
     print(f"Подтверждено: {key}" + (f", выбор {args.choice}" if args.choice else ""))
+    return 0
+
+
+def cmd_propose_revision(args: argparse.Namespace) -> int:
+    project, _tokens = take_project(args.rest, 0)
+    decision = args.decision
+    choice = args.choice
+    if not re.fullmatch(r"D\d+", decision or "") or not re.fullmatch(r"O\d+", choice or ""):
+        die("Форма: propose-revision [проект] --decision D2 --choice O3 --reason \"...\"")
+    reason = resolve_text(
+        args.reason, args.reason_file, label="причина пересмотра", env_name="STRAT_REASON", required=True
+    )
+    state = load_state(project)
+    previous = (state.get("checkpoints") or {}).get("options", {}).get("choice")
+    state["revision"] = {
+        "status": "pending",
+        "decision": decision,
+        "proposed_option": choice,
+        "previous_option": previous,
+        "reason": reason,
+        "opened_at": now_iso(),
+        "accepted_at": None,
+        "accepted_option": None,
+    }
+    append_log(
+        project,
+        int(state.get("stage") or 0),
+        f"Предложен пересмотр {decision}: выбор {choice} вместо {previous or '—'}",
+        grounds=reason,
+    )
+    save_state(project, state)
+    print(f"Пересмотр ожидает человека: {decision}, предложен {choice}, сейчас в контрольной точке {previous or '—'}.")
+    print("После явного согласия: python scripts/strat.py accept-revision <проект> --choice " + choice)
+    return 0
+
+
+def cmd_accept_revision(args: argparse.Namespace) -> int:
+    project, _tokens = take_project(args.rest, 0)
+    state = load_state(project)
+    revision = state.get("revision") or {}
+    if revision.get("status") != "pending":
+        die("Нет ожидающего пересмотра. Сначала propose-revision.")
+    choice = args.choice or revision.get("proposed_option")
+    if not re.fullmatch(r"O\d+", choice or ""):
+        die("Укажите --choice O3. Это выбор человека, не подстановка агента.")
+    note = resolve_text(args.note, args.note_file, label="заметка", env_name="STRAT_NOTE")
+    checkpoint = state["checkpoints"]["options"]
+    history = list(checkpoint.get("history") or [])
+    history.append(
+        {
+            "choice": checkpoint.get("choice"),
+            "at": checkpoint.get("at"),
+            "note": checkpoint.get("note"),
+            "until": now_iso(),
+        }
+    )
+    checkpoint["history"] = history
+    checkpoint["status"] = "confirmed"
+    checkpoint["choice"] = choice
+    checkpoint["at"] = now_iso()
+    checkpoint["note"] = note or revision.get("reason")
+    revision["status"] = "accepted"
+    revision["accepted_option"] = choice
+    revision["accepted_at"] = now_iso()
+    state["revision"] = revision
+    append_log(
+        project,
+        int(state.get("stage") or 0),
+        f"Принят пересмотр {revision.get('decision')}: выбор {choice}",
+        grounds=note or revision.get("reason"),
+    )
+    save_state(project, state)
+    print(f"Контрольная точка options обновлена: {choice}. Предыдущий выбор сохранён в history.")
     return 0
 
 
@@ -1214,6 +1522,7 @@ def cmd_advance(args: argparse.Namespace) -> int:
         if state.get("stage_status") == "done" and current == stage:
             die(f"Этап {stage} уже закрыт.")
         die(f"Сейчас открыт этап {current} ({STAGES.get(current, '?')}). Закрывать можно только его.")
+    require_stage_log(project, stage)
     failure = gate_failure(project, state, stage)
     if failure:
         die(failure)
@@ -1324,16 +1633,19 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "Проект можно не указывать, если он один (кроме папок с _) или задан projects/.current.\n"
             "Примеры:\n"
-            "  python scripts/strat.py init demo --title \"Новая задача\"\n"
+            "  python scripts/strat.py init demo --title-file title.txt\n"
             "  python scripts/strat.py resume\n"
             "  python scripts/strat.py check projects/_example\n"
+            "Русский текст на Windows: файл UTF-8 (*-file), stdin (-) или переменная STRAT_*.\n"
+            "Не передавайте кириллицу аргументом PowerShell 5.1 — она превратится в «?».\n"
         ),
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     init = sub.add_parser("init", help="создать папку проекта из шаблонов")
     init.add_argument("project_id")
-    init.add_argument("--title", help="человекочитаемое название")
+    init.add_argument("--title", help="название; «-» читает stdin в UTF-8")
+    init.add_argument("--title-file", help="название из файла UTF-8")
     init.set_defaults(func=cmd_init)
 
     use = sub.add_parser("use", help="сделать проект текущим")
@@ -1353,17 +1665,21 @@ def build_parser() -> argparse.ArgumentParser:
     add_source = sub.add_parser("add-source", help="зарегистрировать источник")
     add_source.add_argument("rest", nargs="+", help="[проект] <url|файл>")
     add_source.add_argument("--kind", choices=sorted(SOURCE_KINDS))
-    add_source.add_argument("--title")
+    add_source.add_argument("--title", help="название; «-» читает stdin")
+    add_source.add_argument("--title-file", help="название из файла UTF-8")
     add_source.add_argument("--reliability", choices=sorted(RELIABILITY))
     add_source.set_defaults(func=cmd_add_source)
 
     add_evidence = sub.add_parser("add-evidence", help="добавить свидетельство")
     add_evidence.add_argument("project", nargs="?")
-    add_evidence.add_argument("--claim", required=True)
+    add_evidence.add_argument("--claim", help="тезис; «-» читает stdin")
+    add_evidence.add_argument("--claim-file", help="тезис из файла UTF-8")
     add_evidence.add_argument("--type", dest="etype", required=True)
     add_evidence.add_argument("--source", required=True)
-    add_evidence.add_argument("--quote", default="")
+    add_evidence.add_argument("--quote", default="", help="цитата; «-» читает stdin")
+    add_evidence.add_argument("--quote-file", help="цитата из файла UTF-8")
     add_evidence.add_argument("--locator", default="")
+    add_evidence.add_argument("--locator-file")
     add_evidence.add_argument("--confidence", default="med")
     add_evidence.add_argument("--date")
     add_evidence.add_argument("--depends-on", default="")
@@ -1371,8 +1687,31 @@ def build_parser() -> argparse.ArgumentParser:
 
     retract = sub.add_parser("retract", help="отозвать свидетельство")
     retract.add_argument("rest", nargs="+", help="[проект] <E001>")
-    retract.add_argument("--reason", required=True)
+    retract.add_argument("--reason", help="причина; «-» читает stdin")
+    retract.add_argument("--reason-file", help="причина из файла UTF-8")
     retract.set_defaults(func=cmd_retract)
+
+    supersede = sub.add_parser("supersede", help="заместить свидетельство новой записью")
+    supersede.add_argument("rest", nargs="+", help="[проект] <старый E>")
+    supersede.add_argument("--by", required=True, help="новый id, например E019")
+    supersede.add_argument("--reason", help="почему старая запись больше не опора")
+    supersede.add_argument("--reason-file")
+    supersede.set_defaults(func=cmd_supersede)
+
+    propose = sub.add_parser("propose-revision", help="поставить решение на пересмотр, не меняя выбор")
+    propose.add_argument("rest", nargs="*", help="необязательный проект")
+    propose.add_argument("--decision", required=True, help="D2")
+    propose.add_argument("--choice", required=True, help="предложенный вариант, например O3")
+    propose.add_argument("--reason")
+    propose.add_argument("--reason-file")
+    propose.set_defaults(func=cmd_propose_revision)
+
+    accept = sub.add_parser("accept-revision", help="принять пересмотр и обновить выбор с историей")
+    accept.add_argument("rest", nargs="*", help="необязательный проект")
+    accept.add_argument("--choice", help="если не задан, берётся предложенный вариант")
+    accept.add_argument("--note")
+    accept.add_argument("--note-file")
+    accept.set_defaults(func=cmd_accept_revision)
 
     impact = sub.add_parser("impact", help="что зависит от источника или свидетельства")
     impact.add_argument("rest", nargs="+", help="[проект] <S001|E001>")
@@ -1380,7 +1719,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     log = sub.add_parser("log", help="дописать журнал")
     log.add_argument("rest", nargs="+", help="[проект] <этап> <сообщение>")
-    log.add_argument("--grounds")
+    log.add_argument("--message-file", help="текст действия из файла UTF-8, вместо слов в команде")
+    log.add_argument("--grounds", help="основания; «-» читает stdin")
+    log.add_argument("--grounds-file", help="основания из файла UTF-8")
     log.add_argument("--minutes", type=float)
     log.add_argument("--tokens", type=int)
     log.add_argument("--cost", type=float)
@@ -1389,7 +1730,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     confirm = sub.add_parser("confirm", help="зафиксировать согласие человека")
     confirm.add_argument("rest", nargs="+", help="[проект] brief|options|validation")
-    confirm.add_argument("--note")
+    confirm.add_argument("--note", help="заметка; «-» читает stdin")
+    confirm.add_argument("--note-file", help="заметка из файла UTF-8")
     confirm.add_argument("--choice", help="для options: O1, O2, ...")
     confirm.set_defaults(func=cmd_confirm)
 
