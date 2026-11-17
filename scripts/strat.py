@@ -2885,9 +2885,18 @@ def cmd_inspect(args: argparse.Namespace) -> int:
             transcript=one(getattr(args, "transcript", None)),
             description=description,
             synthetic=bool(getattr(args, "synthetic", False)),
+            force=bool(getattr(args, "force", False)),
         )
     except inspect_media.InspectError as exc:
         die(str(exc))
+    if outcome.get("already"):
+        _print_existing_inspect(project, outcome)
+        claim = _resolve_optional_text(
+            getattr(args, "claim", None), getattr(args, "claim_file", None), "тезис", "STRAT_CLAIM"
+        )
+        if claim:
+            _add_inspect_evidence(project, outcome, args, claim)
+        return 0
     manifest = outcome["manifest"]
     report_rel = str(outcome["report_rel"])
     titles = {
@@ -2966,6 +2975,66 @@ def cmd_inspect(args: argparse.Namespace) -> int:
         cmd_add_evidence(evidence_args)
     remember_step(project, f"inspect:{outcome['id']}", "done", str(manifest.get("input_sha256")), outcome["id"])
     return 0
+
+
+def _inspect_sources(project: Path, inspect_id: str) -> tuple[dict | None, dict | None]:
+    rows, errors = load_jsonl(project / "sources.jsonl")
+    if errors:
+        die("sources.jsonl повреждён:\n" + "\n".join(errors))
+    primary = None
+    described = None
+    for row in rows:
+        if row.get("inspect_id") != inspect_id:
+            continue
+        if row.get("model_description"):
+            described = row
+        elif primary is None:
+            primary = row
+    return primary, described
+
+
+def _print_existing_inspect(project: Path, outcome: dict) -> None:
+    manifest = outcome["manifest"]
+    primary, described = _inspect_sources(project, str(outcome["id"]))
+    print(f"inspect_id: {outcome['id']}")
+    if primary is not None:
+        print(f"source_id: {primary['id']}")
+    print(f"snapshot: {manifest.get('input_path')}")
+    print(f"sha256: {manifest.get('input_sha256')}")
+    print(f"report: {outcome.get('report_rel')}")
+    if described is not None:
+        print(f"description_source_id: {described['id']}")
+    print("Уже разобрано.")
+
+
+def _add_inspect_evidence(project: Path, outcome: dict, args: argparse.Namespace, claim: str) -> None:
+    primary, _described = _inspect_sources(project, str(outcome["id"]))
+    if primary is None:
+        die(f"Разбор {outcome['id']} ещё не зарегистрирован как источник.")
+    if outcome.get("gap") and (getattr(args, "etype", None) or "fact") == "fact":
+        die("Нельзя записать fact: текст из файла не извлечён. Содержимое не выдумывается.")
+    quote = _resolve_optional_text(
+        getattr(args, "quote", None), getattr(args, "quote_file", None), "цитата", "STRAT_QUOTE"
+    )
+    cmd_add_evidence(
+        argparse.Namespace(
+            project=project.name,
+            claim=claim,
+            claim_file=None,
+            etype=getattr(args, "etype", None) or "fact",
+            source=primary["id"],
+            quote=quote or "",
+            quote_file=None,
+            locator=str(outcome.get("report_rel") or ""),
+            locator_file=None,
+            confidence=getattr(args, "confidence", None) or "med",
+            date=None,
+            depends_on="",
+            analysis=None,
+            metric=None,
+            inspect=outcome["id"],
+        )
+    )
 
 
 def cmd_doctor(_args: argparse.Namespace) -> int:
@@ -3246,6 +3315,11 @@ def build_parser() -> argparse.ArgumentParser:
     inspect_cmd.add_argument("--description", help="описание изображения моделью IDE")
     inspect_cmd.add_argument("--description-file", help="описание из файла UTF-8")
     inspect_cmd.add_argument("--synthetic", action="store_true", help="материал помечен как синтетический")
+    inspect_cmd.add_argument(
+        "--force",
+        action="store_true",
+        help="новый разбор, даже если снимок с этим sha256 уже есть",
+    )
     inspect_cmd.add_argument("--claim")
     inspect_cmd.add_argument("--claim-file")
     inspect_cmd.add_argument("--quote", default=None)

@@ -435,6 +435,64 @@ class InspectCliTests(unittest.TestCase):
         heard_report = list((project / "inspect").glob("M00*/report.md"))
         self.assertTrue(any("Семейный тариф без витрины" in path.read_text(encoding="utf-8") for path in heard_report))
 
+    def test_repeat_inspect_returns_the_same_snapshot(self) -> None:
+        assert_code(self.cli("init", "again", "--title", "Повтор"))
+        project = self.projects / "again"
+        (project / "sources" / "page.html").write_text(FIXTURE_HTML, encoding="utf-8")
+        (project / "sources" / "pixel.png").write_bytes(inspect_media.png_bytes())
+        assert_code(self.cli("inspect", "again", "--html", "sources/page.html", "--synthetic"))
+        image = self.cli(
+            "inspect",
+            "again",
+            "--image",
+            "sources/pixel.png",
+            "--description",
+            "Учебный кадр: один красный пиксель, людей нет.",
+            "--synthetic",
+        )
+        assert_code(image)
+        self.assertIn("description_source_id: S003", image.stdout)
+
+        def ids_and_bytes() -> tuple[list[str], list[str], dict[str, bytes]]:
+            inspect_ids = sorted(path.name for path in (project / "inspect").iterdir() if path.is_dir())
+            sources = [
+                json.loads(line)["id"]
+                for line in (project / "sources.jsonl").read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            blobs = {
+                path.relative_to(project).as_posix(): path.read_bytes()
+                for path in project.rglob("*")
+                if path.is_file()
+            }
+            return inspect_ids, sources, blobs
+
+        before_ids, before_sources, before_blobs = ids_and_bytes()
+        self.assertEqual(before_ids, ["M001", "M002"])
+        self.assertEqual(before_sources, ["S001", "S002", "S003"])
+        html_again = self.cli("inspect", "again", "--html", "inspect/M001/input.html")
+        assert_code(html_again)
+        self.assertIn("Уже разобрано", html_again.stdout)
+        self.assertIn("inspect_id: M001", html_again.stdout)
+        self.assertIn("source_id: S001", html_again.stdout)
+        image_again = self.cli("inspect", "again", "--image", "inspect/M002/input.png", "--description", "другой текст")
+        assert_code(image_again)
+        self.assertIn("Уже разобрано", image_again.stdout)
+        self.assertIn("inspect_id: M002", image_again.stdout)
+        self.assertIn("description_source_id: S003", image_again.stdout)
+        after_ids, after_sources, after_blobs = ids_and_bytes()
+        self.assertEqual(after_ids, before_ids)
+        self.assertEqual(after_sources, before_sources)
+        self.assertEqual(after_blobs, before_blobs)
+        forced = self.cli("inspect", "again", "--html", "sources/page.html", "--force")
+        assert_code(forced)
+        self.assertIn("inspect_id: M003", forced.stdout)
+        self.assertNotIn("Уже разобрано", forced.stdout)
+        self.assertEqual(
+            sorted(path.name for path in (project / "inspect").iterdir() if path.is_dir()),
+            ["M001", "M002", "M003"],
+        )
+
     def test_media_evidence_without_snapshot_warns(self) -> None:
         assert_code(self.cli("init", "gap", "--title", "Дыра"))
         project = self.projects / "gap"

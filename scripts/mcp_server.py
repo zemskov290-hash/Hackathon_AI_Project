@@ -891,6 +891,7 @@ def handle_inspect(arguments: dict) -> dict:
             description=description or None,
             description_file=None,
             synthetic=bool(arguments.get("synthetic", False)),
+            force=bool(arguments.get("force", False)),
             claim=claim or None,
             claim_file=None,
             quote=quote or None,
@@ -1364,6 +1365,10 @@ def build_tools() -> list[dict]:
                         max_length=8_000,
                     ),
                     "synthetic": {"type": "boolean", "description": "true, если страница или кадр вымышлены."},
+                    "force": {
+                        "type": "boolean",
+                        "description": "true — новый разбор, даже если снимок с тем же sha256 уже разобран.",
+                    },
                     "claim": string_prop("Тезис по строке отчёта.", max_length=4_000),
                     "quote": string_prop("Дословная строка отчёта.", max_length=4_000),
                     "type": {

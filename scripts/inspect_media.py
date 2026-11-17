@@ -541,6 +541,64 @@ def render_av_report(
     return "\n".join(lines)
 
 
+def _kind_for(html: Path | None, image: Path | None, pdf: Path | None, av: Path | None) -> str:
+    if html is not None:
+        return "ui"
+    if image is not None:
+        return "image"
+    if pdf is not None:
+        return "pdf"
+    return "av"
+
+
+def iter_manifests(project: Path):
+    root = project / "inspect"
+    if not root.is_dir():
+        return
+    folders = [
+        path
+        for path in root.iterdir()
+        if path.is_dir() and ID_RE.fullmatch(path.name) and (path / "manifest.json").is_file()
+    ]
+    for folder in sorted(folders, key=lambda item: item.name):
+        yield load_manifest(project, folder.name)
+
+
+def find_existing(project: Path, kind: str, digest: str, transcript_hash: str | None) -> dict | None:
+    for manifest in iter_manifests(project):
+        if manifest.get("kind") != kind or manifest.get("input_sha256") != digest:
+            continue
+        if kind == "av" and (manifest.get("transcript_sha256") or None) != transcript_hash:
+            continue
+        return manifest
+    return None
+
+
+def extract_saved(project: Path, manifest: dict) -> dict:
+    """Read the stored snapshot in memory. Does not write."""
+    snapshot = project / str(manifest.get("input_path") or "")
+    kind = str(manifest.get("kind") or "")
+    if kind == "ui":
+        return extract_dom(snapshot.read_text(encoding="utf-8", errors="replace"))
+    if kind == "image":
+        return image_metadata(snapshot)
+    if kind == "pdf":
+        parsed = read_pdf(snapshot)
+        return {
+            "status": parsed["status"],
+            "pages": len(parsed["pages"]),
+            "page_text": [str(page.get("text") or "") for page in parsed["pages"]],
+            "message": parsed.get("message") or "",
+        }
+    plain = None
+    transcript_rel = manifest.get("transcript_path")
+    if transcript_rel:
+        transcript_path = project / str(transcript_rel)
+        if transcript_path.is_file():
+            plain = transcript_plain(transcript_path.read_text(encoding="utf-8", errors="replace"))
+    return {"transcript": plain is not None, "text": plain or ""}
+
+
 def run_inspect(
     project: Path,
     *,
@@ -551,6 +609,7 @@ def run_inspect(
     transcript: Path | None = None,
     description: str | None = None,
     synthetic: bool = False,
+    force: bool = False,
 ) -> dict:
     chosen = [item for item in (html, image, pdf, av) if item is not None]
     if len(chosen) != 1:
@@ -562,14 +621,30 @@ def run_inspect(
             "В описании изображения есть почта или телефон. В репозиторий не кладут ПДн со скриншотов и записей."
         )
     source = chosen[0]
+    kind = _kind_for(html, image, pdf, av)
+    transcript_hash = content_digest(transcript) if transcript is not None else None
+    if not force:
+        existing = find_existing(project, kind, content_digest(source), transcript_hash)
+        if existing is not None:
+            return {
+                "id": existing["id"],
+                "manifest": existing,
+                "structured": extract_saved(project, existing),
+                "gap": bool(existing.get("gap")),
+                "report_rel": existing.get("report_path"),
+                "already": True,
+                "message": "",
+            }
     inspect_id = next_id(project)
     folder = project / "inspect" / inspect_id
     folder.mkdir(parents=True)
     try:
-        return _build(project, folder, inspect_id, source, html, image, pdf, av, transcript, description, synthetic)
+        built = _build(project, folder, inspect_id, source, html, image, pdf, av, transcript, description, synthetic)
     except Exception:
         shutil.rmtree(folder, ignore_errors=True)
         raise
+    built["already"] = False
+    return built
 
 
 def _build(
