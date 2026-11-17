@@ -7,7 +7,7 @@ __pycache__/
 .mypy_cache/
 .DS_Store
 # Боевые проекты и указатель текущего — только на машине.
-# Учебный пример projects/_example остаётся в git.
+# В git остаются учебный projects/_example и снимок projects/demo-family-tariffs.
 projects/*
 !projects/_example/
 !projects/demo-family-tariffs/

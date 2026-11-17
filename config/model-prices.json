@@ -1,0 +1,22 @@
+{
+  "chars_per_token": 4,
+  "currency": "USD",
+  "assumption": "Допущение, не счёт. Токен приближённо равен 4 символам входа или выхода. Цены ниже — условная таблица для режима подписки IDE, а не тариф провайдера и не выставленный счёт.",
+  "models": {
+    "ide/subscription": {
+      "input_per_million": 3,
+      "output_per_million": 15,
+      "label": "условная сильная модель подписки IDE"
+    },
+    "example/strong": {
+      "input_per_million": 15,
+      "output_per_million": 75,
+      "label": "учебная сильная модель из примера"
+    },
+    "default": {
+      "input_per_million": 3,
+      "output_per_million": 15,
+      "label": "если в записи журнала модель не указана"
+    }
+  }
+}

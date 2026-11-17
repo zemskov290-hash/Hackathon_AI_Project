@@ -25,6 +25,10 @@
         "validation": { "$ref": "#/$defs/checkpoint" }
       }
     },
+    "option_registry": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/option" }
+    },
     "created_at": { "type": "string" },
     "updated_at": { "type": "string" },
     "revision": { "$ref": "#/$defs/revision" }
@@ -50,6 +54,17 @@
             }
           }
         }
+      }
+    },
+    "option": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "status"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^O\\d+$" },
+        "title": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["active", "superseded"] },
+        "superseded_reason": { "type": "string" }
       }
     },
     "revision": {

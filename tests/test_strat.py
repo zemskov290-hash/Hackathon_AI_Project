@@ -457,6 +457,9 @@ class WorkflowTests(unittest.TestCase):
             "Возражение: одного упоминания доли [E001] мало, чтобы закрыть направление.\n",
             encoding="utf-8",
         )
+        assert_code(self.cli("add-option", "happy", "--title", "Оставить как есть"))
+        assert_code(self.cli("add-option", "happy", "--title", "Уточнить барьер коротким исследованием"))
+        assert_code(self.cli("add-option", "happy", "--title", "Закрыть направление"))
         assert_code(self.cli("log", "happy", "5", "Three options", "--grounds", "status quo and close included"))
         no_choice = self.cli("advance", "happy", "5")
         assert_code(no_choice, 1)
@@ -465,10 +468,31 @@ class WorkflowTests(unittest.TestCase):
 
         (project / "strategy.md").write_text(
             "# Стратегия\n\n## Продуктовая стратегия\n\n"
-            "Аудитория — действующие подписчики. Направление O2, отказ от немедленной переделки цены.\n"
+            "### Целевой сегмент и работа (JTBD)\n\n"
+            "Аудитория — действующие подписчики, которые решают, оставлять ли продукт. Работа — понять барьер до переделки.\n\n"
+            "### Ценностное предложение\n\n"
             "Свойство PP1: протокол из пяти интервью и решение по их итогам, без новой функции в этом цикле.\n\n"
+            "### Границы MVP\n\n"
+            "В этот цикл входит только протокол интервью и решение. Интерфейс и цену не переписываем.\n\n"
+            "### Метрики\n\n"
+            "Метрика цикла — есть письменный барьер и решение продолжать или остановить, а не выручка.\n\n"
+            "### Риски\n\n"
+            "Исследование может затянуться, и решение не будет принято, пока падение доли продолжится.\n\n"
+            "### Что мы не делаем\n\n"
+            "Направление O2, отказ от немедленной переделки цены и от обещания наружу до интервью.\n\n"
             "## Коммуникационная стратегия\n\n"
-            "Сообщение команде: сначала назовём барьер, наружу ничего не обещаем.\n\n"
+            "### Аудитории\n\n"
+            "Аудитория сообщения — команда продукта, а не внешние подписчики этого цикла.\n\n"
+            "### Ключевые сообщения\n\n"
+            "Сообщение команде: сначала назовём барьер, наружу ничего не обещаем до решения.\n\n"
+            "### Каналы\n\n"
+            "Канал — внутренний разбор протокола, не рекламная кампания и не пуш подписчикам.\n\n"
+            "### Сроки и последовательность\n\n"
+            "Сначала пять интервью, затем решение. Внешнее обещание не выходит раньше этого решения.\n\n"
+            "### Работа с возражениями\n\n"
+            "Возражение «исследование откладывает решение» закрывается сроком в плане проверки и явным решением.\n\n"
+            "### Как измеряется успех\n\n"
+            "Успех коммуникации внутри команды — одно названное барьером решение, а не охват рекламы.\n\n"
             "<!-- promise: P1 -->\n"
             "Команде показываем выводы интервью до любой переделки продукта.\n"
             "<!-- product: PP1 -->\n",
@@ -893,6 +917,378 @@ class WorkflowTests(unittest.TestCase):
         refused = self.cli("fetch", "pages", f"http://127.0.0.1:{closed_port}/closed")
         assert_code(refused, 1)
         self.assertIn("не открыл", refused.stdout)
+
+
+STRATEGY_SECTIONS = {
+    "Продуктовая стратегия": [
+        (
+            "Целевой сегмент и работа (JTBD)",
+            "Сегмент — действующие подписчики за несколько дней до списания. Работа — понять, пользуются ли они продуктом.",
+        ),
+        (
+            "Ценностное предложение",
+            "Свойство PP1: протокол из пяти интервью и письменное решение, без новой функции в этом цикле.",
+        ),
+        (
+            "Границы MVP",
+            "В этот выпуск входит только протокол интервью и решение команды. Цену и интерфейс не меняем.",
+        ),
+        (
+            "Метрики",
+            "Метрика цикла — названный барьер и решение продолжать или остановить, а не обещание выручки.",
+        ),
+        (
+            "Риски",
+            "Исследование может затянуться, и решение не будет принято, пока доля продлений продолжит падать.",
+        ),
+        (
+            "Что мы не делаем",
+            "Не обещаем скидку и не запускаем внешнюю кампанию, пока барьер не назван словами интервью.",
+        ),
+    ],
+    "Коммуникационная стратегия": [
+        (
+            "Аудитории",
+            "Аудитория сообщения — команда продукта, а не внешние подписчики этого короткого цикла.",
+        ),
+        (
+            "Ключевые сообщения",
+            "Сообщение команде: сначала называем барьер, наружу ничего не обещаем до решения по протоколу.",
+        ),
+        (
+            "Каналы",
+            "Канал — внутренний разбор протокола. Рекламный пуш и внешняя рассылка в этот цикл не входят.",
+        ),
+        (
+            "Сроки и последовательность",
+            "Сначала пять интервью, затем одно решение. Внешнее обещание не выходит раньше этого решения.",
+        ),
+        (
+            "Работа с возражениями",
+            "Возражение «исследование только откладывает решение» закрывается датой решения в плане проверки.",
+        ),
+        (
+            "Как измеряется успех",
+            "Успех — одно названное барьером решение команды, а не охват рекламы и не прогноз выручки.",
+        ),
+    ],
+}
+
+
+def strategy_markdown(replace: dict[str, str] | None = None, omit: str | None = None) -> str:
+    parts = ["# Стратегия", ""]
+    for parent, sections in STRATEGY_SECTIONS.items():
+        parts.append(f"## {parent}")
+        parts.append("")
+        for title, body in sections:
+            if title == omit:
+                continue
+            if replace and title in replace:
+                body = replace[title]
+            parts.append(f"### {title}")
+            parts.append("")
+            parts.append(body)
+            parts.append("")
+    parts.extend(
+        [
+            "<!-- promise: P1 -->",
+            "Команде показываем выводы интервью до любой переделки продукта.",
+            "<!-- product: PP1 -->",
+            "",
+        ]
+    )
+    return "\n".join(parts)
+
+
+class MinimumCheckTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.env = {"STRAT_PROJECTS_DIR": self.tmp.name}
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def cli(self, *args: str, env: dict | None = None, input: str | None = None) -> subprocess.CompletedProcess[str]:
+        merged = dict(self.env)
+        if env:
+            merged.update(env)
+        return run(*args, env=merged, input=input)
+
+    def test_url_without_snapshot_warns_until_strict(self) -> None:
+        assert_code(self.cli("init", "web", "--title", "Веб без снимка"))
+        added = self.cli("add-source", "web", "https://example.com/tariff", "--title", "Страница")
+        assert_code(added)
+        self.assertIn("Локального снимка нет", added.stdout)
+        assert_code(
+            self.cli(
+                "add-evidence",
+                "web",
+                "--claim",
+                "На странице что-то сказано, но файла нет.",
+                "--type",
+                "hypothesis",
+                "--source",
+                "S001",
+                "--quote",
+                "цитата не с чем сверить",
+                "--confidence",
+                "med",
+            )
+        )
+        warned = self.cli("check", "web")
+        assert_code(warned)
+        self.assertIn("[snapshot]", warned.stdout)
+        self.assertIn("Предупреждения", warned.stdout)
+        strict = self.cli("check", "web", "--strict")
+        assert_code(strict, 1)
+        self.assertIn("[snapshot]", strict.stdout)
+        self.assertIn("ОШИБКИ", strict.stdout)
+
+    def test_missing_quote_warns_until_strict(self) -> None:
+        assert_code(self.cli("init", "noquote", "--title", "Без цитаты"))
+        project = Path(self.tmp.name) / "noquote"
+        (project / "sources" / "note.md").write_text("В файле есть фраза, но её не процитировали.\n", encoding="utf-8")
+        assert_code(self.cli("add-source", "noquote", "sources/note.md", "--kind", "own"))
+        assert_code(
+            self.cli(
+                "add-evidence",
+                "noquote",
+                "--claim",
+                "Гипотеза без дословной опоры.",
+                "--type",
+                "hypothesis",
+                "--source",
+                "S001",
+                "--confidence",
+                "low",
+            )
+        )
+        warned = self.cli("check", "noquote")
+        assert_code(warned)
+        self.assertIn("E001: нет дословной цитаты", warned.stdout)
+        strict = self.cli("check", "noquote", "--strict")
+        assert_code(strict, 1)
+        self.assertIn("[quote]", strict.stdout)
+
+    def test_low_confidence_recommendation_is_warning(self) -> None:
+        assert_code(self.cli("init", "lowrec", "--title", "Низкая уверенность"))
+        project = Path(self.tmp.name) / "lowrec"
+        (project / "sources" / "note.md").write_text(
+            "Рабочая гипотеза команды: барьер не в цене.\n",
+            encoding="utf-8",
+        )
+        assert_code(self.cli("add-source", "lowrec", "sources/note.md", "--kind", "own"))
+        assert_code(
+            self.cli(
+                "add-evidence",
+                "lowrec",
+                "--claim",
+                "Гипотеза, что барьер не в цене.",
+                "--type",
+                "hypothesis",
+                "--source",
+                "S001",
+                "--quote",
+                "Рабочая гипотеза команды: барьер не в цене.",
+                "--confidence",
+                "low",
+            )
+        )
+        text = strategy_markdown()
+        text = text.replace(
+            "Сегмент — действующие подписчики за несколько дней до списания.",
+            "Сегмент — действующие подписчики. Опора слабая: гипотеза [E001].",
+        )
+        (project / "strategy.md").write_text(text, encoding="utf-8")
+        (project / "decisions.md").write_text(
+            "# Решения\n\n## D1. Сначала интервью\n\n"
+            "Решение держится на слабой записи [E001], это надо видеть в проверке.\n\n"
+            "- owner: лид продукта\n"
+            "- metric: есть письменный барьер и решение продолжать или остановить\n"
+            "- review_date: 2026-12-01\n"
+            "- revisit_if: протокол не собран к дате пересмотра\n",
+            encoding="utf-8",
+        )
+        checked = self.cli("check", "lowrec")
+        assert_code(checked)
+        self.assertIn("[confidence]", checked.stdout)
+        self.assertIn("E001", checked.stdout)
+        self.assertIn("OK", checked.stdout)
+
+    def test_strategy_sections_fail_when_missing_or_placeholder(self) -> None:
+        assert_code(self.cli("init", "stratgap", "--title", "Дыра в стратегии"))
+        project = Path(self.tmp.name) / "stratgap"
+        (project / "strategy.md").write_text(strategy_markdown(omit="Метрики"), encoding="utf-8")
+        missing = self.cli("check", "stratgap")
+        assert_code(missing, 1)
+        self.assertIn("нет подраздела «Метрики»", missing.stdout)
+        (project / "strategy.md").write_text(
+            strategy_markdown(replace={"Риски": "TODO"}),
+            encoding="utf-8",
+        )
+        placeholder = self.cli("check", "stratgap")
+        assert_code(placeholder, 1)
+        self.assertIn("подраздел «Риски» пуст или заполнен заглушкой", placeholder.stdout)
+        (project / "strategy.md").write_text(strategy_markdown(), encoding="utf-8")
+        assert_code(self.cli("check", "stratgap"))
+
+    def test_option_ids_stay_stable(self) -> None:
+        assert_code(self.cli("init", "opts", "--title", "Стабильные варианты"))
+        project = Path(self.tmp.name) / "opts"
+        first = self.cli("add-option", "opts", "--title", "Оставить как есть")
+        assert_code(first)
+        self.assertIn("id: O1", first.stdout)
+        assert_code(self.cli("add-option", "opts", "--title", "Другой путь"))
+        assert_code(self.cli("add-option", "opts", "--title", "Закрыть направление"))
+        reused = self.cli("add-option", "opts", "--id", "O2", "--title", "Ещё один путь")
+        assert_code(reused, 1)
+        self.assertIn("уже занят", reused.stdout)
+        duplicate = (
+            "# Варианты\n\n"
+            "### O1. Оставить как есть\n<!-- role: status-quo -->\n\nТекст.\n\nВозражение: слабое.\n\n"
+            "### O1. Другой путь\n<!-- role: change -->\n\nТекст второго.\n\nВозражение: то же самое.\n\n"
+            "### O3. Закрыть направление\n<!-- role: close -->\n\nТекст третьего.\n\nВозражение: рано.\n"
+        )
+        (project / "options.md").write_text(duplicate, encoding="utf-8")
+        dup = self.cli("check", "opts")
+        assert_code(dup, 1)
+        self.assertIn("[options-id]", dup.stdout)
+        self.assertIn("не дублируют", dup.stdout)
+        swapped = (
+            "<!-- preliminary -->\n\nгипотезы, не подтверждены, свидетельств 0\n\n"
+            "### O1. Другой путь\n<!-- role: status-quo -->\n\n"
+            "Ничего не менять, пока нет интервью и отдельной развилки.\n\nВозражение: доля уже падает.\n\n"
+            "### O2. Оставить как есть\n<!-- role: change -->\n\n"
+            "Сначала короткое исследование барьера, потом решение о продукте.\n\nВозражение: исследование откладывает ход.\n\n"
+            "### O3. Закрыть направление\n<!-- role: close -->\n\n"
+            "Остановить развитие этого направления в текущем квартале.\n\nВозражение: одного сигнала мало.\n"
+        )
+        (project / "options.md").write_text(swapped, encoding="utf-8")
+        renumbered = self.cli("check", "opts")
+        assert_code(renumbered, 1)
+        self.assertIn("перенумерац", renumbered.stdout)
+        removed = self.cli("supersede-option", "opts", "O2", "--reason", "путь снят, номер остаётся")
+        assert_code(removed)
+        self.assertIn("сохраняет ID", removed.stdout)
+        nxt = self.cli("add-option", "opts", "--title", "Новый путь после снятия")
+        assert_code(nxt)
+        self.assertIn("id: O4", nxt.stdout)
+        self.assertNotIn("id: O2", nxt.stdout)
+        stable = (
+            "<!-- preliminary -->\n\nгипотезы, не подтверждены, свидетельств 0\n\n"
+            "### O1. Оставить как есть\n<!-- role: status-quo -->\n\n"
+            "Ничего не менять, пока нет живых интервью.\n\nВозражение: доля уже описана как низкая.\n\n"
+            "### O2. Другой путь\n<!-- role: change -->\n<!-- status: superseded -->\n\n"
+            "Снятый путь остаётся под своим номером и не получает новый.\n\nВозражение: его уже сняли.\n\n"
+            "### O3. Закрыть направление\n<!-- role: close -->\n\n"
+            "Остановить развитие, не обещая экономию.\n\nВозражение: стоимость закрытия не посчитана.\n\n"
+            "### O4. Новый путь после снятия\n<!-- role: change -->\n\n"
+            "Короткое исследование барьера до любой переделки продукта.\n\nВозражение: исследование может затянуть решение.\n"
+        )
+        (project / "options.md").write_text(stable, encoding="utf-8")
+        assert_code(self.cli("check", "opts"))
+
+    def test_cost_estimate_is_not_a_bill(self) -> None:
+        assert_code(self.cli("init", "priced", "--title", "Оценка"))
+        assert_code(
+            self.cli(
+                "log",
+                "priced",
+                "3",
+                "Сбор страниц",
+                "--minutes",
+                "12",
+                "--input-chars",
+                "4000",
+                "--output-chars",
+                "800",
+                "--model",
+                "ide/subscription",
+            )
+        )
+        result = self.cli("cost", "priced", "--estimate")
+        assert_code(result)
+        self.assertIn("минуты 12", result.stdout)
+        self.assertIn("Оценка (не счёт, допущение)", result.stdout)
+        self.assertIn("Допущение, не счёт", result.stdout)
+        self.assertIn("вход 1000", result.stdout)
+        self.assertIn("выход 200", result.stdout)
+        self.assertIn("0.006", result.stdout)
+        self.assertIn("Это не выставленный счёт", result.stdout)
+        self.assertNotIn("счёт провайдера: 0.006", result.stdout)
+        rows = [
+            json.loads(line)
+            for line in (Path(self.tmp.name) / "priced" / "log.jsonl").read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        recorded = next(row for row in rows if row.get("message") == "Сбор страниц")
+        self.assertEqual(recorded["input_chars"], 4000)
+        self.assertEqual(recorded["output_chars"], 800)
+        self.assertIsNone(recorded["cost"])
+        self.assertIsNone(recorded["tokens"])
+
+    def test_fetch_binds_snapshot_to_existing_url(self) -> None:
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                body = "<html><head><title>Тариф</title></head><body><p>Семейный пакет стоит 5 долларов.</p></body></html>".encode(
+                    "utf-8"
+                )
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, fmt: str, *args: object) -> None:
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            assert_code(self.cli("init", "bind", "--title", "Привязка снимка"))
+            url = f"http://127.0.0.1:{server.server_address[1]}/family"
+            assert_code(self.cli("add-source", "bind", url, "--title", "Уже известный адрес"))
+            fetched = self.cli("fetch", "bind", url)
+            assert_code(fetched)
+            self.assertIn("Снимок привязан", fetched.stdout)
+            self.assertIn("id: S001", fetched.stdout)
+            project = Path(self.tmp.name) / "bind"
+            rows = [
+                json.loads(line)
+                for line in (project / "sources.jsonl").read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["id"], "S001")
+            self.assertEqual(rows[0]["origin_url"], url)
+            self.assertTrue(str(rows[0]["sha256"]))
+            self.assertFalse(str(rows[0]["url_or_path"]).startswith("http"))
+            assert_code(
+                self.cli(
+                    "add-evidence",
+                    "bind",
+                    "--claim",
+                    "На странице сказано, что пакет стоит 5 долларов.",
+                    "--type",
+                    "fact",
+                    "--source",
+                    "S001",
+                    "--quote",
+                    "Семейный пакет стоит 5 долларов.",
+                    "--confidence",
+                    "high",
+                )
+            )
+            checked = self.cli("check", "bind", "--strict")
+            assert_code(checked)
+            self.assertNotIn("[snapshot]", checked.stdout)
+        finally:
+            server.shutdown()
+            server.server_close()
 
 
 if __name__ == "__main__":

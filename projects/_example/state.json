@@ -26,6 +26,11 @@
       "choice": null
     }
   },
+  "option_registry": [
+    {"id": "O1", "title": "Оставить как есть", "status": "active"},
+    {"id": "O2", "title": "Усилить момент продления", "status": "active"},
+    {"id": "O3", "title": "Закрыть направление", "status": "active"}
+  ],
   "created_at": "2026-11-04T09:00:00Z",
   "updated_at": "2026-11-04T11:10:00Z"
 }

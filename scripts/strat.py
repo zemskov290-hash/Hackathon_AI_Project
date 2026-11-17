@@ -48,7 +48,7 @@ NEXT_ACTION = {
     3: "Соберите источники и свидетельства (skills/03-collect/SKILL.md). Каждый тезис — запись в evidence.jsonl.",
     4: "Соберите situation.md: факты со ссылками [E..], противоречия, неизвестное. Затем strat check.",
     5: "Напишите не меньше трёх вариантов, включая статус-кво и закрытие, с возражениями. Ждите выбор человека.",
-    6: "Соберите strategy.md: продукт и коммуникация. Каждое обещание свяжите со свойством продукта.",
+    6: "Соберите strategy.md по подразделам skills/06-strategy: продукт и коммуникация. Каждое обещание свяжите со свойством продукта. Пустой подраздел не проходит check.",
     7: "Соберите validation.md и дождитесь принятия плана человеком.",
     8: "Ведите decisions.md. Новые данные — через impact, retract и навык revise-on-new-data.",
 }
@@ -98,6 +98,32 @@ VALIDATION_LABELS = (
     "Срок наблюдения",
     "Нежелательные эффекты",
 )
+PRODUCT_HEADING = "Продуктовая стратегия"
+COMM_HEADING = "Коммуникационная стратегия"
+PRODUCT_SUBSECTIONS = (
+    "Целевой сегмент и работа (JTBD)",
+    "Ценностное предложение",
+    "Границы MVP",
+    "Метрики",
+    "Риски",
+    "Что мы не делаем",
+)
+COMM_SUBSECTIONS = (
+    "Аудитории",
+    "Ключевые сообщения",
+    "Каналы",
+    "Сроки и последовательность",
+    "Работа с возражениями",
+    "Как измеряется успех",
+)
+PLACEHOLDER_RE = re.compile(
+    r"^(?:todo|tbd|xxx|заполнить|заполните|дополнить|будет дополнено|нет данных|н/?д|\.\.\.|…|—|-|нет)\.?$",
+    re.IGNORECASE,
+)
+OPTION_ID_RE = re.compile(r"^O\d+$")
+MIN_SECTION_LETTERS = 40
+PRICE_TABLE_PATH = ROOT / "config" / "model-prices.json"
+RECOMMENDATION_FILES = ("strategy.md", "decisions.md")
 
 
 def projects_root() -> Path:
@@ -447,6 +473,7 @@ def fresh_state(project_id: str, title: str) -> dict:
             "options": blank_checkpoint(),
             "validation": blank_checkpoint(),
         },
+        "option_registry": [],
         "created_at": stamp,
         "updated_at": stamp,
     }
@@ -483,6 +510,8 @@ def append_log(
     tokens: int | None = None,
     cost: float | None = None,
     model: str | None = None,
+    input_chars: int | None = None,
+    output_chars: int | None = None,
 ) -> None:
     if stage not in STAGES:
         die("Этап должен быть числом от 0 до 8.")
@@ -497,6 +526,10 @@ def append_log(
         "cost": cost,
         "model": model,
     }
+    if input_chars is not None:
+        entry["input_chars"] = input_chars
+    if output_chars is not None:
+        entry["output_chars"] = output_chars
     path = project / "log.jsonl"
     with path.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(json.dumps(entry, ensure_ascii=False, separators=(",", ":")) + "\n")
@@ -513,6 +546,10 @@ def append_log(
         lines.append(f"- токены: {tokens}")
     if cost is not None:
         lines.append(f"- стоимость: {fmt_num(cost)}")
+    if input_chars is not None:
+        lines.append(f"- символы входа: {input_chars}")
+    if output_chars is not None:
+        lines.append(f"- символы выхода: {output_chars}")
     if model:
         lines.append(f"- модель: {model}")
     lines.append("")
@@ -654,6 +691,11 @@ def cmd_add_source(args: argparse.Namespace) -> int:
     save_state(project, state)
     print(f"id: {source_id}")
     print(f"Источник зарегистрирован: {source_id} {stored}")
+    if digest is None:
+        print(
+            "Локального снимка нет. Для веб-страницы выполните fetch тем же адресом: "
+            "иначе цитата не сверяется. check предупредит, check --strict завершится с ошибкой."
+        )
     return 0
 
 
@@ -775,50 +817,42 @@ def find_fetched_source(project: Path, url: str) -> tuple[str, str] | None:
     return None
 
 
-def cmd_fetch(args: argparse.Namespace) -> int:
-    project, tokens = take_project(args.rest, 1)
-    url = tokens[0].strip()
-    if not re.match(r"https?://", url):
-        die("Нужен полный адрес http:// или https://.")
-    title = resolve_text(None, args.title_file, label="название страницы", env_name="STRAT_SOURCE_TITLE")
-    existing = find_fetched_source(project, url)
-    if existing:
-        stored, digest = existing
-        sources, parse_errors = load_jsonl(project / "sources.jsonl")
-        if parse_errors:
-            die("sources.jsonl повреждён:\n" + "\n".join(parse_errors))
-        for row in sources:
-            if row.get("url_or_path") == stored:
-                print(f"id: {row['id']}")
-                print(f"Уже загружено: {row['id']} {stored}")
-                return 0
-    else:
-        page_title, body = download_url(url)
-        if not title:
-            title = page_title or slug_from_url(url)
-        filename = f"{slug_from_url(url)}-{today()}.md"
-        dest = project / "sources" / filename
-        if dest.exists():
-            filename = f"{slug_from_url(url)}-{today()}-{abs(hash(url)) % 10000}.md"
-            dest = project / "sources" / filename
-        write_utf8(
-            dest,
-            f"# {title}\n\n- url: {url}\n- загружено: {today()}\n\n{body}\n",
-        )
-        stored, digest = locate_local_file(project, dest.as_posix())
-    sources, parse_errors = load_jsonl(project / "sources.jsonl")
-    if parse_errors:
-        die("sources.jsonl повреждён:\n" + "\n".join(parse_errors))
+def bind_fetched_page(
+    project: Path,
+    sources: list[dict],
+    url: str,
+    stored: str,
+    digest: str,
+    title: str | None,
+) -> tuple[str, str]:
+    """Attach a local snapshot to an existing URL row, or append a new web source.
+
+    Returns the source id and a short status: already, bound, created.
+    """
     for row in sources:
-        if row.get("url_or_path") == stored:
-            print(f"id: {row['id']}")
-            print(f"Уже зарегистрирован: {row['id']} {stored}")
-            return 0
+        same = row.get("origin_url") == url or row.get("url_or_path") in {url, stored}
+        if not same:
+            continue
+        unchanged = (
+            row.get("url_or_path") == stored
+            and row.get("sha256") == digest
+            and row.get("origin_url") == url
+        )
+        row["origin_url"] = url
+        row["url_or_path"] = stored
+        row["sha256"] = digest
+        row["accessed"] = today()
+        if not str(row.get("title") or "").strip():
+            row["title"] = title or slug_from_url(url)
+        save_jsonl(project / "sources.jsonl", sources)
+        save_state(project, load_state(project))
+        return str(row["id"]), ("already" if unchanged else "bound")
     source_id = next_serial(sources, "S")
     sources.append(
         {
             "id": source_id,
             "url_or_path": stored,
+            "origin_url": url,
             "title": title or slug_from_url(url),
             "accessed": today(),
             "kind": "web",
@@ -828,8 +862,46 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     )
     save_jsonl(project / "sources.jsonl", sources)
     save_state(project, load_state(project))
+    return source_id, "created"
+
+
+def cmd_fetch(args: argparse.Namespace) -> int:
+    project, tokens = take_project(args.rest, 1)
+    url = tokens[0].strip()
+    if not re.match(r"https?://", url):
+        die("Нужен полный адрес http:// или https://.")
+    title = resolve_text(None, args.title_file, label="название страницы", env_name="STRAT_SOURCE_TITLE")
+    sources, parse_errors = load_jsonl(project / "sources.jsonl")
+    if parse_errors:
+        die("sources.jsonl повреждён:\n" + "\n".join(parse_errors))
+    existing = find_fetched_source(project, url)
+    if existing:
+        stored, digest = existing
+        page_title = title
+    else:
+        page_title, body = download_url(url)
+        if not title:
+            page_title = page_title or slug_from_url(url)
+        else:
+            page_title = title
+        filename = f"{slug_from_url(url)}-{today()}.md"
+        dest = project / "sources" / filename
+        if dest.exists():
+            filename = f"{slug_from_url(url)}-{today()}-{abs(hash(url)) % 10000}.md"
+            dest = project / "sources" / filename
+        write_utf8(
+            dest,
+            f"# {page_title}\n\n- url: {url}\n- загружено: {today()}\n\n{body}\n",
+        )
+        stored, digest = locate_local_file(project, dest.as_posix())
+    source_id, status = bind_fetched_page(project, sources, url, stored, digest, page_title)
     print(f"id: {source_id}")
-    print(f"Страница сохранена и зарегистрирована: {source_id} {stored}")
+    if status == "already":
+        print(f"Уже загружено: {source_id} {stored}")
+    elif status == "bound":
+        print(f"Снимок привязан к существующему источнику: {source_id} {stored}")
+    else:
+        print(f"Страница сохранена и зарегистрирована: {source_id} {stored}")
     return 0
 
 
@@ -1031,7 +1103,223 @@ def uncommitted_tool_files() -> list[str]:
     return paths
 
 
-def check_project(project: Path, state: dict | None = None) -> list[dict]:
+def normalize_option_title(title: str) -> str:
+    return re.sub(r"\s+", " ", title).strip().casefold()
+
+
+def option_rows(state: dict) -> list[dict]:
+    rows = state.get("option_registry") or []
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def next_option_id(rows: list[dict]) -> str:
+    numbers = []
+    for row in rows:
+        match = re.fullmatch(r"O(\d+)", str(row.get("id") or ""))
+        if match:
+            numbers.append(int(match.group(1)))
+    return f"O{(max(numbers) if numbers else 0) + 1}"
+
+
+def heading_body(text: str, level: int, title: str) -> str | None:
+    lines = text.splitlines()
+    start = None
+    for index, line in enumerate(lines):
+        match = re.match(rf"^(#{{{level}}})\s+(.*?)\s*$", line)
+        if match and match.group(2).strip() == title:
+            start = index + 1
+            break
+    if start is None:
+        return None
+    end = len(lines)
+    for index in range(start, len(lines)):
+        match = re.match(r"^(#+)\s+", lines[index])
+        if match and len(match.group(1)) <= level:
+            end = index
+            break
+    return "\n".join(lines[start:end])
+
+
+def section_is_placeholder(body: str) -> bool:
+    visible = re.sub(r"<!--.*?-->", "", body, flags=re.S)
+    compact = re.sub(r"\s+", " ", visible).strip(" \t*_`")
+    letters = re.sub(r"[^0-9A-Za-zА-Яа-яЁё]", "", compact)
+    if len(letters) < MIN_SECTION_LETTERS:
+        return True
+    return PLACEHOLDER_RE.match(compact.casefold()) is not None
+
+
+def check_strategy_sections(strategy: str, add) -> None:
+    parents = (
+        (PRODUCT_HEADING, PRODUCT_SUBSECTIONS),
+        (COMM_HEADING, COMM_SUBSECTIONS),
+    )
+    for parent, subsections in parents:
+        if not re.search(rf"^##\s+{re.escape(parent)}\s*$", strategy, re.M):
+            add("strategy", f"нет заголовка «## {parent}»")
+            continue
+        parent_body = heading_body(strategy, 2, parent) or ""
+        for title in subsections:
+            body = heading_body(parent_body, 3, title)
+            if body is None:
+                add("strategy", f"в «{parent}» нет подраздела «{title}»")
+            elif section_is_placeholder(body):
+                add("strategy", f"подраздел «{title}» пуст или заполнен заглушкой")
+
+
+def check_option_identity(options_text: str, state: dict, add) -> None:
+    registry = option_rows(state)
+    by_id: dict[str, dict] = {}
+    for row in registry:
+        option_id = str(row.get("id") or "")
+        if not option_id:
+            continue
+        if option_id in by_id:
+            add("options-id", f"в реестре повторяется {option_id}")
+        by_id[option_id] = row
+    matches = list(OPTION_RE.finditer(options_text))
+    counts: dict[str, int] = {}
+    for match in matches:
+        counts[match.group(1)] = counts.get(match.group(1), 0) + 1
+    for option_id, count in counts.items():
+        if count > 1:
+            add(
+                "options-id",
+                f"{option_id} встречается в options.md {count} раза. ID не дублируют и не перенумеровывают.",
+            )
+    stage_now = int(state.get("stage") or 0)
+    require_registry = stage_required(state, 5) or stage_now >= 5
+    file_titles: dict[str, list[str]] = {}
+    headings = []
+    for index, match in enumerate(matches):
+        option_id = match.group(1)
+        title = match.group(2).strip()
+        headings.append(option_id)
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(options_text)
+        block = options_text[match.start() : end]
+        file_titles.setdefault(normalize_option_title(title), []).append(option_id)
+        registered = by_id.get(option_id)
+        if registered is None:
+            add(
+                "options-id",
+                f"{option_id} не зарегистрирован. ID назначает add-option один раз и больше не меняется.",
+                warning=not require_registry,
+            )
+            continue
+        registered_title = str(registered.get("title") or "")
+        if normalize_option_title(registered_title) != normalize_option_title(title):
+            add(
+                "options-id",
+                f"{option_id} зарегистрирован как «{registered_title}», в файле «{title}». "
+                "ID не перенумеровывают.",
+            )
+        if registered.get("status") == "superseded" and "<!-- status: superseded -->" not in block:
+            add(
+                "options-id",
+                f"{option_id} снят, но в блоке нет маркера <!-- status: superseded -->. "
+                "Снятый вариант сохраняет свой ID.",
+            )
+    for row in registry:
+        option_id = str(row.get("id") or "")
+        title = str(row.get("title") or "")
+        key = normalize_option_title(title)
+        found = file_titles.get(key, [])
+        if option_id and option_id not in headings:
+            gone_is_error = require_registry or row.get("status") == "superseded"
+            add(
+                "options-id",
+                f"{option_id} («{title}») исчез из options.md. Снятый и действующий вариант сохраняют свой ID.",
+                warning=not gone_is_error,
+            )
+        elif found and option_id not in found:
+            add(
+                "options-id",
+                f"заголовок «{title}» был {option_id}, теперь {found[0]}. Это перенумерация, ID так не меняют.",
+            )
+
+
+def load_price_table() -> dict | None:
+    if not PRICE_TABLE_PATH.is_file():
+        return None
+    try:
+        payload = json.loads(PRICE_TABLE_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def estimate_usage(entries: list[dict]) -> dict | None:
+    """Approximate tokens and cost from logged character counts.
+
+    The result is an assumption from config/model-prices.json, never a provider bill.
+    """
+    table = load_price_table()
+    if table is None:
+        return None
+    per = float(table.get("chars_per_token") or 4) or 4.0
+    models = table.get("models") if isinstance(table.get("models"), dict) else {}
+    default = models.get("default") if isinstance(models.get("default"), dict) else {}
+    total_in = 0
+    total_out = 0
+    cost = 0.0
+    any_chars = False
+    for entry in entries:
+        if entry.get("input_chars") is None and entry.get("output_chars") is None:
+            continue
+        any_chars = True
+        incoming = int(entry.get("input_chars") or 0)
+        outgoing = int(entry.get("output_chars") or 0)
+        model_name = str(entry.get("model") or "default")
+        price = models.get(model_name)
+        if not isinstance(price, dict):
+            price = default
+        in_tokens = int(round(incoming / per))
+        out_tokens = int(round(outgoing / per))
+        in_rate = float(price.get("input_per_million") or 0)
+        out_rate = float(price.get("output_per_million") or 0)
+        cost += in_tokens / 1_000_000 * in_rate + out_tokens / 1_000_000 * out_rate
+        total_in += in_tokens
+        total_out += out_tokens
+    return {
+        "empty": not any_chars,
+        "input_tokens": total_in,
+        "output_tokens": total_out,
+        "cost": cost,
+        "chars_per_token": per,
+        "currency": str(table.get("currency") or "USD"),
+        "assumption": str(table.get("assumption") or ""),
+    }
+
+
+def format_estimate(entries: list[dict], minutes: float) -> list[str]:
+    estimated = estimate_usage(entries)
+    if estimated is None:
+        return [
+            "Оценка: таблица config/model-prices.json не прочитана. Стоимость не выдумана. Это не счёт."
+        ]
+    lines = [
+        "Оценка (не счёт, допущение):",
+        estimated["assumption"] or "Допущение не подписано в таблице цен.",
+        f"Время в журнале: {fmt_num(minutes)} минут.",
+    ]
+    if estimated["empty"]:
+        lines.append(
+            "Оценка по символам: не записана. Передайте в log --input-chars и --output-chars. Это не счёт провайдера."
+        )
+        return lines
+    lines.append(
+        "Оценка токенов: "
+        f"вход {fmt_num(estimated['input_tokens'])}, выход {fmt_num(estimated['output_tokens'])} "
+        f"(символы/{fmt_num(estimated['chars_per_token'])})."
+    )
+    lines.append(
+        "Оценка стоимости: "
+        f"{fmt_num(estimated['cost'])} {estimated['currency']}. Это не выставленный счёт."
+    )
+    return lines
+
+
+def check_project(project: Path, state: dict | None = None, *, strict: bool = False) -> list[dict]:
     errors: list[dict] = []
     seen: set[tuple[str, str, bool]] = set()
 
@@ -1128,12 +1416,32 @@ def check_project(project: Path, state: dict | None = None) -> list[dict]:
                 add("type", f"{evidence_id}: type=synthetic, но источник {source_id} не kind=synthetic")
             quote = str(row.get("quote") or "")
             active = row.get("status") == "active"
-            if row.get("type") == "fact" and not quote.strip():
-                if active:
-                    add("quote", f"{evidence_id}: у факта пустая цитата")
+            if not quote.strip():
+                if row.get("type") == "fact":
+                    if active:
+                        add("quote", f"{evidence_id}: у факта пустая цитата")
+                    else:
+                        add("quote", f"{evidence_id}: у неактивного факта пустая цитата", warning=True)
+                elif active:
+                    add(
+                        "quote",
+                        f"{evidence_id}: нет дословной цитаты",
+                        warning=not strict,
+                    )
                 else:
-                    add("quote", f"{evidence_id}: у неактивного факта пустая цитата", warning=True)
+                    add(
+                        "quote",
+                        f"{evidence_id}: у неактивной записи нет дословной цитаты",
+                        warning=True,
+                    )
             ref = str(source.get("url_or_path") or "")
+            if source_file_for_quote(project, source) is None and re.match(r"https?://", ref):
+                add(
+                    "snapshot",
+                    f"{evidence_id}: источник {source_id} без локального снимка ({ref}). "
+                    "Веб-страницу регистрируют через fetch.",
+                    warning=not (strict and active),
+                )
             if quote_matches_source(project, source, quote) is False:
                 if active:
                     add("quote-mismatch", f"{evidence_id}: цитата не найдена в {ref}. {QUOTE_HINT}")
@@ -1245,6 +1553,7 @@ def check_project(project: Path, state: dict | None = None) -> list[dict]:
                 add("options", "нет варианта «оставить как есть» (маркер <!-- role: status-quo -->)")
             if not has_close:
                 add("options", "нет варианта «закрыть направление» (маркер <!-- role: close -->)")
+            check_option_identity(options_text, state, add)
     stage_now = int(state.get("stage") or 0)
     if options_started and stage_now < 5 and not stage_required(state, 5):
         body = options_text or ""
@@ -1265,10 +1574,7 @@ def check_project(project: Path, state: dict | None = None) -> list[dict]:
         if is_template(strategy) or not strategy:
             add("strategy", "strategy.md всё ещё шаблон, а этап стратегии уже закрыт")
         else:
-            if not re.search(r"^##\s+Продуктовая стратегия\s*$", strategy, re.M):
-                add("strategy", "нет заголовка «## Продуктовая стратегия»")
-            if not re.search(r"^##\s+Коммуникационная стратегия\s*$", strategy, re.M):
-                add("strategy", "нет заголовка «## Коммуникационная стратегия»")
+            check_strategy_sections(strategy, add)
             if not promises:
                 add("promise", "нет ни одного обещания <!-- promise: P1 -->")
             visible = re.sub(r"<!--.*?-->", "", strategy, flags=re.S)
@@ -1279,6 +1585,24 @@ def check_project(project: Path, state: dict | None = None) -> list[dict]:
                     continue
                 if product.group(1) not in visible:
                     add("product", f"{product.group(1)} указано в маркере, но не описано в тексте стратегии")
+
+    low_basis: set[str] = set()
+    for name in RECOMMENDATION_FILES:
+        body = texts.get(name)
+        if not body or is_template(body):
+            continue
+        for evidence_id in CITE_RE.findall(body):
+            row = by_evidence.get(evidence_id)
+            if row is None or evidence_id in low_basis:
+                continue
+            if row.get("status") == "active" and row.get("confidence") == "low":
+                low_basis.add(evidence_id)
+                add(
+                    "confidence",
+                    f"{name}: [{evidence_id}] с низкой уверенностью — опора рекомендации. "
+                    "Ссылку не запрещает, молчаливым основанием быть не должна.",
+                    warning=True,
+                )
 
     if stage_required(state, 7):
         validation = texts.get("validation.md")
@@ -1354,7 +1678,7 @@ def format_report(project: Path, findings: list[dict]) -> str:
 
 def cmd_check(args: argparse.Namespace) -> int:
     project, _tokens = take_project(args.rest, 0)
-    findings = check_project(project)
+    findings = check_project(project, strict=bool(getattr(args, "strict", False)))
     print(format_report(project, findings))
     return 1 if hard_findings(findings) else 0
 
@@ -1450,11 +1774,13 @@ def format_usage(entries: list[dict], total: dict) -> str:
     )
 
 
-def format_cost(project: Path, entries: list[dict]) -> str:
+def format_cost(project: Path, entries: list[dict], *, show_estimate: bool = True) -> str:
     by_stage, total = aggregate(entries)
     lines = [f"Проект: {project.name}"]
     if not entries:
         lines.append("Затраты не записаны.")
+        if show_estimate:
+            lines.extend(format_estimate(entries, 0))
         return "\n".join(lines)
     measured = usage_was_measured(entries)
     for stage in sorted(by_stage):
@@ -1468,6 +1794,10 @@ def format_cost(project: Path, entries: list[dict]) -> str:
         else:
             lines.append(f"Этап {stage} {name}: минуты {fmt_num(bucket['minutes'])}")
     lines.append(f"Итого: {format_usage(entries, total)}")
+    if measured:
+        lines.append("Записанные токены и стоимость — поля журнала, не счёт провайдера.")
+    if show_estimate:
+        lines.extend(format_estimate(entries, total["minutes"]))
     return "\n".join(lines)
 
 
@@ -1507,7 +1837,7 @@ def cmd_show(args: argparse.Namespace) -> int:
 
 def cmd_cost(args: argparse.Namespace) -> int:
     project, _tokens = take_project(args.rest, 0)
-    print(format_cost(project, load_log(project)))
+    print(format_cost(project, load_log(project), show_estimate=True))
     return 0
 
 
@@ -1687,6 +2017,9 @@ def cmd_log(args: argparse.Namespace) -> int:
     if not message or not message.strip():
         die("Пустое сообщение в журнал не пишется.")
     grounds = resolve_text(args.grounds, args.grounds_file, label="основания", env_name="STRAT_GROUNDS")
+    for label, value in (("input-chars", args.input_chars), ("output-chars", args.output_chars)):
+        if value is not None and value < 0:
+            die(f"--{label} не может быть отрицательным.")
     append_log(
         project,
         stage,
@@ -1696,6 +2029,8 @@ def cmd_log(args: argparse.Namespace) -> int:
         tokens=args.tokens,
         cost=args.cost,
         model=args.model,
+        input_chars=args.input_chars,
+        output_chars=args.output_chars,
     )
     save_state(project, load_state(project))
     print("Запись добавлена в log.md и log.jsonl")
@@ -1882,6 +2217,72 @@ def cmd_advance(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_add_option(args: argparse.Namespace) -> int:
+    project, _tokens = take_project(args.rest, 0)
+    title = resolve_text(
+        args.title,
+        args.title_file,
+        label="название варианта",
+        env_name="STRAT_OPTION_TITLE",
+        required=True,
+    )
+    title = re.sub(r"\s+", " ", title or "").strip()
+    if not title:
+        die("Пустое название варианта.")
+    state = load_state(project)
+    registry = option_rows(state)
+    for row in registry:
+        if normalize_option_title(str(row.get("title") or "")) == normalize_option_title(title):
+            die(
+                f"Такой заголовок уже у {row.get('id')}. "
+                "Новый номер ему не дают, снятый вариант сохраняет свой ID."
+            )
+    if args.id:
+        if not OPTION_ID_RE.fullmatch(args.id):
+            die("ID варианта выглядит как O1, O2, O3.")
+        if any(str(row.get("id")) == args.id for row in registry):
+            die(f"{args.id} уже занят. ID не переиспользуют и не перенумеровывают.")
+        option_id = args.id
+    else:
+        option_id = next_option_id(registry)
+    registry.append({"id": option_id, "title": title, "status": "active"})
+    state["option_registry"] = registry
+    save_state(project, state)
+    print(f"id: {option_id}")
+    print(f"Вариант зарегистрирован: {option_id}. {title}")
+    print("Поставьте этот ID в заголовок options.md. Позже номер не меняют.")
+    return 0
+
+
+def cmd_supersede_option(args: argparse.Namespace) -> int:
+    project, tokens = take_project(args.rest, 1)
+    option_id = tokens[0]
+    if not OPTION_ID_RE.fullmatch(option_id):
+        die("Укажите ID варианта, например O2.")
+    reason = resolve_text(
+        args.reason,
+        args.reason_file,
+        label="причина снятия варианта",
+        env_name="STRAT_REASON",
+        required=True,
+    )
+    state = load_state(project)
+    registry = option_rows(state)
+    found = next((row for row in registry if str(row.get("id")) == option_id), None)
+    if found is None:
+        die(f"Вариант не зарегистрирован: {option_id}. Сначала add-option.")
+    if found.get("status") == "superseded":
+        print(f"{option_id} уже снят и сохраняет ID.")
+        return 0
+    found["status"] = "superseded"
+    found["superseded_reason"] = reason
+    state["option_registry"] = registry
+    save_state(project, state)
+    print(f"{option_id} снят и сохраняет ID. Заголовок «{found.get('title')}» не отдавайте другому номеру.")
+    print("В options.md оставьте этот заголовок и маркер <!-- status: superseded -->.")
+    return 0
+
+
 def scrub(text: str) -> str:
     for name in ("STRAT_LLM_API_KEY", "OPENROUTER_API_KEY"):
         secret = os.environ.get(name)
@@ -1960,6 +2361,13 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
         print("Проекты: " + ", ".join(path.name for path in projects))
     else:
         print("Проекты: боевых нет. Учебный пример: python scripts/strat.py check projects/_example")
+    if PRICE_TABLE_PATH.is_file():
+        print(
+            "Оценка стоимости: config/model-prices.json. "
+            "Это допущение для cost, не счёт провайдера."
+        )
+    else:
+        print("Оценка стоимости: нет config/model-prices.json. cost не выдумывает тариф.")
     pointed, found = current_pointer()
     if pointed and found is None:
         print(stale_current_hint(pointed))
@@ -2003,12 +2411,28 @@ def build_parser() -> argparse.ArgumentParser:
     for name, help_text, handler in (
         ("status", "этап, точки, пробелы, затраты", cmd_status),
         ("resume", "краткий бриф для продолжения в новом чате", cmd_resume),
-        ("check", "проверить свидетельства и тексты", cmd_check),
-        ("cost", "сумма минут, токенов и стоимости по этапам", cmd_cost),
     ):
         command = sub.add_parser(name, help=help_text)
         command.add_argument("rest", nargs="*", help="необязательный id или путь проекта")
         command.set_defaults(func=handler)
+
+    check = sub.add_parser("check", help="проверить свидетельства, стратегию и ID вариантов")
+    check.add_argument("rest", nargs="*", help="необязательный id или путь проекта")
+    check.add_argument(
+        "--strict",
+        action="store_true",
+        help="снимок веб-источника и пустая цитата — ошибка, а не предупреждение",
+    )
+    check.set_defaults(func=cmd_check)
+
+    cost = sub.add_parser("cost", help="минуты, токены журнала и оценка, которая не является счётом")
+    cost.add_argument("rest", nargs="*", help="необязательный id или путь проекта")
+    cost.add_argument(
+        "--estimate",
+        action="store_true",
+        help="показать оценку по символам и таблице цен; оценка печатается и без флага",
+    )
+    cost.set_defaults(func=cmd_cost)
 
     show = sub.add_parser("show", help="прочитать файл проекта в UTF-8")
     show.add_argument("rest", nargs="+", help="[проект] evidence|sources|log|state|decisions")
@@ -2043,6 +2467,19 @@ def build_parser() -> argparse.ArgumentParser:
     add_evidence.add_argument("--date")
     add_evidence.add_argument("--depends-on", default="")
     add_evidence.set_defaults(func=cmd_add_evidence)
+
+    add_option = sub.add_parser("add-option", help="выдать варианту стабильный ID один раз")
+    add_option.add_argument("rest", nargs="*", help="необязательный проект")
+    add_option.add_argument("--id", help="явный свободный ID, например O4; иначе следующий свободный")
+    add_option.add_argument("--title", help="заголовок как в options.md; «-» читает stdin")
+    add_option.add_argument("--title-file", help="заголовок из файла UTF-8")
+    add_option.set_defaults(func=cmd_add_option)
+
+    supersede_option = sub.add_parser("supersede-option", help="снять вариант, сохранив его ID")
+    supersede_option.add_argument("rest", nargs="+", help="[проект] <O2>")
+    supersede_option.add_argument("--reason", help="почему вариант снят; «-» читает stdin")
+    supersede_option.add_argument("--reason-file")
+    supersede_option.set_defaults(func=cmd_supersede_option)
 
     retract = sub.add_parser("retract", help="отозвать свидетельство")
     retract.add_argument("rest", nargs="+", help="[проект] <E001>")
@@ -2084,6 +2521,8 @@ def build_parser() -> argparse.ArgumentParser:
     log.add_argument("--minutes", type=float)
     log.add_argument("--tokens", type=int)
     log.add_argument("--cost", type=float)
+    log.add_argument("--input-chars", type=int, help="символы прочитанного; для оценки токенов, не для счёта")
+    log.add_argument("--output-chars", type=int, help="символы написанного; для оценки токенов, не для счёта")
     log.add_argument("--model")
     log.set_defaults(func=cmd_log)
 
