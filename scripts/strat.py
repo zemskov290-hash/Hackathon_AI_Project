@@ -2946,6 +2946,7 @@ def cmd_inspect(args: argparse.Namespace) -> int:
         print(f"description_source_id: {description_source['id']}")
     if outcome.get("gap"):
         print((project / report_rel).read_text(encoding="utf-8"))
+    _print_inspect_summary(outcome)
     claim = _resolve_optional_text(
         getattr(args, "claim", None), getattr(args, "claim_file", None), "тезис", "STRAT_CLAIM"
     )
@@ -3005,6 +3006,14 @@ def _print_existing_inspect(project: Path, outcome: dict) -> None:
     if described is not None:
         print(f"description_source_id: {described['id']}")
     print("Уже разобрано.")
+    _print_inspect_summary(outcome)
+
+
+def _print_inspect_summary(outcome: dict) -> None:
+    kind = str((outcome.get("manifest") or {}).get("kind") or "")
+    summary = inspect_media.format_summary(kind, outcome.get("structured") or {})
+    if summary.strip():
+        print(summary)
 
 
 def _add_inspect_evidence(project: Path, outcome: dict, args: argparse.Namespace, claim: str) -> None:

@@ -574,6 +574,130 @@ def find_existing(project: Path, kind: str, digest: str, transcript_hash: str | 
     return None
 
 
+def _clip(text: str, limit: int = 180) -> str:
+    cleaned = re.sub(r"\s+", " ", str(text or "")).strip()
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 1] + "…"
+
+
+def format_summary(kind: str, structured: dict) -> str:
+    """Short Russian digest printed by the CLI and included in the MCP text."""
+    lines = ["Сводка:"]
+    if kind == "ui":
+        lines.append(f"- title: {_clip(structured.get('title') or 'нет', 120)}")
+        headings = list(structured.get("headings") or [])
+        for item in headings[:12]:
+            lines.append(f"- раздел h{item['level']}: {_clip(item.get('text') or '', 120)}")
+        if len(headings) > 12:
+            lines.append(f"- разделов ещё: {len(headings) - 12}")
+        for item in list(structured.get("screens") or [])[:8]:
+            ident = f"#{item['id']}" if item.get("id") else ""
+            lines.append(f"- экран {item.get('tag')}{ident}: {_clip(item.get('label') or '', 120)}")
+        for item in list(structured.get("prices") or [])[:12]:
+            lines.append(
+                f"- цена: {_clip(item.get('text') or '', 40)} | {_clip(item.get('context') or 'нет', 80)}"
+            )
+        for item in list(structured.get("ctas") or [])[:12]:
+            lines.append(
+                f"- CTA: {_clip(item.get('text') or '', 60)} | tag={item.get('tag')} | href={_clip(item.get('href') or 'нет', 80)}"
+            )
+        for index, path_items in enumerate(list(structured.get("steps") or [])[:4], start=1):
+            shown = "; ".join(_clip(step, 60) for step in list(path_items)[:8])
+            lines.append(f"- шаги {index}: {shown}")
+        return "\n".join(lines)
+    if kind == "image":
+        lines.append(f"- format: {structured.get('format')}")
+        lines.append(f"- width: {structured.get('width')}")
+        lines.append(f"- height: {structured.get('height')}")
+        lines.append(f"- bytes: {structured.get('bytes')}")
+        return "\n".join(lines)
+    if kind == "pdf":
+        lines.append(f"- status: {structured.get('status')}")
+        lines.append(f"- pages: {structured.get('pages')}")
+        if structured.get("message"):
+            lines.append(f"- {_clip(structured.get('message') or '', 240)}")
+        for index, text in enumerate(list(structured.get("page_text") or [])[:3], start=1):
+            if str(text).strip():
+                lines.append(f"- страница {index}: {_clip(text, 240)}")
+        return "\n".join(lines)
+    lines.append(f"- transcript: {'да' if structured.get('transcript') else 'нет'}")
+    if structured.get("text"):
+        lines.append(f"- текст: {_clip(structured.get('text') or '', 400)}")
+    elif not structured.get("transcript"):
+        lines.append("- Расшифровки нет, текст не извлечён.")
+    return "\n".join(lines)
+
+
+def bound_extract(kind: str, structured: dict) -> dict:
+    """Capped extract for MCP structuredContent."""
+    truncated = False
+
+    def take(items: list, limit: int) -> list:
+        nonlocal truncated
+        if len(items) > limit:
+            truncated = True
+        return items[:limit]
+
+    if kind == "ui":
+        steps_in = list(structured.get("steps") or [])
+        steps = []
+        for path_items in take(steps_in, 6):
+            path_items = list(path_items)
+            if len(path_items) > 12:
+                truncated = True
+            steps.append([_clip(step, 80) for step in path_items[:12]])
+        return {
+            "title": _clip(structured.get("title") or "", 160),
+            "headings": [
+                {"level": item.get("level"), "text": _clip(item.get("text") or "")}
+                for item in take(list(structured.get("headings") or []), 20)
+            ],
+            "screens": [
+                {"tag": item.get("tag"), "id": item.get("id") or "", "label": _clip(item.get("label") or "")}
+                for item in take(list(structured.get("screens") or []), 20)
+            ],
+            "prices": [
+                {"text": _clip(item.get("text") or "", 40), "context": _clip(item.get("context") or "", 120)}
+                for item in take(list(structured.get("prices") or []), 20)
+            ],
+            "ctas": [
+                {
+                    "text": _clip(item.get("text") or "", 80),
+                    "tag": item.get("tag"),
+                    "href": _clip(item.get("href") or "", 120),
+                }
+                for item in take(list(structured.get("ctas") or []), 20)
+            ],
+            "steps": steps,
+            "truncated": truncated,
+        }
+    if kind == "image":
+        return {
+            "format": structured.get("format"),
+            "width": structured.get("width"),
+            "height": structured.get("height"),
+            "bytes": structured.get("bytes"),
+        }
+    if kind == "pdf":
+        pages = [str(text) for text in list(structured.get("page_text") or [])]
+        if len(pages) > 5:
+            truncated = True
+        return {
+            "status": structured.get("status"),
+            "pages": structured.get("pages"),
+            "message": _clip(structured.get("message") or "", 300),
+            "page_text": [_clip(text, 400) for text in pages[:5]],
+            "truncated": truncated or any(len(text) > 400 for text in pages[:5]),
+        }
+    text = str(structured.get("text") or "")
+    return {
+        "transcript": bool(structured.get("transcript")),
+        "text": _clip(text, 800),
+        "truncated": len(text) > 800,
+    }
+
+
 def extract_saved(project: Path, manifest: dict) -> dict:
     """Read the stored snapshot in memory. Does not write."""
     snapshot = project / str(manifest.get("input_path") or "")
@@ -688,7 +812,12 @@ def _build(
             raise InspectError("Для --pdf нужен файл .pdf.")
         parsed = read_pdf(snapshot)
         report = render_pdf_report(inspect_id, snapshot_rel, digest, parsed, synthetic)
-        structured = {"status": parsed["status"], "pages": len(parsed["pages"])}
+        structured = {
+            "status": parsed["status"],
+            "pages": len(parsed["pages"]),
+            "page_text": [str(page.get("text") or "") for page in parsed["pages"]],
+            "message": parsed.get("message") or "",
+        }
         gap = parsed["status"] != "ok"
         kind = "pdf"
     else:
@@ -712,7 +841,7 @@ def _build(
         else:
             gap = True
         report = render_av_report(inspect_id, snapshot_rel, digest, transcript_rel, transcript_hash, plain, synthetic)
-        structured = {"transcript": transcript_rel is not None}
+        structured = {"transcript": plain is not None, "text": plain or ""}
         kind = "av"
     report_path = folder / "report.md"
     report_path.write_text(report, encoding="utf-8")

@@ -367,6 +367,10 @@ class InspectCliTests(unittest.TestCase):
         assert_code(inspected)
         self.assertIn("inspect_id: M001", inspected.stdout)
         self.assertIn("source_id: S001", inspected.stdout)
+        self.assertIn("Сводка:", inspected.stdout)
+        self.assertIn("399", inspected.stdout)
+        self.assertIn("Подключить", inspected.stdout)
+        self.assertIn("Выберите тариф", inspected.stdout)
         report = (project / "inspect" / "M001" / "report.md").read_text(encoding="utf-8")
         self.assertIn("Подключить | tag=a | href=/connect", report)
         self.assertIn("1. Выберите тариф", report)
@@ -452,6 +456,8 @@ class InspectCliTests(unittest.TestCase):
         )
         assert_code(image)
         self.assertIn("description_source_id: S003", image.stdout)
+        self.assertIn("- width: 1", image.stdout)
+        self.assertIn("- format: png", image.stdout)
 
         def ids_and_bytes() -> tuple[list[str], list[str], dict[str, bytes]]:
             inspect_ids = sorted(path.name for path in (project / "inspect").iterdir() if path.is_dir())
@@ -616,3 +622,28 @@ class McpAnalyzeTests(unittest.TestCase):
         )
         self.assertTrue(tool_body(outside)["isError"])
         self.assertIn("вне проекта", tool_text(tool_body(outside)).casefold() + tool_text(tool_body(outside)))
+
+    def test_inspect_tool_returns_the_extract(self) -> None:
+        created = tool_body(self.server.call("strat_init", {"project_id": "mcpmedia", "title": "MCP разбор"}))
+        self.assertFalse(created["isError"], tool_text(created))
+        project = self.projects / "mcpmedia"
+        (project / "sources" / "page.html").write_text(FIXTURE_HTML, encoding="utf-8")
+        (project / "sources" / "pixel.png").write_bytes(inspect_media.png_bytes(2, 4))
+        page = tool_body(
+            self.server.call("strat_inspect", {"project": "mcpmedia", "html": "sources/page.html", "synthetic": True})
+        )
+        self.assertFalse(page["isError"], tool_text(page))
+        self.assertIn("НЕДОВЕРЕННЫЕ ДАННЫЕ", tool_text(page))
+        self.assertIn("Подключить", tool_text(page))
+        self.assertTrue(page["structuredContent"]["untrusted"])
+        extract = page["structuredContent"]["extract"]
+        self.assertEqual(extract["title"], "ПримерСвязь — семейный тариф")
+        self.assertTrue(any("399" in item["text"] for item in extract["prices"]))
+        self.assertTrue(any(item["text"] == "Подключить" for item in extract["ctas"]))
+        self.assertIn("Выберите тариф", extract["steps"][0])
+        image = tool_body(
+            self.server.call("strat_inspect", {"project": "mcpmedia", "image": "sources/pixel.png"})
+        )
+        self.assertFalse(image["isError"], tool_text(image))
+        self.assertEqual(image["structuredContent"]["extract"], {"format": "png", "width": 2, "height": 4, "bytes": len(inspect_media.png_bytes(2, 4))})
+        self.assertIn("- width: 2", tool_text(image))
