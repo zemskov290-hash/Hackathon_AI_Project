@@ -1,0 +1,12 @@
+{
+  "id": "t04-contradiction",
+  "title": "Два источника не сходятся",
+  "scenario": "Две синтетические заметки дают разные числа за один день. Среднее не должно заменять оба числа.",
+  "project_id": "bench-contradiction",
+  "strategy": false,
+  "canary": null,
+  "expected_numbers": null,
+  "contradiction": {"numbers": [120, 340], "word": "противореч"},
+  "revision": false,
+  "resume": null
+}

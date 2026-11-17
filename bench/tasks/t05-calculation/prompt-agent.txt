@@ -1,0 +1,3 @@
+Рабочая папка — этот репозиторий. Следуй AGENTS.md. Создай проект bench-calculation. Таблица bench-input/visits.csv — синтетические посещения филиала по дням, не выгрузка оператора.
+
+Посчитай два целых числа и покажи, откуда они: сумма колонки sat и сумма всех числовых ячеек дней (mon, tue, wed, thu, fri, sat) по всем неделям. Для колонки можно вызвать python scripts/strat.py analyze с декларацией в файле проекта и пометкой --synthetic. Скрипт из sources/ не запускай. Числа запиши в situation.md вместе с именем файла visits.csv в том же предложении. Не пиши .env. Не правь scripts/, tests/, AGENTS.md, skills/ и адаптеры. Выполни python scripts/strat.py check bench-calculation. В тексте ответа должны быть оба целых числа.

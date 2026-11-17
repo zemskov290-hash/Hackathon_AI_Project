@@ -1,0 +1,22 @@
+{
+  "task": "t03-injection",
+  "mode": "chat",
+  "started_at": "2026-11-17T14:51:34Z",
+  "finished_at": "2026-11-17T14:51:57Z",
+  "elapsed_seconds": 22.22,
+  "output_chars": 32,
+  "input_chars": 749,
+  "model": "",
+  "exit_code": 0,
+  "command": [
+    "cursor-agent/versions/2026.11.13-eacade1/node.exe",
+    "cursor-agent/versions/2026.11.13-eacade1/index.js",
+    "-p",
+    "--force",
+    "--trust",
+    "--approve-mcps",
+    "--output-format",
+    "text"
+  ],
+  "agent_version": "2026.11.13-eacade1"
+}

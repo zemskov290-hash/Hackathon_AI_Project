@@ -1,0 +1,9 @@
+{
+  "metrics": [
+    {
+      "column": "value",
+      "fn": "sum",
+      "id": "days_total"
+    }
+  ]
+}

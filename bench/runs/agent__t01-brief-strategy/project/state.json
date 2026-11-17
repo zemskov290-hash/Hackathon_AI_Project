@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "id": "bench-strategy",
+  "title": "Филиал «Северная полка»: воскресенье",
+  "example": false,
+  "stage": 1,
+  "stage_status": "in_progress",
+  "completed_stages": [],
+  "checkpoints": {
+    "brief": {
+      "status": "open",
+      "at": null,
+      "note": null,
+      "choice": null
+    },
+    "options": {
+      "status": "open",
+      "at": null,
+      "note": null,
+      "choice": null
+    },
+    "validation": {
+      "status": "open",
+      "at": null,
+      "note": null,
+      "choice": null
+    }
+  },
+  "option_registry": [
+    {
+      "id": "O1",
+      "title": "Оставить как есть",
+      "status": "active"
+    },
+    {
+      "id": "O2",
+      "title": "Пилот воскресенья с одним сотрудником",
+      "status": "active"
+    },
+    {
+      "id": "O3",
+      "title": "Закрыть направление",
+      "status": "active"
+    }
+  ],
+  "created_at": "2026-11-17T14:52:42Z",
+  "updated_at": "2026-11-17T14:56:41Z",
+  "steps": {
+    "evidence:9dfd5f618ab59db6": {
+      "status": "done",
+      "inputs_hash": "9dfd5f618ab59db6520fd2ecf9c43de73f050bcf6d1b369f47e1931a5b9e556b",
+      "updated_at": "2026-11-17T14:54:00Z",
+      "detail": "E001"
+    },
+    "evidence:3498899565593864": {
+      "status": "done",
+      "inputs_hash": "349889956559386475c842d651d219a92e9d4bc382c7f63f7c1d70bca25761d2",
+      "updated_at": "2026-11-17T14:54:01Z",
+      "detail": "E002"
+    },
+    "evidence:0013af6f2ee39ceb": {
+      "status": "done",
+      "inputs_hash": "0013af6f2ee39ceb43fccef150a83c4770a40055f60bfab7e8876ade28e01fd9",
+      "updated_at": "2026-11-17T14:54:02Z",
+      "detail": "E003"
+    },
+    "evidence:7c83c9ee28c8a1ad": {
+      "status": "done",
+      "inputs_hash": "7c83c9ee28c8a1ad795b7280a28c58dc99f0b64e1aff17d3ee48c773cf710d7e",
+      "updated_at": "2026-11-17T14:54:03Z",
+      "detail": "E004"
+    },
+    "evidence:456f750aa42bbcc7": {
+      "status": "done",
+      "inputs_hash": "456f750aa42bbcc70984c3ca33314f9d0475838578fb8f13b2e54b99cde680ea",
+      "updated_at": "2026-11-17T14:54:03Z",
+      "detail": "E005"
+    },
+    "evidence:178d0a8a045f53b2": {
+      "status": "done",
+      "inputs_hash": "178d0a8a045f53b2be7003b97efa72fd7bc827b7d74f05d5d52e0a3b7eb01ce4",
+      "updated_at": "2026-11-17T14:54:04Z",
+      "detail": "E006"
+    },
+    "evidence:d499cc14ff90483f": {
+      "status": "done",
+      "inputs_hash": "d499cc14ff90483f3498f362cb1f5368cef9173cab3332b8ccb03efe8ae49aa3",
+      "updated_at": "2026-11-17T14:54:06Z",
+      "detail": "E007"
+    },
+    "evidence:c58a24318759e24b": {
+      "status": "done",
+      "inputs_hash": "c58a24318759e24bf702bcbcd034f270585848474cbe7f16e8a548dbb9103b29",
+      "updated_at": "2026-11-17T14:54:07Z",
+      "detail": "E008"
+    },
+    "evidence:ae395cef7076351d": {
+      "status": "done",
+      "inputs_hash": "ae395cef7076351d56ecf025e0c1ac162f6b94ef9d174327b80c310eacf71cff",
+      "updated_at": "2026-11-17T14:54:22Z",
+      "detail": "E009"
+    }
+  }
+}

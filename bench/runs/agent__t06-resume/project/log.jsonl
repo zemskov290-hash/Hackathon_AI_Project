@@ -1,0 +1,5 @@
+{"stage":1,"message":"Синтетический бриф записан","model":"fixture"}
+{"stage":2,"message":"Синтетический план исследования записан","model":"fixture"}
+{"stage":3,"message":"Синтетический fetch расписания оборвался","model":"fixture"}
+{"ts":"2026-11-17T15:08:44Z","stage":3,"message":"Загрузка не удалась: https://example.invalid/library-saturday","grounds":"Сеть недоступна или адрес не открылся: https://example.invalid/library-saturday. [Errno 11001] getaddrinfo failed Попыток: 3.","minutes":null,"tokens":null,"cost":null,"model":null}
+{"ts":"2026-11-17T15:08:50Z","stage":3,"message":"Fetch https://example.invalid/library-saturday не удался: адрес не открылся","grounds":"Сеть недоступна или DNS: [Errno 11001] getaddrinfo failed после 3 попыток; шаг fetch:https://example.invalid/library-saturday — failed; текст страницы не выдуман","minutes":null,"tokens":null,"cost":null,"model":"ide/subscription","input_chars":2500,"output_chars":400}

@@ -1,0 +1,10 @@
+Проект **bench-calculation** создан (этап 1, бриф).
+
+**440** — сумма колонки `sat` в `visits.csv` через `analyze --synthetic` и декларацию `spec-sat.json` → [A001.sum_sat].  
+**1174** — сумма всех ячеек `mon…sat` по четырём неделям (развёртка `day-cells.csv` из того же `visits.csv`, декларация `spec-days.json`) → [A002.days_total].
+
+Оба числа записаны в `situation.md` в одном предложении с именем `visits.csv`.
+
+`python scripts/strat.py check bench-calculation` — **OK** (есть предупреждение по отозванному E002 после смены снимка A002).
+
+**Правка инструмента (не вносил):** в `scripts/analysis.py` в `recompute` строка `folder / "input" + snapshot.suffix` на Windows даёт `TypeError` и ломает `check` для script-режима. Нужно, например: `folder / f"input{snapshot.suffix}"`. В журнал записано «предложена правка инструмента».

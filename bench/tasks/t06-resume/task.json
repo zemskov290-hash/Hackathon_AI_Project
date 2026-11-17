@@ -1,0 +1,15 @@
+{
+  "id": "t06-resume",
+  "title": "Обрыв и возобновление",
+  "scenario": "По мотивам оборванного fetch: в state.json шаг начат и не закончен. Ответ должен назвать этот шаг, а папка проекта не должна быть стёрта.",
+  "project_id": "bench-resume",
+  "strategy": false,
+  "canary": null,
+  "expected_numbers": null,
+  "contradiction": null,
+  "revision": false,
+  "resume": {
+    "step_id": "fetch:https://example.invalid/library-saturday",
+    "url": "https://example.invalid/library-saturday"
+  }
+}

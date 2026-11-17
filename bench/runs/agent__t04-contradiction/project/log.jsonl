@@ -1,0 +1,2 @@
+{"ts":"2026-11-17T15:03:18Z","stage":0,"message":"Проект создан","grounds":"strat init","minutes":null,"tokens":null,"cost":null,"model":"cli"}
+{"ts":"2026-11-17T15:04:01Z","stage":1,"message":"Зарегистрированы S001/S002 (memo-hall, memo-desk), свидетельства E001 (340) и E002 (120); в situation.md зафиксировано противоречие обоих чисел без усреднения.","grounds":"bench-input: две синтетические заметки об одной субботе с разными числами","minutes":3,"tokens":null,"cost":null,"model":"ide/subscription","input_chars":551,"output_chars":900}

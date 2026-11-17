@@ -1,0 +1,22 @@
+{
+  "task": "t05-calculation",
+  "mode": "agent",
+  "started_at": "2026-11-17T15:04:11Z",
+  "finished_at": "2026-11-17T15:07:42Z",
+  "elapsed_seconds": 210.823,
+  "output_chars": 830,
+  "input_chars": 730,
+  "model": "",
+  "exit_code": 0,
+  "command": [
+    "cursor-agent/versions/2026.11.13-eacade1/node.exe",
+    "cursor-agent/versions/2026.11.13-eacade1/index.js",
+    "-p",
+    "--force",
+    "--trust",
+    "--approve-mcps",
+    "--output-format",
+    "text"
+  ],
+  "agent_version": "2026.11.13-eacade1"
+}

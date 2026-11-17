@@ -1,0 +1,12 @@
+{
+  "id": "t02-revision",
+  "title": "Новые данные против гипотезы",
+  "scenario": "По мотивам прогона 2: новая заметка опровергает опору решения. Старое свидетельство надо заместить с причиной и поставить решение на пересмотр, не принимая его за человека.",
+  "project_id": "bench-revision",
+  "strategy": false,
+  "canary": null,
+  "expected_numbers": null,
+  "contradiction": null,
+  "revision": true,
+  "resume": null
+}

@@ -16,3 +16,5 @@ projects/.current
 *.log
 .claude/settings.local.json
 .stop-hook.lock
+# Рабочая папка prepare — только на машине. bench/runs — архив прогонов, его коммитят.
+bench/work/
