@@ -263,7 +263,7 @@ python scripts/bench.py score --work 'C:\strat-bench'
 python scripts/bench.py summary --work 'C:\strat-bench'
 ```
 
-`prepare` пишет `commands.ps1` со всеми шестью задачами и обоими режимами. В строках нет `$` и внутренних двойных кавычек. `capture` читает `PROMPT.txt` как UTF-8 и вызывает:
+`prepare` пишет `commands.ps1` со всеми шестью задачами и обоими режимами. В строках нет `$` и внутренних двойных кавычек. `capture` читает `PROMPT.txt` как UTF-8. На Windows он не вызывает `agent.cmd` через оболочку: ищет лаунчер и запускает `node.exe` с `index.js`, промпт одним аргументом. Явный путь — `--agent-cmd` или `STRAT_AGENT_CMD`. Команда, которую он собирает:
 
 ```text
 agent -p --force --trust --approve-mcps --output-format text <текст PROMPT.txt>

@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import csv
+import io
 import json
+import os
+import stat
+import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -310,8 +315,11 @@ class PrepareTests(unittest.TestCase):
             out = Path(tmp) / "cap"
             bench.prepare(out, "t05-calculation")
             workspace = out / "chat" / "t05-calculation"
-            code = bench.capture(workspace, dry_run=True)
+            buffer = io.StringIO()
+            with redirect_stdout(buffer):
+                code = bench.capture(workspace, dry_run=True)
             self.assertEqual(code, 0)
+            self.assertIn("argv_head", buffer.getvalue())
             self.assertFalse((workspace / "response.txt").exists())
 
     def test_missing_run_stays_empty_and_a_real_response_is_scored(self) -> None:
@@ -371,3 +379,141 @@ class ResumeWorkspaceTests(unittest.TestCase):
             state_path.write_text(json.dumps(state), encoding="utf-8")
             lost = bench.score_workspace(workspace, task, "agent")
             self.assertEqual(lost["metrics"]["resume_kept"]["value"], 0)
+
+
+class LauncherTests(unittest.TestCase):
+    def _tree(self, root: Path, *, sibling: bool = False, versions: list[str] | None = None) -> Path:
+        root.mkdir(parents=True)
+        (root / "agent.cmd").write_text("@echo off\r\n", encoding="utf-8")
+        (root / "agent.ps1").write_text("# launcher\n", encoding="utf-8")
+        (root / "promote-staged.cmd").write_text("@echo off\r\n", encoding="utf-8")
+        (root / "pending-launchers").mkdir()
+        if sibling:
+            (root / "node.exe").write_bytes(b"")
+            (root / "index.js").write_text("console.log(1)\n", encoding="utf-8")
+        for name in versions or []:
+            folder = root / "versions" / name
+            folder.mkdir(parents=True)
+            (folder / "node.exe").write_bytes(b"")
+            (folder / "index.js").write_text("console.log(1)\n", encoding="utf-8")
+        return root / "agent.cmd"
+
+    def test_version_folder_is_the_newest_date_and_prompt_stays_one_argument(self) -> None:
+        prompt = 'строка\nвторая "кавычки" 100% ^ & конец'
+        with tempfile.TemporaryDirectory() as tmp:
+            cmd = self._tree(
+                Path(tmp) / "cursor-agent",
+                versions=["2026.10.22-27dcf5f", "2026.11.13-eacade1"],
+            )
+            prefix, env, version = bench.resolve_cursor_launcher(cmd)
+            self.assertEqual(version, "2026.11.13-eacade1")
+            self.assertEqual(Path(prefix[0]).parent.name, "2026.11.13-eacade1")
+            self.assertTrue(prefix[1].endswith("index.js"))
+            later = Path(tmp) / "cursor-agent" / "versions" / "2026.11.13-23-59-59-ffff"
+            later.mkdir()
+            (later / "node.exe").write_bytes(b"")
+            (later / "index.js").write_text("console.log(1)\n", encoding="utf-8")
+            prefix, _env, version = bench.resolve_cursor_launcher(cmd)
+            self.assertEqual(version, "2026.11.13-23-59-59-ffff")
+            self.assertEqual(env["CURSOR_INVOKED_AS"], "agent.ps1")
+            self.assertIn("compile-cache", env["NODE_COMPILE_CACHE"])
+            argv = bench.launch_argv(prefix, prompt)
+            self.assertEqual(argv[-1], prompt)
+            self.assertEqual(argv[2:7], ["-p", "--force", "--trust", "--approve-mcps", "--output-format"])
+            rendered = subprocess.list2cmdline([prompt])
+            self.assertTrue(rendered.startswith('"'))
+            self.assertIn("\n", rendered)
+            self.assertIn("%", rendered)
+            self.assertIn("^", rendered)
+            self.assertIn("&", rendered)
+
+    def test_sibling_node_wins_over_versions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cmd = self._tree(
+                Path(tmp) / "cursor-agent",
+                sibling=True,
+                versions=["2026.11.13-eacade1"],
+            )
+            prefix, _env, version = bench.resolve_cursor_launcher(cmd)
+            self.assertEqual(version, "")
+            self.assertTrue(prefix[0].endswith("node.exe"))
+            self.assertNotIn("versions", prefix[0])
+
+    def test_exe_is_used_as_is_and_a_missing_runtime_is_an_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            exe = Path(tmp) / "agent.exe"
+            exe.write_bytes(b"")
+            prefix, env, version = bench.resolve_cursor_launcher(exe)
+            self.assertEqual(prefix, [str(exe)])
+            self.assertEqual(env, {})
+            self.assertEqual(version, "")
+            empty = Path(tmp) / "bare"
+            cmd = self._tree(empty)
+            with self.assertRaises(bench.BenchError) as caught:
+                bench.resolve_cursor_launcher(cmd)
+            self.assertIn("node.exe", str(caught.exception))
+            self.assertIn("--agent-cmd", str(caught.exception))
+
+    def test_agent_cmd_overrides_the_environment(self) -> None:
+        self.assertEqual(bench.chosen_agent("C:\\agent.cmd", "agent"), "C:\\agent.cmd")
+        previous = os.environ.get("STRAT_AGENT_CMD")
+        os.environ["STRAT_AGENT_CMD"] = "D:\\from-env.cmd"
+        try:
+            self.assertEqual(bench.chosen_agent(None, "agent"), "D:\\from-env.cmd")
+        finally:
+            if previous is None:
+                os.environ.pop("STRAT_AGENT_CMD", None)
+            else:
+                os.environ["STRAT_AGENT_CMD"] = previous
+
+    def test_failed_or_empty_capture_is_not_scored(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "bad"
+            bench.prepare(out, "t05-calculation")
+            workspace = out / "chat" / "t05-calculation"
+            (workspace / "response.txt").write_text("", encoding="utf-8")
+            (workspace / "meta.json").write_text(
+                json.dumps({"exit_code": 2, "elapsed_seconds": 1}),
+                encoding="utf-8",
+            )
+            task = bench.task_by_id("t05-calculation")
+            failed = bench.score_workspace(workspace, task, "chat")
+            self.assertEqual(failed["status"], "invalid")
+            self.assertIsNone(failed["metrics"]["calculation_correct"]["value"])
+            self.assertIn("код выхода 2", failed["reason"])
+            (workspace / "meta.json").write_text(json.dumps({"exit_code": 0}), encoding="utf-8")
+            empty = bench.score_workspace(workspace, task, "chat")
+            self.assertEqual(empty["status"], "invalid")
+            self.assertIn("ответ пустой", empty["reason"])
+
+    def test_tooling_warning_is_excluded_from_the_snapshot_count(self) -> None:
+        errors, warnings = bench.split_check(
+            [
+                {"code": "quote", "warning": True},
+                {"code": "tooling", "warning": True},
+                {"code": "hash", "warning": False},
+            ]
+        )
+        self.assertEqual((errors, warnings), (1, 1))
+
+
+class CaptureProcessTests(unittest.TestCase):
+    def test_nonzero_exit_is_reported_and_stored(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "run"
+            bench.prepare(out, "t05-calculation")
+            workspace = out / "chat" / "t05-calculation"
+            program = Path(tmp) / "fake-agent"
+            program.write_text("#!/bin/sh\nexit 3\n", encoding="utf-8")
+            program.chmod(program.stat().st_mode | stat.S_IEXEC)
+            errors = io.StringIO()
+            with redirect_stderr(errors):
+                code = bench.capture(workspace, agent_cmd=str(program))
+            self.assertEqual(code, 3)
+            self.assertIn("Прогон недействителен", errors.getvalue())
+            meta = json.loads((workspace / "meta.json").read_text(encoding="utf-8"))
+            self.assertEqual(meta["exit_code"], 3)
+            self.assertEqual(meta["command"][0], str(program))
+            self.assertIn("--approve-mcps", meta["command"])
+            scored = bench.score_workspace(workspace, bench.task_by_id("t05-calculation"), "chat")
+            self.assertEqual(scored["status"], "invalid")

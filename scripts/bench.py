@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -57,6 +58,12 @@ NUMBER_RE = re.compile(r"(?<![\w.])(\d+(?:[.,]\d+)?%?)(?![\w])")
 QUOTE_RE = re.compile(r"«([^»]{20,})»|\"([^\"]{20,})\"")
 YEAR_RE = re.compile(r"^(19[9]\d|20[0-2]\d|203[0-5])$")
 AGENT_FLAGS = ["-p", "--force", "--trust", "--approve-mcps", "--output-format", "text"]
+# git status of scripts/ and tests/. It changes between a dirty checkout and CI
+# and is not a property of the scored project.
+IGNORED_CHECK_WARNINGS = frozenset({"tooling"})
+VERSION_DIR_RE = re.compile(
+    r"^(\d{4})\.(\d{2})\.(\d{2})(?:-(\d{2})-(\d{2})-(\d{2}))?-(.+)$"
+)
 
 METRICS = (
     {
@@ -156,7 +163,10 @@ METRICS = (
         "title": "Ошибки strat check",
         "better": "ниже лучше",
         "limit": (
-            "Только агент: число ошибок check_project по папке проекта, предупреждения отдельно в JSON. "
+            "Только агент: число ошибок check_project. В пояснении JSON предупреждения без кода tooling: "
+            "это незакоммиченные scripts/ и tests/ в текущем git, не свойство проекта. "
+            "Именно оно давало в черновике сводки 6 и 1 предупреждения, а на чистом дереве 5 и 0. "
+            "Пакеты pypdf и openpyxl на снимках demo-family-tariffs и demo-analysis этот список не меняют. "
             "У чата метрика не применяется. Нет папки проекта — пусто, не ноль."
         ),
     },
@@ -453,24 +463,184 @@ def prepare(out: Path, only: str | None = None) -> Path:
     return script
 
 
-def agent_argv(executable: str, prompt: str) -> list[str]:
-    return [executable, *AGENT_FLAGS, prompt]
+def version_sort_key(name: str) -> tuple | None:
+    """Date from versions/<YYYY.MM.DD[-HH-MM-SS]-commit>. Other names are ignored."""
+    match = VERSION_DIR_RE.match(name)
+    if not match:
+        return None
+    year, month, day, hour, minute, second, commit = match.groups()
+    return (
+        int(year),
+        int(month),
+        int(day),
+        int(hour or 0),
+        int(minute or 0),
+        int(second or 0),
+        commit,
+    )
 
 
-def capture(workspace: Path, executable: str = "agent", *, dry_run: bool = False) -> int:
+def latest_version_dir(root: Path) -> Path | None:
+    versions = root / "versions"
+    if not versions.is_dir():
+        return None
+    found: list[tuple[tuple, Path]] = []
+    for child in versions.iterdir():
+        if not child.is_dir() or child.name == "pending-launchers":
+            continue
+        key = version_sort_key(child.name)
+        if key is not None:
+            found.append((key, child))
+    if not found:
+        return None
+    found.sort(key=lambda item: item[0])
+    return found[-1][1]
+
+
+def resolve_cursor_launcher(path: Path) -> tuple[list[str], dict[str, str], str]:
+    """Turn agent.cmd / agent.ps1 into node.exe + index.js. Other files stay as-is.
+
+    cmd.exe cannot carry a multiline prompt: it splits on newlines and expands
+    % ^ &. CreateProcess quoting of an argument list can. The .cmd only forwards
+    to powershell -File, so the real program is node and index.js.
+    """
+    suffix = path.suffix.lower()
+    if suffix not in {".cmd", ".ps1"}:
+        return [str(path)], {}, ""
+    folder = path.parent
+    env = {
+        "CURSOR_INVOKED_AS": "agent.ps1",
+        "NODE_COMPILE_CACHE": str(folder / "compile-cache"),
+    }
+    sibling_node = folder / "node.exe"
+    sibling_index = folder / "index.js"
+    if sibling_node.is_file() and sibling_index.is_file():
+        return [str(sibling_node), str(sibling_index)], env, ""
+    version = latest_version_dir(folder)
+    if version is None:
+        raise BenchError(
+            f"Лаунчер {path.name} найден, но рядом нет node.exe и нет каталога versions "
+            "с именем даты. pending-launchers и promote-staged.cmd не используются. "
+            "Укажите программу флагом --agent-cmd или переменной STRAT_AGENT_CMD."
+        )
+    node = version / "node.exe"
+    index = version / "index.js"
+    if not node.is_file() or not index.is_file():
+        raise BenchError(
+            f"В {version} нет node.exe или index.js. "
+            "Укажите программу флагом --agent-cmd или переменной STRAT_AGENT_CMD."
+        )
+    return [str(node), str(index)], env, version.name
+
+
+def locate_agent(explicit: str | None) -> Path:
+    """Find agent. On Windows shutil.which honors PATHEXT, so agent.cmd is visible."""
+    if explicit:
+        candidate = Path(explicit)
+        if candidate.is_file():
+            return candidate
+        found = shutil.which(explicit)
+        if found:
+            return Path(found)
+        raise BenchError(
+            f"Не найден файл агента: {explicit}. "
+            "Проверьте --agent-cmd или STRAT_AGENT_CMD. "
+            "Команда subprocess без оболочки не раскрывает PATHEXT сама: ищется which."
+        )
+    found = shutil.which("agent")
+    if not found:
+        raise BenchError(
+            "Не найден исполняемый файл agent. Нужен cursor-agent в PATH. "
+            "На Windows это обычно agent.cmd; укажите его через --agent-cmd или STRAT_AGENT_CMD, "
+            "если which его не видит."
+        )
+    return Path(found)
+
+
+def agent_launch(explicit: str | None) -> tuple[list[str], dict[str, str], str]:
+    return resolve_cursor_launcher(locate_agent(explicit))
+
+
+def chosen_agent(agent_cmd: str | None, agent: str | None) -> str | None:
+    """--agent-cmd wins, then STRAT_AGENT_CMD, then the name passed as --agent."""
+    if agent_cmd:
+        return agent_cmd
+    env = os.environ.get("STRAT_AGENT_CMD")
+    if env:
+        return env
+    return agent
+
+
+def launch_argv(prefix: list[str], prompt: str) -> list[str]:
+    """Prompt is one argument. CreateProcess quoting keeps newlines and % ^ &."""
+    return [*prefix, *AGENT_FLAGS, prompt]
+
+
+def child_env(extra: dict[str, str]) -> dict[str, str]:
+    env = os.environ.copy()
+    for key, value in extra.items():
+        if key == "NODE_COMPILE_CACHE" and env.get("NODE_COMPILE_CACHE"):
+            continue
+        env[key] = value
+    return env
+
+
+def split_check(findings: list[dict]) -> tuple[int, int]:
+    errors = sum(1 for item in findings if not item.get("warning"))
+    warnings = sum(
+        1
+        for item in findings
+        if item.get("warning") and item.get("code") not in IGNORED_CHECK_WARNINGS
+    )
+    return errors, warnings
+
+
+def invalid_run_reason(response: str, meta: dict, response_exists: bool) -> str | None:
+    """A failed or empty capture is not a score. A hand-saved answer without meta still counts."""
+    reasons = []
+    exit_code = meta.get("exit_code")
+    if isinstance(exit_code, int) and exit_code != 0:
+        reasons.append(f"код выхода {exit_code}")
+    if response_exists and not response.strip():
+        reasons.append("ответ пустой")
+    if not reasons:
+        return None
+    if not meta and response_exists and response.strip():
+        return None
+    return "; ".join(reasons)
+
+
+def capture(
+    workspace: Path,
+    executable: str = "agent",
+    *,
+    agent_cmd: str | None = None,
+    dry_run: bool = False,
+) -> int:
     prompt_path = workspace / "PROMPT.txt"
     if not prompt_path.is_file():
         raise BenchError(f"Нет PROMPT.txt в {workspace}. Сначала prepare.")
     prompt = read_text(prompt_path)
-    argv = agent_argv(executable, prompt)
+    spec = chosen_agent(agent_cmd, executable)
     if dry_run:
+        try:
+            prefix, _env, version = agent_launch(spec)
+        except BenchError:
+            prefix, version = [spec or "agent"], ""
         print(
             json.dumps(
-                {"cwd": str(workspace), "argv_head": argv[:-1], "prompt_chars": len(prompt)},
+                {
+                    "cwd": str(workspace),
+                    "argv_head": [*prefix, *AGENT_FLAGS],
+                    "prompt_chars": len(prompt),
+                    "agent_version": version,
+                },
                 ensure_ascii=False,
             )
         )
         return 0
+    prefix, extra, version = agent_launch(spec)
+    argv = launch_argv(prefix, prompt)
     started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     clock = time.perf_counter()
     try:
@@ -481,10 +651,13 @@ def capture(workspace: Path, executable: str = "agent", *, dry_run: bool = False
             text=True,
             encoding="utf-8",
             errors="replace",
+            env=child_env(extra),
         )
     except FileNotFoundError as exc:
         raise BenchError(
-            f"Не найден исполняемый файл {executable}. Нужен cursor-agent в PATH, команда agent."
+            "Не удалось запустить "
+            + " ".join(prefix)
+            + ". Проверьте node.exe рядом с cursor-agent или --agent-cmd."
         ) from exc
     elapsed = round(time.perf_counter() - clock, 3)
     finished_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -502,12 +675,27 @@ def capture(workspace: Path, executable: str = "agent", *, dry_run: bool = False
         "input_chars": len(prompt),
         "model": "",
         "exit_code": proc.returncode,
-        "command": argv[:-1],
+        "command": [*prefix, *AGENT_FLAGS],
+        "agent_version": version,
     }
     (workspace / "meta.json").write_bytes((json.dumps(meta, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
     if proc.stderr:
         sys.stderr.write(proc.stderr)
-    return int(proc.returncode)
+    if proc.returncode != 0 or not response.strip():
+        parts = []
+        if proc.returncode != 0:
+            parts.append(f"код выхода {proc.returncode}")
+        if not response.strip():
+            parts.append("ответ пустой")
+        print(
+            "Прогон недействителен: " + ", ".join(parts) + ". Оценщик его не засчитает.",
+            file=sys.stderr,
+        )
+    if proc.returncode != 0:
+        return int(proc.returncode)
+    if not response.strip():
+        return 2
+    return 0
 
 
 def sentences(text: str) -> list[str]:
@@ -881,7 +1069,22 @@ def score_workspace(workspace: Path, task: dict, mode: str) -> dict:
             "status": "missing",
             "metrics": blank_metrics(),
         }
-    response = read_text(workspace / "response.txt") if (workspace / "response.txt").is_file() else ""
+    response_path = workspace / "response.txt"
+    response_exists = response_path.is_file()
+    response = read_text(response_path) if response_exists else ""
+    meta = read_meta(workspace)
+    reason = invalid_run_reason(response, meta, response_exists)
+    if reason:
+        metrics = blank_metrics()
+        for item in metrics.values():
+            item["detail"] = "прогон недействителен: " + reason
+        return {
+            "task": task["id"],
+            "mode": mode,
+            "status": "invalid",
+            "reason": reason,
+            "metrics": metrics,
+        }
     project = None
     evidence: list[dict] = []
     check_errors = None
@@ -890,16 +1093,13 @@ def score_workspace(workspace: Path, task: dict, mode: str) -> dict:
         project = workspace / "projects" / str(task["project_id"])
         if project.is_dir() and (project / "state.json").is_file():
             evidence = load_jsonl_rows(project / "evidence.jsonl")
-            findings = strat.check_project(project)
-            check_errors = sum(1 for item in findings if not item.get("warning"))
-            check_warnings = sum(1 for item in findings if item.get("warning"))
+            check_errors, check_warnings = split_check(strat.check_project(project))
         else:
             project = None
     prose = project_prose(project) if project else ""
     text = "\n".join(part for part in (response, prose) if part)
     names = filenames_of(context_files(task))
     corpus = source_corpus(project, context_files(task))
-    meta = read_meta(workspace)
     elapsed = meta.get("elapsed_seconds")
     elapsed_value = float(elapsed) if isinstance(elapsed, (int, float)) else None
     output_chars = len(response) if (workspace / "response.txt").is_file() else (len(prose) if prose else 0)
@@ -937,6 +1137,7 @@ def score_historical(project: Path) -> dict:
     evidence = load_jsonl_rows(project / "evidence.jsonl")
     findings = strat.check_project(project)
     names = [path.name for path in (project / "sources").rglob("*") if path.is_file()] if (project / "sources").is_dir() else []
+    check_errors, check_warnings = split_check(findings)
     metrics = score_texts(
         prose,
         task=task,
@@ -945,8 +1146,8 @@ def score_historical(project: Path) -> dict:
         evidence=evidence,
         project=project,
         mode="agent",
-        check_errors=sum(1 for item in findings if not item.get("warning")),
-        check_warnings=sum(1 for item in findings if item.get("warning")),
+        check_errors=check_errors,
+        check_warnings=check_warnings,
         elapsed=None,
         output_chars=len(prose),
     )
@@ -1139,6 +1340,8 @@ def render_summary(results: list[dict], historical: dict) -> tuple[str, dict]:
             "",
             "Рабочий каталог процесса agent — папка режима. У чата это каталог вне репозитория, без AGENTS.md, skills, хуков и MCP. Материалы чата вставлены в PROMPT.txt и лежат в materials.",
             "",
+            "На Windows capture не зовёт agent.cmd через оболочку: subprocess без shell не учитывает PATHEXT, а cmd.exe режет многострочный промпт и раскрывает % ^ &. Если which находит agent.cmd или agent.ps1 в каталоге cursor-agent, запускается node.exe и index.js: рядом с лаунчером, либо из самой свежей папки versions по дате в имени. pending-launchers и promote-staged.cmd не используются. Явный путь: --agent-cmd или STRAT_AGENT_CMD. В meta.json пишутся фактическая команда и имя папки versions. Ненулевой код или пустой ответ в сводку не входят.",
+            "",
             "Прямая строка для тех, кто хочет видеть agent сам, тоже есть в commands.ps1. Она не пишет response.txt. Кириллицу надёжнее отдаёт capture: Python читает UTF-8 и не просит BOM у PowerShell 5.1.",
             "",
             "Имя модели в meta.json не заполняется. Его можно дописать руками после прогона, оценщик сам его не выставляет.",
@@ -1181,13 +1384,20 @@ def cmd_prepare(args: argparse.Namespace) -> int:
 
 
 def cmd_capture(args: argparse.Namespace) -> int:
-    return capture(Path(args.workspace), args.agent, dry_run=args.dry_run)
+    return capture(Path(args.workspace), args.agent, agent_cmd=args.agent_cmd, dry_run=args.dry_run)
 
 
 def cmd_score(args: argparse.Namespace) -> int:
     results = score_work(Path(args.work))
     scored = sum(1 for item in results if item["status"] == "scored")
-    print(f"Оценено записей: {scored} из {len(results)}. Пустые прогоны оставлены со статусом missing.")
+    invalid = [item for item in results if item.get("status") == "invalid"]
+    missing = sum(1 for item in results if item["status"] == "missing")
+    print(
+        f"Оценено записей: {scored} из {len(results)}. "
+        f"Пустых прогонов: {missing}. Недействительных: {len(invalid)}."
+    )
+    for item in invalid:
+        print(f"Прогон недействителен: {item['mode']}/{item['task']}. {item.get('reason', '')}")
     return 0
 
 
@@ -1207,7 +1417,12 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_cmd.set_defaults(func=cmd_prepare)
     capture_cmd = sub.add_parser("capture", help="запустить agent в рабочей папке и записать response.txt")
     capture_cmd.add_argument("--workspace", required=True)
-    capture_cmd.add_argument("--agent", default="agent", help="имя команды cursor-agent")
+    capture_cmd.add_argument("--agent", default="agent", help="имя команды, если --agent-cmd и STRAT_AGENT_CMD не заданы")
+    capture_cmd.add_argument(
+        "--agent-cmd",
+        default=None,
+        help="явный путь к agent, agent.cmd или agent.ps1; иначе переменная STRAT_AGENT_CMD",
+    )
     capture_cmd.add_argument("--dry-run", action="store_true", help="показать аргументы и не запускать agent")
     capture_cmd.set_defaults(func=cmd_capture)
     score_cmd = sub.add_parser("score", help="посчитать метрики по рабочим папкам")
