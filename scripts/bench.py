@@ -20,6 +20,7 @@ import sys
 import tempfile
 import time
 from datetime import datetime, timezone
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent
@@ -1306,16 +1307,42 @@ def score_work(work: Path) -> list[dict]:
 
 
 def mean_of(results: list[dict], mode: str, metric_id: str):
+    """Average already-rounded task values with decimal arithmetic.
+
+    A binary sum of rates like 0.35895 sits on a rounding boundary and becomes
+    0.359 on one Python build and 0.3589 on another. Decimal half-up does not.
+    """
     values = []
     for item in results:
         if item.get("mode") != mode or item.get("status") != "scored":
             continue
         value = (item.get("metrics") or {}).get(metric_id, {}).get("value")
-        if isinstance(value, (int, float)):
-            values.append(float(value))
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        values.append(Decimal(format(value, ".4f")))
     if not values:
         return None, 0
-    return round(sum(values) / len(values), 4), len(values)
+    mean = (sum(values, Decimal(0)) / Decimal(len(values))).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+    return mean, len(values)
+
+
+def number_text(value) -> str:
+    if isinstance(value, Decimal):
+        text = format(value, "f")
+    elif isinstance(value, float):
+        text = f"{value:.4f}"
+    else:
+        return str(value)
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text
+
+
+def json_number(value):
+    """A float, so 0 and 1 stay 0.0 and 1.0 in JSON the way the summary already writes them."""
+    if isinstance(value, Decimal):
+        return float(value)
+    return value
 
 
 def cell_text(value, applicable: bool) -> str:
@@ -1323,8 +1350,8 @@ def cell_text(value, applicable: bool) -> str:
         return "н/п"
     if value is None:
         return "—"
-    if isinstance(value, float):
-        return f"{value:.4f}".rstrip("0").rstrip(".")
+    if isinstance(value, (float, Decimal)):
+        return number_text(value)
     return str(value)
 
 
@@ -1590,8 +1617,8 @@ def render_summary(
         comparison[spec["id"]] = {
             "title": spec["title"],
             "better": spec["better"],
-            "agent": agent_value,
-            "chat": None if not chat_applicable else chat_value,
+            "agent": None if agent_value is None else json_number(agent_value),
+            "chat": None if not chat_applicable or chat_value is None else json_number(chat_value),
             "chat_applicable": chat_applicable,
             "agent_n": agent_n,
             "chat_n": 0 if not chat_applicable else chat_n,

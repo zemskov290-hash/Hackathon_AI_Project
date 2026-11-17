@@ -375,6 +375,16 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(committed, text)
         self.assertIn("cursor-agent 2026.11.13-eacade1", committed)
 
+    def test_mean_of_rates_rounds_half_up(self) -> None:
+        results = [
+            {"mode": "agent", "status": "scored", "metrics": {"citation_rate": {"value": value}}}
+            for value in (0.6, 0.24, 0.4, 0.3333, 0.4375, 0.1429)
+        ]
+        mean, count = bench.mean_of(results, "agent", "citation_rate")
+        self.assertEqual(count, 6)
+        self.assertEqual(bench.number_text(mean), "0.359")
+        self.assertEqual(json.dumps(bench.json_number(mean)), "0.359")
+
 
 class ResumeWorkspaceTests(unittest.TestCase):
     def test_agent_must_keep_the_step(self) -> None:
