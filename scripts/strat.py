@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 import urllib.error
@@ -123,6 +124,7 @@ PLACEHOLDER_RE = re.compile(
 OPTION_ID_RE = re.compile(r"^O\d+$")
 MIN_SECTION_LETTERS = 40
 PRICE_TABLE_PATH = ROOT / "config" / "model-prices.json"
+ROUTING_PATH = ROOT / "config" / "routing.json"
 RECOMMENDATION_FILES = ("strategy.md", "decisions.md")
 
 
@@ -354,6 +356,22 @@ def save_state(project: Path, state: dict) -> None:
     write_json(project / "state.json", state)
 
 
+def remember_step(project: Path, step_id: str, status: str, inputs: str, detail: str | None) -> None:
+    """Record a resumable step. Reloads state so a parallel save is not discarded."""
+    state = load_state(project)
+    steps = state.get("steps")
+    if not isinstance(steps, dict):
+        steps = {}
+        state["steps"] = steps
+    steps[step_id] = {
+        "status": status,
+        "inputs_hash": hashlib.sha256(inputs.encode("utf-8")).hexdigest(),
+        "updated_at": now_iso(),
+        "detail": detail,
+    }
+    save_state(project, state)
+
+
 def project_dir_if_any(token: str) -> Path | None:
     raw = Path(token)
     candidates = [raw] if raw.is_absolute() else [Path.cwd() / raw, projects_root() / token]
@@ -419,6 +437,22 @@ def stale_current_hint(name: str) -> str:
         "Команды с явным путём проекта это не останавливает. "
         "Удалите projects/.current или выполните: python scripts/strat.py use <id>"
     )
+
+
+def optional_project(explicit: str | None) -> Path | None:
+    """A project when one is named or unambiguous. None when the call is not about a project."""
+    if explicit:
+        found = project_dir_if_any(explicit)
+        if found is None:
+            die(f"Проект не найден: {explicit}")
+        return found
+    _name, found = current_pointer()
+    if found is not None:
+        return found
+    projects = list_user_projects()
+    if len(projects) == 1:
+        return projects[0]
+    return None
 
 
 def resolve_project(explicit: str | None) -> Path:
@@ -512,6 +546,7 @@ def append_log(
     model: str | None = None,
     input_chars: int | None = None,
     output_chars: int | None = None,
+    tier: str | None = None,
 ) -> None:
     if stage not in STAGES:
         die("Этап должен быть числом от 0 до 8.")
@@ -530,6 +565,8 @@ def append_log(
         entry["input_chars"] = input_chars
     if output_chars is not None:
         entry["output_chars"] = output_chars
+    if tier:
+        entry["tier"] = tier
     path = project / "log.jsonl"
     with path.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(json.dumps(entry, ensure_ascii=False, separators=(",", ":")) + "\n")
@@ -550,6 +587,8 @@ def append_log(
         lines.append(f"- символы входа: {input_chars}")
     if output_chars is not None:
         lines.append(f"- символы выхода: {output_chars}")
+    if tier:
+        lines.append(f"- уровень: {tier}")
     if model:
         lines.append(f"- модель: {model}")
     lines.append("")
@@ -755,7 +794,25 @@ def slug_from_url(url: str) -> str:
     return (slug or "page")[:60]
 
 
-def download_url(url: str) -> tuple[str, str]:
+class FetchFailed(Exception):
+    def __init__(self, message: str, retryable: bool) -> None:
+        super().__init__(message)
+        self.retryable = retryable
+
+
+def fetch_retry_settings() -> tuple[int, float]:
+    try:
+        attempts = int(os.environ.get("STRAT_FETCH_RETRIES", "3"))
+    except ValueError:
+        attempts = 3
+    try:
+        backoff = float(os.environ.get("STRAT_FETCH_BACKOFF_SECONDS", "0.25"))
+    except ValueError:
+        backoff = 0.25
+    return max(1, attempts), max(0.0, backoff)
+
+
+def download_url_once(url: str) -> tuple[str, str]:
     request = urllib.request.Request(
         url,
         headers={"User-Agent": FETCH_USER_AGENT, "Accept": "text/html,text/plain;q=0.9,*/*;q=0.1"},
@@ -778,11 +835,15 @@ def download_url(url: str) -> tuple[str, str]:
             charset = response.headers.get_content_charset() or "utf-8"
             content_type = (response.headers.get("Content-Type") or "").lower()
     except urllib.error.HTTPError as exc:
-        die(f"Страница не открылась: HTTP {exc.code} для {url}.")
+        retryable = exc.code in {429, 500, 502, 503, 504}
+        raise FetchFailed(f"Страница не открылась: HTTP {exc.code} для {url}.", retryable) from exc
     except urllib.error.URLError as exc:
-        die(f"Сеть недоступна или адрес не открылся: {url}. {exc.reason}")
-    except TimeoutError:
-        die(f"Таймаут при загрузке {url}.")
+        raise FetchFailed(
+            f"Сеть недоступна или адрес не открылся: {url}. {exc.reason}",
+            True,
+        ) from exc
+    except TimeoutError as exc:
+        raise FetchFailed(f"Таймаут при загрузке {url}.", True) from exc
     raw = b"".join(chunks)
     try:
         text = raw.decode(charset, errors="replace")
@@ -795,6 +856,23 @@ def download_url(url: str) -> tuple[str, str]:
     if truncated:
         body += "\n\n[страница обрезана по лимиту размера]"
     return page_title, body
+
+
+def download_url(url: str) -> tuple[str, str]:
+    attempts, backoff = fetch_retry_settings()
+    last: FetchFailed | None = None
+    tried = 0
+    for attempt in range(1, attempts + 1):
+        tried = attempt
+        try:
+            return download_url_once(url)
+        except FetchFailed as exc:
+            last = exc
+            if not exc.retryable or attempt >= attempts:
+                break
+            time.sleep(backoff * (2 ** (attempt - 1)))
+    assert last is not None
+    raise FetchFailed(f"{last} Попыток: {tried}.", last.retryable)
 
 
 def find_fetched_source(project: Path, url: str) -> tuple[str, str] | None:
@@ -865,6 +943,19 @@ def bind_fetched_page(
     return source_id, "created"
 
 
+def snapshot_dest(project: Path, url: str, existing: tuple[str, str] | None) -> Path:
+    if existing:
+        stored = existing[0]
+        path = Path(stored)
+        return path if path.is_absolute() else project / stored
+    filename = f"{slug_from_url(url)}-{today()}.md"
+    dest = project / "sources" / filename
+    if dest.exists():
+        filename = f"{slug_from_url(url)}-{today()}-{abs(hash(url)) % 10000}.md"
+        dest = project / "sources" / filename
+    return dest
+
+
 def cmd_fetch(args: argparse.Namespace) -> int:
     project, tokens = take_project(args.rest, 1)
     url = tokens[0].strip()
@@ -874,29 +965,49 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     sources, parse_errors = load_jsonl(project / "sources.jsonl")
     if parse_errors:
         die("sources.jsonl повреждён:\n" + "\n".join(parse_errors))
+    step_id = "fetch:" + url
     existing = find_fetched_source(project, url)
-    if existing:
+    if existing and not args.force:
         stored, digest = existing
-        page_title = title
-    else:
-        page_title, body = download_url(url)
-        if not title:
-            page_title = page_title or slug_from_url(url)
+        source_id, status = bind_fetched_page(project, sources, url, stored, digest, title)
+        remember_step(project, step_id, "done", url, source_id)
+        print(f"id: {source_id}")
+        if status == "already":
+            print(f"Уже загружено: {source_id} {stored}")
+        elif status == "bound":
+            print(f"Снимок привязан к существующему источнику: {source_id} {stored}")
         else:
-            page_title = title
-        filename = f"{slug_from_url(url)}-{today()}.md"
-        dest = project / "sources" / filename
-        if dest.exists():
-            filename = f"{slug_from_url(url)}-{today()}-{abs(hash(url)) % 10000}.md"
-            dest = project / "sources" / filename
-        write_utf8(
-            dest,
-            f"# {page_title}\n\n- url: {url}\n- загружено: {today()}\n\n{body}\n",
-        )
-        stored, digest = locate_local_file(project, dest.as_posix())
+            print(f"Страница сохранена и зарегистрирована: {source_id} {stored}")
+        return 0
+    remember_step(project, step_id, "started", url, None)
+    try:
+        page_title, body = download_url(url)
+    except FetchFailed as exc:
+        remember_step(project, step_id, "failed", url, str(exc))
+        stage = int(load_state(project).get("stage") or 0)
+        append_log(project, stage, f"Загрузка не удалась: {url}", grounds=str(exc))
+        print(str(exc))
+        print(f"Шаг {step_id} записан как failed. Повторный fetch попробует снова.")
+        return 1
+    if not title:
+        page_title = page_title or slug_from_url(url)
+    else:
+        page_title = title
+    dest = snapshot_dest(project, url, existing if args.force else None)
+    write_utf8(
+        dest,
+        f"# {page_title}\n\n- url: {url}\n- загружено: {today()}\n\n{body}\n",
+    )
+    stored, digest = locate_local_file(project, dest.as_posix())
+    sources, parse_errors = load_jsonl(project / "sources.jsonl")
+    if parse_errors:
+        die("sources.jsonl повреждён:\n" + "\n".join(parse_errors))
     source_id, status = bind_fetched_page(project, sources, url, stored, digest, page_title)
+    remember_step(project, step_id, "done", url, source_id)
     print(f"id: {source_id}")
-    if status == "already":
+    if args.force and existing:
+        print(f"Страница обновлена: {source_id} {stored}")
+    elif status == "already":
         print(f"Уже загружено: {source_id} {stored}")
     elif status == "bound":
         print(f"Снимок привязан к существующему источнику: {source_id} {stored}")
@@ -944,6 +1055,35 @@ def cmd_add_evidence(args: argparse.Namespace) -> int:
     missing = [item for item in depends if item not in known]
     if missing:
         die("depends_on ссылается на неизвестные записи: " + ", ".join(missing))
+    identity = (args.etype, args.source, claim.strip(), quote.strip())
+    duplicate = next(
+        (
+            row
+            for row in evidence
+            if row.get("status") == "active"
+            and (
+                row.get("type"),
+                row.get("source"),
+                str(row.get("claim") or "").strip(),
+                str(row.get("quote") or "").strip(),
+            )
+            == identity
+        ),
+        None,
+    )
+    if duplicate is not None:
+        step_inputs = "\n".join(identity)
+        remember_step(
+            project,
+            "evidence:" + hashlib.sha256(step_inputs.encode("utf-8")).hexdigest()[:16],
+            "done",
+            step_inputs,
+            str(duplicate.get("id")),
+        )
+        die(
+            f"Такое свидетельство уже есть: {duplicate.get('id')} "
+            "(тот же type, source, claim и quote). Новая запись не создана."
+        )
     evidence_id = next_serial(evidence, "E")
     evidence.append(
         {
@@ -962,6 +1102,14 @@ def cmd_add_evidence(args: argparse.Namespace) -> int:
     )
     save_jsonl(project / "evidence.jsonl", evidence)
     save_state(project, load_state(project))
+    step_inputs = "\n".join(identity)
+    remember_step(
+        project,
+        "evidence:" + hashlib.sha256(step_inputs.encode("utf-8")).hexdigest()[:16],
+        "done",
+        step_inputs,
+        evidence_id,
+    )
     print(f"id: {evidence_id}")
     print(f"Свидетельство записано: {evidence_id} ({args.etype})")
     return 0
@@ -1259,11 +1407,18 @@ def estimate_usage(entries: list[dict]) -> dict | None:
     per = float(table.get("chars_per_token") or 4) or 4.0
     models = table.get("models") if isinstance(table.get("models"), dict) else {}
     default = models.get("default") if isinstance(models.get("default"), dict) else {}
+    measured = [
+        entry
+        for entry in entries
+        if entry.get("input_chars") is not None or entry.get("output_chars") is not None
+    ]
+    own = [entry for entry in measured if entry.get("model") != "hook/stop"]
+    chosen = own or measured
     total_in = 0
     total_out = 0
     cost = 0.0
     any_chars = False
-    for entry in entries:
+    for entry in chosen:
         if entry.get("input_chars") is None and entry.get("output_chars") is None:
             continue
         any_chars = True
@@ -1272,7 +1427,9 @@ def estimate_usage(entries: list[dict]) -> dict | None:
         model_name = str(entry.get("model") or "default")
         price = models.get(model_name)
         if not isinstance(price, dict):
-            price = default
+            tier_name = str(entry.get("tier") or "")
+            tier_price = models.get(tier_name) if tier_name else None
+            price = tier_price if isinstance(tier_price, dict) else default
         in_tokens = int(round(incoming / per))
         out_tokens = int(round(outgoing / per))
         in_rate = float(price.get("input_per_million") or 0)
@@ -1934,6 +2091,35 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def pending_step_ids(state: dict) -> list[str]:
+    steps = state.get("steps")
+    if not isinstance(steps, dict):
+        return []
+    found = []
+    for key in sorted(steps):
+        row = steps[key]
+        if isinstance(row, dict) and row.get("status") == "started":
+            found.append(str(key))
+    return found
+
+
+def format_steps(state: dict) -> list[str]:
+    steps = state.get("steps")
+    if not isinstance(steps, dict) or not steps:
+        return ["шаги: нет"]
+    lines = ["шаги:"]
+    for key in sorted(steps):
+        row = steps[key]
+        if not isinstance(row, dict):
+            continue
+        detail = str(row.get("detail") or "").strip()
+        suffix = f" ({detail})" if detail else ""
+        lines.append(f"- {key} — {row.get('status')}{suffix}")
+    if len(lines) == 1:
+        return ["шаги: нет"]
+    return lines
+
+
 def cmd_resume(args: argparse.Namespace) -> int:
     project, _tokens = take_project(args.rest, 0)
     state = load_state(project)
@@ -1949,11 +2135,17 @@ def cmd_resume(args: argparse.Namespace) -> int:
         nxt = "Сопровождение: дата пересмотра в decisions.md. Новые данные не подмешивайте молча — impact и навык revise-on-new-data."
     else:
         nxt = NEXT_ACTION.get(stage, "Прочитайте state.json")
+    step_lines = format_steps(state)
+    started = pending_step_ids(state)
+    if started:
+        nxt = "Продолжить незавершённый шаг, не повторяя готовые: " + "; ".join(started)
     print("=== resume ===")
     print(f"проект: {state.get('id')}")
     print(f"название: {state.get('title')}")
     print(f"этап: {stage} {STAGES.get(stage, '?')} ({state.get('stage_status')})")
     print(f"дальше: {nxt}")
+    for line in step_lines:
+        print(line)
     points = []
     for name, payload in state.get("checkpoints", {}).items():
         choice = payload.get("choice")
@@ -2031,6 +2223,7 @@ def cmd_log(args: argparse.Namespace) -> int:
         model=args.model,
         input_chars=args.input_chars,
         output_chars=args.output_chars,
+        tier=args.tier,
     )
     save_state(project, load_state(project))
     print("Запись добавлена в log.md и log.jsonl")
@@ -2291,19 +2484,114 @@ def scrub(text: str) -> str:
     return text
 
 
+def load_routing() -> dict:
+    fallback = {"version": 1, "default": "ide", "tasks": {}}
+    if not ROUTING_PATH.is_file():
+        return fallback
+    try:
+        loaded = json.loads(ROUTING_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return fallback
+    if not isinstance(loaded, dict):
+        return fallback
+    if not isinstance(loaded.get("tasks"), dict):
+        loaded["tasks"] = {}
+    return loaded
+
+
+def provider_cost(usage: dict) -> float | None:
+    for key in ("cost", "total_cost"):
+        raw = usage.get(key)
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+            return float(raw)
+    return None
+
+
+def log_completion(
+    project: Path | None,
+    *,
+    stage: int | None,
+    tier: str,
+    model: str,
+    mode: str,
+    prompt: str,
+    content: str,
+    tokens: int | None,
+    cost: float | None,
+    grounds: str,
+) -> None:
+    if project is None:
+        return
+    if stage is None:
+        stage = int(load_state(project).get("stage") or 0)
+    append_log(
+        project,
+        stage,
+        f"Вызов complete, уровень {tier}",
+        grounds=grounds,
+        tokens=tokens,
+        cost=cost,
+        model=model,
+        input_chars=len(prompt) if mode == "api" else None,
+        output_chars=len(content) if mode == "api" and content else None,
+        tier=tier,
+    )
+
+
 def cmd_complete(args: argparse.Namespace) -> int:
-    prompt = args.prompt if args.prompt is not None else sys.stdin.read()
+    if args.prompt_file:
+        prompt = strip_one_trailing_newline(read_utf8_arg_file(args.prompt_file))
+    elif args.prompt is not None:
+        prompt = args.prompt
+    else:
+        prompt = sys.stdin.read()
+    tier = args.tier or args.role
+    if tier not in {"cheap", "strong", "ide"}:
+        die("Укажите --tier cheap|strong|ide или --role cheap|strong.")
+    if args.tier and args.role and args.tier != args.role:
+        die("--tier и --role указывают разный уровень.")
+    project = optional_project(args.project)
     key = os.environ.get("STRAT_LLM_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
-    model_env = "STRAT_MODEL_STRONG" if args.role == "strong" else "STRAT_MODEL_CHEAP"
-    if not key:
+    if tier == "ide" or not key:
         print("MODE: manual")
-        print(f"Роль: {args.role}")
-        print("Ключ API не задан. Ответьте моделью подписки IDE. Платный вызов не выполнялся.")
+        print(f"TIER: {tier}")
+        print(f"Роль: {tier}")
+        if tier == "ide":
+            print("Уровень ide остаётся на модели подписки IDE. Платный вызов не выполнялся.")
+        else:
+            print("Ключ API не задан. Ответьте моделью подписки IDE. Платный вызов не выполнялся.")
+        log_completion(
+            project,
+            stage=args.stage,
+            tier=tier,
+            model="ide/subscription",
+            mode="manual",
+            prompt=prompt,
+            content="",
+            tokens=None,
+            cost=None,
+            grounds="MODE: manual. Платный вызов не выполнялся.",
+        )
         return 0
+    model_env = "STRAT_MODEL_STRONG" if tier == "strong" else "STRAT_MODEL_CHEAP"
     model = os.environ.get(model_env)
     if not model:
         print("MODE: manual")
+        print(f"TIER: {tier}")
+        print(f"Роль: {tier}")
         print(f"Ключ есть, но не задана {model_env}. Платный вызов не выполнялся.")
+        log_completion(
+            project,
+            stage=args.stage,
+            tier=tier,
+            model="ide/subscription",
+            mode="manual",
+            prompt=prompt,
+            content="",
+            tokens=None,
+            cost=None,
+            grounds=f"Ключ есть, но не задана {model_env}.",
+        )
         return 0
     base = os.environ.get("STRAT_LLM_BASE_URL", "https://openrouter.ai/api/v1").rstrip("/")
     body = json.dumps(
@@ -2320,21 +2608,56 @@ def cmd_complete(args: argparse.Namespace) -> int:
         with urllib.request.urlopen(request, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except Exception as exc:  # noqa: BLE001 — surface a scrubbed transport error, never the key
+        message = scrub(f"Ошибка API: {exc}")
         print("MODE: error")
-        print(scrub(f"Ошибка API: {exc}"))
+        print(f"TIER: {tier}")
+        print(message)
+        log_completion(
+            project,
+            stage=args.stage,
+            tier=tier,
+            model=model,
+            mode="error",
+            prompt=prompt,
+            content="",
+            tokens=None,
+            cost=None,
+            grounds=message,
+        )
         return 1
     choices = payload.get("choices") or []
     content = ""
     if choices:
         content = ((choices[0].get("message") or {}).get("content")) or ""
+    content = scrub(str(content))
     usage = payload.get("usage") or {}
+    prompt_tokens = usage.get("prompt_tokens")
+    completion_tokens = usage.get("completion_tokens")
+    tokens = None
+    if isinstance(prompt_tokens, int) or isinstance(completion_tokens, int):
+        tokens = int(prompt_tokens or 0) + int(completion_tokens or 0)
+    cost = provider_cost(usage if isinstance(usage, dict) else {})
     print("MODE: api")
+    print(f"TIER: {tier}")
     print(content)
     print(
         "USAGE: "
-        f"prompt={usage.get('prompt_tokens', '—')} "
-        f"completion={usage.get('completion_tokens', '—')} "
-        f"model={model}"
+        f"prompt={prompt_tokens if prompt_tokens is not None else '—'} "
+        f"completion={completion_tokens if completion_tokens is not None else '—'} "
+        f"model={model} tier={tier} "
+        f"cost={fmt_num(cost) if cost is not None else '—'}"
+    )
+    log_completion(
+        project,
+        stage=args.stage,
+        tier=tier,
+        model=model,
+        mode="api",
+        prompt=prompt,
+        content=content,
+        tokens=tokens,
+        cost=cost,
+        grounds="Ответ API. Поле cost заполнено только если его прислал провайдер.",
     )
     return 0
 
@@ -2350,6 +2673,15 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
         print(f"API: ключ задан. Дешёвая модель: {cheap}. Сильная модель: {strong}.")
     else:
         print("API: ручной режим. Ключ не задан, агент работает на моделях подписки IDE.")
+    routing = load_routing()
+    print("Маршрутизация:")
+    tasks = routing.get("tasks") if isinstance(routing.get("tasks"), dict) else {}
+    for name in sorted(tasks):
+        print(f"- {name}: {tasks[name]}")
+    print(
+        f"По умолчанию: {routing.get('default', 'ide')}. "
+        "Без ключа уровни cheap и strong выполняются моделью подписки IDE."
+    )
     for module, purpose in (("pypdf", "pdf"), ("docx", "docx"), ("openpyxl", "xlsx")):
         try:
             __import__(module)
@@ -2443,6 +2775,11 @@ def build_parser() -> argparse.ArgumentParser:
     fetch = sub.add_parser("fetch", help="скачать открытую страницу и зарегистрировать её")
     fetch.add_argument("rest", nargs="+", help="[проект] <url>")
     fetch.add_argument("--title-file", help="название из файла UTF-8")
+    fetch.add_argument(
+        "--force",
+        action="store_true",
+        help="скачать страницу заново, даже если снимок этого URL уже есть",
+    )
     fetch.set_defaults(func=cmd_fetch)
 
     add_source = sub.add_parser("add-source", help="зарегистрировать источник")
@@ -2524,6 +2861,7 @@ def build_parser() -> argparse.ArgumentParser:
     log.add_argument("--input-chars", type=int, help="символы прочитанного; для оценки токенов, не для счёта")
     log.add_argument("--output-chars", type=int, help="символы написанного; для оценки токенов, не для счёта")
     log.add_argument("--model")
+    log.add_argument("--tier", choices=("cheap", "strong", "ide"), help="уровень маршрута, если вызов был через complete")
     log.set_defaults(func=cmd_log)
 
     confirm = sub.add_parser("confirm", help="зафиксировать согласие человека")
@@ -2537,9 +2875,13 @@ def build_parser() -> argparse.ArgumentParser:
     advance.add_argument("rest", nargs="+", help="[проект] <этап>")
     advance.set_defaults(func=cmd_advance)
 
-    complete = sub.add_parser("complete", help="необязательный API-вызов; без ключа — ручной режим")
-    complete.add_argument("--role", choices=("cheap", "strong"), required=True)
+    complete = sub.add_parser("complete", help="вызов дешёвой, сильной или подписочной модели")
+    complete.add_argument("--tier", choices=("cheap", "strong", "ide"), help="уровень из config/routing.json")
+    complete.add_argument("--role", choices=("cheap", "strong"), help="прежнее имя --tier cheap|strong")
     complete.add_argument("--prompt", help="если не задан, текст читается из stdin")
+    complete.add_argument("--prompt-file", help="промпт из файла UTF-8")
+    complete.add_argument("--project", help="куда писать журнал вызова; иначе текущий проект, если он один")
+    complete.add_argument("--stage", type=int, help="этап журнала; по умолчанию текущий этап проекта")
     complete.set_defaults(func=cmd_complete)
 
     doctor = sub.add_parser("doctor", help="Python, ключ API, необязательные пакеты")

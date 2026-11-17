@@ -21,3 +21,17 @@ description: Спланировать, как поймём, что ставка 
 Если в плане есть раздел «Факты», каждое содержательное предложение несёт `[E..]`.
 
 Покажи план и остановись. Сначала `log` этапа 7. `confirm` и `advance` откажутся, если такой записи нет. После явного принятия: `confirm <проект> validation`, затем `advance <проект> 7`.
+
+Класс `validation` — уровень `strong`:
+
+```text
+python scripts/strat.py complete --tier strong --stage 7 --project <проект> --prompt-file проверка.txt
+```
+
+`MODE: manual` — план пишет модель подписки. `MODE: api` — черновик сверь с базой сам. Перед ответом, если отвечала подписка:
+
+```text
+python scripts/strat.py log <проект> 7 "<действие>" --grounds "<почему>" --input-chars <N> --output-chars <M> --model ide/subscription
+```
+
+Затем `python scripts/strat.py cost <проект> --estimate`. Оценку в `--cost` не подставляй.

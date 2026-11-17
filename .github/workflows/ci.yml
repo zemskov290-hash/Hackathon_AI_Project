@@ -21,5 +21,7 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Check the worked example
         run: python scripts/strat.py check projects/_example
+      - name: Check the demo snapshot
+        run: python scripts/strat.py check projects/demo-family-tariffs
       - name: Check the committed demo
         run: python scripts/strat.py check projects/demo-family-tariffs

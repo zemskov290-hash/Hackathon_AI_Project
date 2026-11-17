@@ -216,6 +216,10 @@ class ExampleAndHelpTests(unittest.TestCase):
         assert_code(doctor)
         self.assertIn("ручной режим", doctor.stdout)
         self.assertIn("utf-8", doctor.stdout.casefold())
+        self.assertIn("Маршрутизация", doctor.stdout)
+        self.assertIn("extract: cheap", doctor.stdout)
+        self.assertIn("options: strong", doctor.stdout)
+        self.assertIn("critic: strong", doctor.stdout)
         complete = self.cli("complete", "--role", "cheap", "--prompt", "ping")
         assert_code(complete)
         self.assertIn("MODE: manual", complete.stdout)
@@ -320,7 +324,9 @@ class ExampleAndHelpTests(unittest.TestCase):
                 timeout=30,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("advance", result.stdout)
+        self.assertEqual(json.loads(result.stdout), {})
+        self.assertIn("advance", result.stderr)
+        self.assertNotIn("followup_message", result.stdout)
 
 
 class WorkflowTests(unittest.TestCase):
@@ -1286,6 +1292,209 @@ class MinimumCheckTests(unittest.TestCase):
             checked = self.cli("check", "bind", "--strict")
             assert_code(checked)
             self.assertNotIn("[snapshot]", checked.stdout)
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_fetch_retries_records_failure_and_skips_snapshot(self) -> None:
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        class Handler(BaseHTTPRequestHandler):
+            flaky_hits = 0
+
+            def do_GET(self) -> None:  # noqa: N802
+                if self.path.startswith("/down"):
+                    self.send_response(503)
+                    self.end_headers()
+                    self.wfile.write(b"unavailable")
+                    return
+                if self.path.startswith("/flaky"):
+                    Handler.flaky_hits += 1
+                    if Handler.flaky_hits < 3:
+                        self.send_response(503)
+                        self.end_headers()
+                        return
+                body = (
+                    "<html><head><title>Витрина</title></head><body>"
+                    "<p>Пакет стоит 9 долларов.</p></body></html>"
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, fmt: str, *args: object) -> None:
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        env = {"STRAT_FETCH_RETRIES": "3", "STRAT_FETCH_BACKOFF_SECONDS": "0"}
+        try:
+            assert_code(self.cli("init", "retry", "--title", "Повторы"))
+            flaky = f"http://127.0.0.1:{port}/flaky"
+            fetched = self.cli("fetch", "retry", flaky, env=env)
+            assert_code(fetched)
+            self.assertIn("id: S001", fetched.stdout)
+            self.assertGreaterEqual(Handler.flaky_hits, 3)
+            project = Path(self.tmp.name) / "retry"
+            state = json.loads((project / "state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["steps"]["fetch:" + flaky]["status"], "done")
+            again = self.cli("fetch", "retry", flaky, env=env)
+            assert_code(again)
+            self.assertIn("Уже загружено", again.stdout)
+            self.assertEqual(Handler.flaky_hits, 3)
+            forced = self.cli("fetch", "retry", flaky, "--force", env=env)
+            assert_code(forced)
+            self.assertIn("Страница обновлена", forced.stdout)
+            pages = [path for path in (project / "sources").glob("*.md") if path.name != "README.md"]
+            self.assertEqual(len(pages), 1)
+            down = f"http://127.0.0.1:{port}/down"
+            failed = self.cli("fetch", "retry", down, env=env)
+            assert_code(failed, 1)
+            self.assertIn("503", failed.stdout)
+            self.assertIn("Попыток: 3", failed.stdout)
+            self.assertIn("failed", failed.stdout)
+            state = json.loads((project / "state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["steps"]["fetch:" + down]["status"], "failed")
+            self.assertIn("503", state["steps"]["fetch:" + down]["detail"])
+            log_text = (project / "log.jsonl").read_text(encoding="utf-8")
+            self.assertIn("Загрузка не удалась", log_text)
+            resume = self.cli("resume", "retry")
+            assert_code(resume)
+            self.assertIn("503", resume.stdout)
+            self.assertIn("failed", resume.stdout)
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_resume_names_unfinished_step_and_evidence_is_idempotent(self) -> None:
+        assert_code(self.cli("init", "steps", "--title", "Шаги"))
+        project = Path(self.tmp.name) / "steps"
+        note = project / "sources" / "note.md"
+        note.write_text("Доля продлений равна 42 процентам.\n", encoding="utf-8")
+        assert_code(self.cli("add-source", "steps", str(note), "--title", "Заметка"))
+        state = json.loads((project / "state.json").read_text(encoding="utf-8"))
+        state["steps"] = {
+            "fetch:https://example.com/paused": {
+                "status": "started",
+                "inputs_hash": "abc",
+                "updated_at": "2026-11-17T00:00:00Z",
+                "detail": None,
+            }
+        }
+        (project / "state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        resume = self.cli("resume", "steps")
+        assert_code(resume)
+        self.assertIn("Продолжить незавершённый шаг", resume.stdout)
+        self.assertIn("fetch:https://example.com/paused", resume.stdout)
+        quote = "Доля продлений равна 42 процентам."
+        first = self.cli(
+            "add-evidence",
+            "steps",
+            "--claim",
+            "В заметке доля равна 42 процентам.",
+            "--type",
+            "fact",
+            "--source",
+            "S001",
+            "--quote",
+            quote,
+        )
+        assert_code(first)
+        self.assertIn("id: E001", first.stdout)
+        second = self.cli(
+            "add-evidence",
+            "steps",
+            "--claim",
+            "В заметке доля равна 42 процентам.",
+            "--type",
+            "fact",
+            "--source",
+            "S001",
+            "--quote",
+            quote,
+        )
+        assert_code(second, 1)
+        self.assertIn("уже есть", second.stdout)
+        self.assertIn("E001", second.stdout)
+        rows = [
+            json.loads(line)
+            for line in (project / "evidence.jsonl").read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        self.assertEqual(len(rows), 1)
+
+    def test_complete_logs_tier_and_does_not_call_ide_tier(self) -> None:
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        calls = {"n": 0}
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self) -> None:  # noqa: N802
+                calls["n"] += 1
+                length = int(self.headers.get("Content-Length") or 0)
+                self.rfile.read(length)
+                body = json.dumps(
+                    {
+                        "choices": [{"message": {"content": "черновик выжимки"}}],
+                        "usage": {"prompt_tokens": 11, "completion_tokens": 5, "cost": 0.002},
+                    }
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, fmt: str, *args: object) -> None:
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        secret = "secret-route-key"
+        env = {
+            "STRAT_LLM_API_KEY": secret,
+            "STRAT_MODEL_CHEAP": "dummy-cheap",
+            "STRAT_MODEL_STRONG": "dummy-strong",
+            "STRAT_LLM_BASE_URL": f"http://127.0.0.1:{server.server_address[1]}/v1",
+        }
+        try:
+            assert_code(self.cli("init", "routed", "--title", "Маршрут"))
+            ide = self.cli("complete", "--tier", "ide", "--prompt", "ping", env=env)
+            assert_code(ide)
+            self.assertIn("MODE: manual", ide.stdout)
+            self.assertEqual(calls["n"], 0)
+            missing = self.cli("complete", "--prompt", "ping")
+            assert_code(missing, 1)
+            self.assertIn("Укажите --tier", missing.stdout)
+            api = self.cli("complete", "--tier", "cheap", "--stage", "3", "--prompt", "сожми страницу", env=env)
+            assert_code(api)
+            self.assertEqual(calls["n"], 1)
+            self.assertIn("MODE: api", api.stdout)
+            self.assertIn("TIER: cheap", api.stdout)
+            self.assertIn("черновик выжимки", api.stdout)
+            self.assertIn("tier=cheap", api.stdout)
+            self.assertNotIn(secret, api.stdout + api.stderr)
+            project = Path(self.tmp.name) / "routed"
+            rows = [
+                json.loads(line)
+                for line in (project / "log.jsonl").read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            call = next(row for row in rows if row.get("message") == "Вызов complete, уровень cheap")
+            self.assertEqual(call["tier"], "cheap")
+            self.assertEqual(call["model"], "dummy-cheap")
+            self.assertEqual(call["tokens"], 16)
+            self.assertEqual(call["cost"], 0.002)
+            self.assertGreater(call["input_chars"], 0)
+            self.assertGreater(call["output_chars"], 0)
+            self.assertNotIn(secret, json.dumps(call))
         finally:
             server.shutdown()
             server.server_close()

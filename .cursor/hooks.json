@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      { "command": "python hooks/post_write.py", "timeout": 60 }
+    ],
+    "postToolUse": [
+      { "command": "python hooks/post_write.py", "matcher": "Write", "timeout": 60 }
+    ],
+    "beforeShellExecution": [
+      { "command": "python hooks/guard_shell.py", "timeout": 15 }
+    ],
+    "beforeReadFile": [
+      { "command": "python hooks/guard_read.py", "timeout": 10 }
+    ],
+    "stop": [
+      { "command": "python hooks/stage_end.py", "timeout": 20 }
+    ]
+  }
+}
