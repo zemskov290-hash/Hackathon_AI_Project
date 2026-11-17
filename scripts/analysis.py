@@ -804,10 +804,41 @@ def _create(
     return {"id": analysis_id, "manifest": manifest, "metrics": metrics, "same": False}
 
 
+def _script_metrics(
+    project: Path,
+    folder: Path,
+    snapshot: Path,
+    analysis_id: str,
+    timeout: float,
+) -> dict:
+    """Run the script into a throwaway folder so an identical result does not touch the saved files."""
+    sandbox = folder / "_rerun"
+    if sandbox.exists():
+        shutil.rmtree(sandbox)
+    sandbox.mkdir()
+    try:
+        work_input = sandbox / snapshot.name
+        shutil.copyfile(snapshot, work_input)
+        work_script = sandbox / "script.py"
+        shutil.copyfile(folder / "script.py", work_script)
+        return run_script(
+            project,
+            work_script,
+            work_input,
+            sandbox / "result.json",
+            sandbox / "chart.png",
+            analysis_id,
+            timeout,
+        )
+    finally:
+        shutil.rmtree(sandbox, ignore_errors=True)
+
+
 def _rerun(project: Path, analysis_id: str, timeout: float) -> dict:
     folder = analysis_dir(project, analysis_id)
     manifest = load_manifest(project, analysis_id)
-    previous = (folder / "result.json").read_text(encoding="utf-8") if (folder / "result.json").is_file() else ""
+    result_path = folder / "result.json"
+    previous = result_path.read_text(encoding="utf-8") if result_path.is_file() else ""
     snapshot = project / str(manifest["input_path"])
     if not snapshot.is_file():
         raise AnalysisError(f"{analysis_id}: снимок входа не найден ({manifest.get('input_path')}).")
@@ -820,33 +851,31 @@ def _rerun(project: Path, analysis_id: str, timeout: float) -> dict:
         spec = parse_spec((folder / "spec.json").read_text(encoding="utf-8"))
         rows = load_table(snapshot)
         metrics = compute_metrics(rows, spec)
-        chart_note = try_chart(rows, spec, folder / "chart.png")
+        chart_rows: list[dict[str, str]] | None = rows
+        chart_spec: dict | None = spec
     elif manifest.get("mode") == "script":
-        metrics = run_script(
-            project,
-            folder / "script.py",
-            snapshot,
-            folder / "result.json",
-            folder / "chart.png",
-            analysis_id,
-            timeout,
-        )
-        chart_note = None
+        metrics = _script_metrics(project, folder, snapshot, analysis_id, timeout)
+        chart_rows = None
+        chart_spec = None
     else:
         raise AnalysisError(f"{analysis_id}: неизвестный mode.")
+    rendered = dump_result(metrics)
+    if rendered == previous:
+        return {"id": analysis_id, "manifest": manifest, "metrics": metrics, "same": True}
     manifest["timeout"] = timeout
+    chart_note = None
+    if chart_rows is not None and chart_spec is not None:
+        chart_note = try_chart(chart_rows, chart_spec, folder / "chart.png")
     if (folder / "chart.png").is_file():
         manifest["chart_path"] = rel(project, folder / "chart.png")
         manifest["chart_note"] = None
     else:
         manifest["chart_path"] = None
         manifest["chart_note"] = chart_note
-    rendered = dump_result(metrics)
-    same = rendered == previous
     (folder / "result.json").write_text(rendered, encoding="utf-8", newline="\n")
     (folder / "report.md").write_text(render_report(manifest, metrics), encoding="utf-8", newline="\n")
     write_json(folder / "manifest.json", manifest)
-    return {"id": analysis_id, "manifest": manifest, "metrics": metrics, "same": same}
+    return {"id": analysis_id, "manifest": manifest, "metrics": metrics, "same": False}
 
 
 def recompute(project: Path, analysis_id: str, *, enforce_hash: bool = True) -> dict:

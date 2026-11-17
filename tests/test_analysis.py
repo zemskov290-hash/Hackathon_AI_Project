@@ -152,6 +152,38 @@ class AnalysisCliTests(unittest.TestCase):
         assert_code(verified, 1)
         self.assertIn("[analysis-mismatch]", verified.stdout)
 
+    def test_identical_rerun_does_not_change_bytes(self) -> None:
+        project = self.project("stable")
+        self.write_table(project)
+        assert_code(
+            self.cli(
+                "analyze",
+                "stable",
+                "--input",
+                "sources/tariffs.csv",
+                "--spec-file",
+                "spec.json",
+                "--synthetic",
+                "--metric",
+                "mean_price",
+                "--claim",
+                "В синтетической таблице семейных цен средняя цена равна 350.",
+            )
+        )
+
+        def blobs() -> dict[str, bytes]:
+            return {
+                path.relative_to(project).as_posix(): path.read_bytes()
+                for path in project.rglob("*")
+                if path.is_file()
+            }
+
+        before = blobs()
+        again = self.cli("analyze", "stable", "--id", "A001")
+        assert_code(again)
+        self.assertIn("Тот же результат.", again.stdout)
+        self.assertEqual(blobs(), before)
+
     def test_result_file_drift_is_caught(self) -> None:
         project = self.project("drift")
         self.write_table(project)

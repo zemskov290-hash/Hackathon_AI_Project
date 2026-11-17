@@ -2792,6 +2792,18 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         die(str(exc))
     manifest = outcome["manifest"]
     report_rel = str(manifest["report_path"])
+    claim = _resolve_optional_text(
+        getattr(args, "claim", None), getattr(args, "claim_file", None), "тезис", "STRAT_CLAIM"
+    )
+    if outcome.get("same"):
+        source = _analysis_source(project, str(outcome["id"]))
+        _print_analysis(outcome, source["id"] if source else "")
+        print("Тот же результат.")
+        if claim:
+            if source is None:
+                die(f"Анализ {outcome['id']} ещё не зарегистрирован как источник.")
+            _add_analysis_evidence(project, outcome, args, claim, source["id"])
+        return 0
     title = f"Расчёт {outcome['id']}"
     if manifest.get("synthetic"):
         title += " (синтетические данные)"
@@ -2823,28 +2835,60 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         print(manifest["chart_note"])
     elif manifest.get("chart_path"):
         print(f"chart: {manifest['chart_path']}")
-    if outcome.get("same"):
-        print("Тот же результат.")
-    claim = _resolve_optional_text(
-        getattr(args, "claim", None), getattr(args, "claim_file", None), "тезис", "STRAT_CLAIM"
-    )
-    metric = str(getattr(args, "metric", None) or "").strip()
     if claim:
-        if not metric:
-            die("Для свидетельства из анализа нужна --metric.")
-        try:
-            value = analysis.lookup_metric(metrics, metric)
-        except analysis.AnalysisError as exc:
-            die(str(exc))
-        quote = _resolve_optional_text(
-            getattr(args, "quote", None), getattr(args, "quote_file", None), "цитата", "STRAT_QUOTE"
-        ) or analysis.metric_line(metric, value)
-        evidence_args = argparse.Namespace(
+        _add_analysis_evidence(project, outcome, args, claim, source["id"])
+    remember_step(project, f"analyze:{outcome['id']}", "done", str(manifest.get("input_sha256")), outcome["id"])
+    return 0
+
+
+def _analysis_source(project: Path, analysis_id: str) -> dict | None:
+    rows, errors = load_jsonl(project / "sources.jsonl")
+    if errors:
+        die("sources.jsonl повреждён:\n" + "\n".join(errors))
+    for row in rows:
+        if row.get("analysis_id") == analysis_id:
+            return row
+    return None
+
+
+def _print_analysis(outcome: dict, source_id: str) -> None:
+    manifest = outcome["manifest"]
+    metrics = outcome["metrics"]
+    print(f"analysis_id: {outcome['id']}")
+    if source_id:
+        print(f"source_id: {source_id}")
+    print(f"input_sha256: {manifest.get('input_sha256')}")
+    print(f"input: {manifest.get('input_path')}")
+    print(f"report: {manifest.get('report_path')}")
+    for key in sorted(metrics):
+        value = metrics[key]
+        if isinstance(value, str):
+            print(f"metric {key}: {value}")
+    if manifest.get("chart_note"):
+        print(manifest["chart_note"])
+    elif manifest.get("chart_path"):
+        print(f"chart: {manifest['chart_path']}")
+
+
+def _add_analysis_evidence(project: Path, outcome: dict, args: argparse.Namespace, claim: str, source_id: str) -> None:
+    metric = str(getattr(args, "metric", None) or "").strip()
+    if not metric:
+        die("Для свидетельства из анализа нужна --metric.")
+    try:
+        value = analysis.lookup_metric(outcome["metrics"], metric)
+    except analysis.AnalysisError as exc:
+        die(str(exc))
+    report_rel = str(outcome["manifest"]["report_path"])
+    quote = _resolve_optional_text(
+        getattr(args, "quote", None), getattr(args, "quote_file", None), "цитата", "STRAT_QUOTE"
+    ) or analysis.metric_line(metric, value)
+    cmd_add_evidence(
+        argparse.Namespace(
             project=project.name,
             claim=claim,
             claim_file=None,
             etype=getattr(args, "etype", None) or "fact",
-            source=source["id"],
+            source=source_id,
             quote=quote,
             quote_file=None,
             locator=f"{report_rel}#{metric}",
@@ -2856,9 +2900,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
             metric=metric,
             inspect=None,
         )
-        cmd_add_evidence(evidence_args)
-    remember_step(project, f"analyze:{outcome['id']}", "done", str(manifest.get("input_sha256")), outcome["id"])
-    return 0
+    )
 
 
 def cmd_inspect(args: argparse.Namespace) -> int:
