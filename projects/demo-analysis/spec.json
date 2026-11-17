@@ -1,0 +1,24 @@
+{
+  "filters": [
+    {
+      "column": "segment",
+      "eq": "family"
+    }
+  ],
+  "metrics": [
+    {
+      "id": "n",
+      "fn": "count"
+    },
+    {
+      "id": "mean_price",
+      "fn": "mean",
+      "column": "price"
+    }
+  ],
+  "chart": {
+    "type": "bar",
+    "column": "operator",
+    "agg": "count"
+  }
+}

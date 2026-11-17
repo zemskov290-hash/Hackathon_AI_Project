@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "id": "demo-analysis",
+  "title": "Синтетический расчёт и витрина",
+  "example": true,
+  "stage": 1,
+  "stage_status": "in_progress",
+  "completed_stages": [],
+  "checkpoints": {
+    "brief": {
+      "status": "open",
+      "at": null,
+      "note": null,
+      "choice": null
+    },
+    "options": {
+      "status": "open",
+      "at": null,
+      "note": null,
+      "choice": null
+    },
+    "validation": {
+      "status": "open",
+      "at": null,
+      "note": null,
+      "choice": null
+    }
+  },
+  "option_registry": [],
+  "created_at": "2026-11-17T13:50:20Z",
+  "updated_at": "2026-11-17T13:50:20Z",
+  "steps": {
+    "evidence:c52e24fc8a0a264b": {
+      "status": "done",
+      "inputs_hash": "c52e24fc8a0a264b7a7c54bfb615d0c5a12b7e79d0cfac22b1d297abb82d3e8e",
+      "updated_at": "2026-11-17T13:50:20Z",
+      "detail": "E001"
+    },
+    "analyze:A001": {
+      "status": "done",
+      "inputs_hash": "99db450b5f15376ed5fdfac3f06f25abcf2a5b1629be7f24670972c793e4fe2d",
+      "updated_at": "2026-11-17T13:50:20Z",
+      "detail": "A001"
+    },
+    "evidence:7fc970160507307f": {
+      "status": "done",
+      "inputs_hash": "7fc970160507307f10507ac845ff5874d426b2f6329a91eda6e18103e2b2ba7a",
+      "updated_at": "2026-11-17T13:50:20Z",
+      "detail": "E002"
+    },
+    "inspect:M001": {
+      "status": "done",
+      "inputs_hash": "f18a00f4de6d84832d04c7e4c4a3af683b3e1fcb7be10855c22ba678321ac932",
+      "updated_at": "2026-11-17T13:50:20Z",
+      "detail": "M001"
+    },
+    "inspect:M002": {
+      "status": "done",
+      "inputs_hash": "2c0efed6ea5461cd541004df1ded05341a63a35e56a749fb9a7b5a01fc5dd86b",
+      "updated_at": "2026-11-17T13:50:20Z",
+      "detail": "M002"
+    },
+    "evidence:b8449f2a97861aab": {
+      "status": "done",
+      "inputs_hash": "b8449f2a97861aab4945956b489c487b67ee5c7e7e2011981eefe0bf6c0f24c8",
+      "updated_at": "2026-11-17T13:50:20Z",
+      "detail": "E003"
+    },
+    "evidence:0e0b207c2bbea560": {
+      "status": "done",
+      "inputs_hash": "0e0b207c2bbea560ab57cc3c159c3036c009fd86c4aa1f4a7ec709da5b7a0b8d",
+      "updated_at": "2026-11-17T13:50:20Z",
+      "detail": "E004"
+    }
+  }
+}

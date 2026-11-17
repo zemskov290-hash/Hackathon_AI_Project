@@ -23,6 +23,9 @@ from pathlib import Path
 
 from stdio_utf8 import configure_stdio
 
+import analysis
+import inspect_media
+
 configure_stdio()
 
 if sys.version_info < (3, 10):
@@ -88,9 +91,9 @@ TEMPLATES = {
 EVIDENCE_TYPES = {"fact", "hypothesis", "forecast", "synthetic"}
 CONFIDENCE = {"high", "med", "low"}
 EVIDENCE_STATUS = {"active", "retracted", "superseded"}
-SOURCE_KINDS = {"web", "doc", "table", "interview", "synthetic", "own"}
+SOURCE_KINDS = {"web", "doc", "table", "interview", "synthetic", "own", "data", "ui", "media"}
 RELIABILITY = {"high", "med", "low"}
-TEXT_SUFFIXES = {".md", ".txt", ".csv", ".json", ".jsonl"}
+TEXT_SUFFIXES = {".md", ".txt", ".csv", ".json", ".jsonl", ".html", ".htm", ".vtt", ".srt"}
 CITE_RE = re.compile(r"\[(E\d+)\]")
 OPTION_RE = re.compile(r"^###\s+(O\d+)\.\s+(.+)$", re.M)
 VALIDATION_LABELS = (
@@ -683,53 +686,94 @@ def cmd_use(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_add_source(args: argparse.Namespace) -> int:
-    project, tokens = take_project(args.rest, 1)
-    raw = tokens[0]
+def upsert_source(
+    project: Path,
+    stored: str,
+    digest: str | None,
+    *,
+    kind: str | None,
+    title: str | None,
+    reliability: str | None,
+    extra: dict | None = None,
+    refresh: bool = False,
+) -> tuple[dict, str]:
+    """Create a source row or return the one with the same path. Does not print."""
     sources, parse_errors = load_jsonl(project / "sources.jsonl")
     if parse_errors:
         die("sources.jsonl повреждён:\n" + "\n".join(parse_errors))
-    if re.match(r"https?://", raw):
-        stored, digest = raw.strip(), None
-    else:
-        stored, digest = locate_local_file(project, raw)
     for row in sources:
-        if row.get("url_or_path") == stored:
-            print(f"id: {row['id']}")
-            print(f"Уже зарегистрирован: {row['id']} {stored}")
-            return 0
-    kind = args.kind
+        if row.get("url_or_path") != stored:
+            continue
+        if not refresh:
+            return row, "existing"
+        row["sha256"] = digest
+        row["accessed"] = today()
+        if kind:
+            if kind not in SOURCE_KINDS:
+                die(f"Неизвестный kind: {kind}. Допустимо: {', '.join(sorted(SOURCE_KINDS))}")
+            row["kind"] = kind
+        if reliability:
+            if reliability not in RELIABILITY:
+                die(f"Неизвестная надёжность: {reliability}. Допустимо: high, med, low")
+            row["reliability"] = reliability
+        if title:
+            row["title"] = title
+        if extra:
+            row.update({key: value for key, value in extra.items() if value is not None})
+        save_jsonl(project / "sources.jsonl", sources)
+        save_state(project, load_state(project))
+        return row, "updated"
     if kind is None:
         kind = "web" if digest is None else "doc"
     if kind not in SOURCE_KINDS:
         die(f"Неизвестный kind: {kind}. Допустимо: {', '.join(sorted(SOURCE_KINDS))}")
-    reliability = args.reliability
     if reliability is None:
         reliability = "low" if kind == "synthetic" else "med"
     if reliability not in RELIABILITY:
         die(f"Неизвестная надёжность: {reliability}. Допустимо: high, med, low")
     if kind == "synthetic" and reliability != "low":
         die("Источник kind=synthetic всегда reliability=low: это не наблюдение.")
+    source_id = next_serial(sources, "S")
+    row = {
+        "id": source_id,
+        "url_or_path": stored,
+        "title": title or (stored if digest is None else Path(stored).name),
+        "accessed": today(),
+        "kind": kind,
+        "sha256": digest,
+        "reliability": reliability,
+    }
+    if extra:
+        row.update({key: value for key, value in extra.items() if value is not None})
+    sources.append(row)
+    save_jsonl(project / "sources.jsonl", sources)
+    save_state(project, load_state(project))
+    return row, "created"
+
+
+def cmd_add_source(args: argparse.Namespace) -> int:
+    project, tokens = take_project(args.rest, 1)
+    raw = tokens[0]
+    if re.match(r"https?://", raw):
+        stored, digest = raw.strip(), None
+    else:
+        stored, digest = locate_local_file(project, raw)
     title = resolve_text(
         args.title, args.title_file, label="название источника", env_name="STRAT_SOURCE_TITLE"
-    ) or (stored if digest is None else Path(stored).name)
-    source_id = next_serial(sources, "S")
-    sources.append(
-        {
-            "id": source_id,
-            "url_or_path": stored,
-            "title": title,
-            "accessed": today(),
-            "kind": kind,
-            "sha256": digest,
-            "reliability": reliability,
-        }
     )
-    save_jsonl(project / "sources.jsonl", sources)
-    state = load_state(project)
-    save_state(project, state)
-    print(f"id: {source_id}")
-    print(f"Источник зарегистрирован: {source_id} {stored}")
+    row, status = upsert_source(
+        project,
+        stored,
+        digest,
+        kind=args.kind,
+        title=title,
+        reliability=args.reliability,
+    )
+    print(f"id: {row['id']}")
+    if status == "existing":
+        print(f"Уже зарегистрирован: {row['id']} {stored}")
+    else:
+        print(f"Источник зарегистрирован: {row['id']} {stored}")
     if digest is None:
         print(
             "Локального снимка нет. Для веб-страницы выполните fetch тем же адресом: "
@@ -812,7 +856,7 @@ def fetch_retry_settings() -> tuple[int, float]:
     return max(1, attempts), max(0.0, backoff)
 
 
-def download_url_once(url: str) -> tuple[str, str]:
+def download_url_once(url: str) -> tuple[str, str, str]:
     request = urllib.request.Request(
         url,
         headers={"User-Agent": FETCH_USER_AGENT, "Accept": "text/html,text/plain;q=0.9,*/*;q=0.1"},
@@ -849,16 +893,20 @@ def download_url_once(url: str) -> tuple[str, str]:
         text = raw.decode(charset, errors="replace")
     except LookupError:
         text = raw.decode("utf-8", errors="replace")
+    raw_html = ""
     if "html" in content_type or text.lstrip().lower().startswith("<!doctype html") or "<html" in text[:500].lower():
         page_title, body = html_to_text(text)
+        raw_html = text
     else:
         page_title, body = "", text.strip()
     if truncated:
         body += "\n\n[страница обрезана по лимиту размера]"
-    return page_title, body
+        if raw_html:
+            raw_html += "\n<!-- truncated -->\n"
+    return page_title, body, raw_html
 
 
-def download_url(url: str) -> tuple[str, str]:
+def download_url(url: str) -> tuple[str, str, str]:
     attempts, backoff = fetch_retry_settings()
     last: FetchFailed | None = None
     tried = 0
@@ -981,7 +1029,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         return 0
     remember_step(project, step_id, "started", url, None)
     try:
-        page_title, body = download_url(url)
+        page_title, body, raw_html = download_url(url)
     except FetchFailed as exc:
         remember_step(project, step_id, "failed", url, str(exc))
         stage = int(load_state(project).get("stage") or 0)
@@ -994,9 +1042,15 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     else:
         page_title = title
     dest = snapshot_dest(project, url, existing if args.force else None)
+    html_line = ""
+    if raw_html:
+        html_path = dest.with_suffix(".html")
+        write_utf8(html_path, raw_html if raw_html.endswith("\n") else raw_html + "\n")
+        html_stored, html_digest = locate_local_file(project, html_path.as_posix())
+        html_line = f"- html: {html_stored}\n- html-sha256: {html_digest}\n"
     write_utf8(
         dest,
-        f"# {page_title}\n\n- url: {url}\n- загружено: {today()}\n\n{body}\n",
+        f"# {page_title}\n\n- url: {url}\n- загружено: {today()}\n{html_line}\n{body}\n",
     )
     stored, digest = locate_local_file(project, dest.as_posix())
     sources, parse_errors = load_jsonl(project / "sources.jsonl")
@@ -1085,21 +1139,59 @@ def cmd_add_evidence(args: argparse.Namespace) -> int:
             "(тот же type, source, claim и quote). Новая запись не создана."
         )
     evidence_id = next_serial(evidence, "E")
-    evidence.append(
-        {
-            "id": evidence_id,
-            "claim": claim,
-            "type": args.etype,
-            "source": args.source,
-            "quote": quote,
-            "locator": locator,
-            "confidence": args.confidence,
-            "date": args.date or today(),
-            "status": "active",
-            "superseded_by": None,
-            "depends_on": depends,
-        }
-    )
+    record = {
+        "id": evidence_id,
+        "claim": claim,
+        "type": args.etype,
+        "source": args.source,
+        "quote": quote,
+        "locator": locator,
+        "confidence": args.confidence,
+        "date": args.date or today(),
+        "status": "active",
+        "superseded_by": None,
+        "depends_on": depends,
+    }
+    analysis_id = str(getattr(args, "analysis", None) or "").strip()
+    metric = str(getattr(args, "metric", None) or "").strip()
+    inspect_id = str(getattr(args, "inspect", None) or "").strip()
+    source_row = by_source[args.source]
+    if not analysis_id and metric and source_row.get("analysis_id"):
+        analysis_id = str(source_row["analysis_id"])
+    if analysis_id or metric:
+        if not analysis_id or not metric:
+            die("Для числа из анализа нужны оба поля: --analysis A001 и --metric.")
+        try:
+            value = analysis.lookup_metric(analysis.load_metrics(project, analysis_id), metric)
+            manifest = analysis.load_manifest(project, analysis_id)
+        except analysis.AnalysisError as exc:
+            die(str(exc))
+        needle = analysis.metric_line(metric, value)
+        if needle not in quote:
+            die(f"Цитата должна содержать строку отчёта «{needle}».")
+        linked = str(source_row.get("analysis_id") or "")
+        if linked and linked != analysis_id:
+            die(f"Источник {args.source} связан с {linked}, а не с {analysis_id}.")
+        record["analysis_id"] = analysis_id
+        record["metric"] = metric
+        record["value"] = value
+        record["input_sha256"] = manifest.get("input_sha256")
+        record["analysis_input"] = manifest.get("input_path")
+    if not inspect_id and source_row.get("inspect_id"):
+        inspect_id = str(source_row["inspect_id"])
+    if inspect_id:
+        try:
+            media_manifest = inspect_media.load_manifest(project, inspect_id)
+        except inspect_media.InspectError as exc:
+            die(str(exc))
+        record["inspect_id"] = inspect_id
+        record["snapshot_path"] = media_manifest.get("input_path")
+        record["snapshot_sha256"] = media_manifest.get("input_sha256")
+        if source_row.get("model_description") or media_manifest.get("model_description") and source_row.get("url_or_path") == media_manifest.get("description_path"):
+            record["model_description"] = True
+    if source_row.get("model_description"):
+        record["model_description"] = True
+    evidence.append(record)
     save_jsonl(project / "evidence.jsonl", evidence)
     save_state(project, load_state(project))
     step_inputs = "\n".join(identity)
@@ -1799,6 +1891,10 @@ def check_project(project: Path, state: dict | None = None, *, strict: bool = Fa
     for number in state.get("completed_stages") or []:
         if int(number) not in logged:
             add("log", f"этап {number} закрыт, но в журнале нет записи этого этапа")
+    for item in analysis.verify_project(project):
+        add(str(item["code"]), str(item["message"]), warning=bool(item.get("warning")))
+    for item in inspect_media.verify_project(project):
+        add(str(item["code"]), str(item["message"]), warning=bool(item.get("warning")))
     dirty = uncommitted_tool_files()
     if dirty:
         shown = ", ".join(dirty[:8])
@@ -2662,6 +2758,336 @@ def cmd_complete(args: argparse.Namespace) -> int:
     return 0
 
 
+def _resolve_optional_text(value: str | None, file_value: str | None, label: str, env_name: str) -> str | None:
+    if not value and not file_value and not os.environ.get(env_name):
+        return None
+    return resolve_text(value, file_value, label=label, env_name=env_name)
+
+
+def cmd_analyze(args: argparse.Namespace) -> int:
+    project, _tokens = take_project(list(getattr(args, "rest", None) or []), 0)
+    if bool(getattr(args, "verify", False)):
+        findings = analysis.verify_project(project)
+        print(format_report(project, findings))
+        return 1 if hard_findings(findings) else 0
+    raw_input = getattr(args, "input", None)
+    raw_script = getattr(args, "script", None)
+    spec_text = getattr(args, "spec", None)
+    spec_file = getattr(args, "spec_file", None)
+    try:
+        if spec_file and spec_text:
+            die("Укажите декларацию либо --spec, либо --spec-file, не оба сразу.")
+        if spec_file:
+            spec_text = analysis.require_inside(project, spec_file).read_text(encoding="utf-8")
+        outcome = analysis.run_analysis(
+            project,
+            input_path=analysis.require_inside(project, raw_input) if raw_input else None,
+            spec_text=spec_text,
+            script_path=analysis.require_inside(project, raw_script) if raw_script else None,
+            analysis_id=getattr(args, "analysis_id", None) or None,
+            timeout=getattr(args, "timeout", 5) or 5,
+            synthetic=bool(getattr(args, "synthetic", False)),
+        )
+    except analysis.AnalysisError as exc:
+        die(str(exc))
+    manifest = outcome["manifest"]
+    report_rel = str(manifest["report_path"])
+    claim = _resolve_optional_text(
+        getattr(args, "claim", None), getattr(args, "claim_file", None), "тезис", "STRAT_CLAIM"
+    )
+    if outcome.get("same"):
+        source = _analysis_source(project, str(outcome["id"]))
+        _print_analysis(outcome, source["id"] if source else "")
+        print("Тот же результат.")
+        if claim:
+            if source is None:
+                die(f"Анализ {outcome['id']} ещё не зарегистрирован как источник.")
+            _add_analysis_evidence(project, outcome, args, claim, source["id"])
+        return 0
+    title = f"Расчёт {outcome['id']}"
+    if manifest.get("synthetic"):
+        title += " (синтетические данные)"
+    source, _status = upsert_source(
+        project,
+        report_rel,
+        content_digest(project / report_rel),
+        kind="data",
+        title=title,
+        reliability="low" if manifest.get("synthetic") else "med",
+        extra={
+            "analysis_id": outcome["id"],
+            "snapshot_path": manifest.get("input_path"),
+            "snapshot_sha256": manifest.get("input_sha256"),
+        },
+        refresh=True,
+    )
+    metrics = outcome["metrics"]
+    print(f"analysis_id: {outcome['id']}")
+    print(f"source_id: {source['id']}")
+    print(f"input_sha256: {manifest.get('input_sha256')}")
+    print(f"input: {manifest.get('input_path')}")
+    print(f"report: {report_rel}")
+    for key in sorted(metrics):
+        value = metrics[key]
+        if isinstance(value, str):
+            print(f"metric {key}: {value}")
+    if manifest.get("chart_note"):
+        print(manifest["chart_note"])
+    elif manifest.get("chart_path"):
+        print(f"chart: {manifest['chart_path']}")
+    if claim:
+        _add_analysis_evidence(project, outcome, args, claim, source["id"])
+    remember_step(project, f"analyze:{outcome['id']}", "done", str(manifest.get("input_sha256")), outcome["id"])
+    return 0
+
+
+def _analysis_source(project: Path, analysis_id: str) -> dict | None:
+    rows, errors = load_jsonl(project / "sources.jsonl")
+    if errors:
+        die("sources.jsonl повреждён:\n" + "\n".join(errors))
+    for row in rows:
+        if row.get("analysis_id") == analysis_id:
+            return row
+    return None
+
+
+def _print_analysis(outcome: dict, source_id: str) -> None:
+    manifest = outcome["manifest"]
+    metrics = outcome["metrics"]
+    print(f"analysis_id: {outcome['id']}")
+    if source_id:
+        print(f"source_id: {source_id}")
+    print(f"input_sha256: {manifest.get('input_sha256')}")
+    print(f"input: {manifest.get('input_path')}")
+    print(f"report: {manifest.get('report_path')}")
+    for key in sorted(metrics):
+        value = metrics[key]
+        if isinstance(value, str):
+            print(f"metric {key}: {value}")
+    if manifest.get("chart_note"):
+        print(manifest["chart_note"])
+    elif manifest.get("chart_path"):
+        print(f"chart: {manifest['chart_path']}")
+
+
+def _add_analysis_evidence(project: Path, outcome: dict, args: argparse.Namespace, claim: str, source_id: str) -> None:
+    metric = str(getattr(args, "metric", None) or "").strip()
+    if not metric:
+        die("Для свидетельства из анализа нужна --metric.")
+    try:
+        value = analysis.lookup_metric(outcome["metrics"], metric)
+    except analysis.AnalysisError as exc:
+        die(str(exc))
+    report_rel = str(outcome["manifest"]["report_path"])
+    quote = _resolve_optional_text(
+        getattr(args, "quote", None), getattr(args, "quote_file", None), "цитата", "STRAT_QUOTE"
+    ) or analysis.metric_line(metric, value)
+    cmd_add_evidence(
+        argparse.Namespace(
+            project=project.name,
+            claim=claim,
+            claim_file=None,
+            etype=getattr(args, "etype", None) or "fact",
+            source=source_id,
+            quote=quote,
+            quote_file=None,
+            locator=f"{report_rel}#{metric}",
+            locator_file=None,
+            confidence=getattr(args, "confidence", None) or "med",
+            date=None,
+            depends_on="",
+            analysis=outcome["id"],
+            metric=metric,
+            inspect=None,
+        )
+    )
+
+
+def cmd_inspect(args: argparse.Namespace) -> int:
+    project, _tokens = take_project(list(getattr(args, "rest", None) or []), 0)
+
+    def one(raw: str | None) -> Path | None:
+        if not raw:
+            return None
+        return inspect_media.require_inside(project, raw)
+
+    description = _resolve_optional_text(
+        getattr(args, "description", None),
+        getattr(args, "description_file", None),
+        "описание",
+        "STRAT_DESCRIPTION",
+    )
+    try:
+        outcome = inspect_media.run_inspect(
+            project,
+            html=one(getattr(args, "html", None)),
+            image=one(getattr(args, "image", None)),
+            pdf=one(getattr(args, "pdf", None)),
+            av=one(getattr(args, "av", None)),
+            transcript=one(getattr(args, "transcript", None)),
+            description=description,
+            synthetic=bool(getattr(args, "synthetic", False)),
+            force=bool(getattr(args, "force", False)),
+        )
+    except inspect_media.InspectError as exc:
+        die(str(exc))
+    if outcome.get("already"):
+        _print_existing_inspect(project, outcome)
+        claim = _resolve_optional_text(
+            getattr(args, "claim", None), getattr(args, "claim_file", None), "тезис", "STRAT_CLAIM"
+        )
+        if claim:
+            _add_inspect_evidence(project, outcome, args, claim)
+        return 0
+    manifest = outcome["manifest"]
+    report_rel = str(outcome["report_rel"])
+    titles = {
+        "ui": "Разбор интерфейса",
+        "image": "Метаданные изображения",
+        "pdf": "Разбор PDF",
+        "av": "Разбор записи",
+    }
+    title = f"{titles.get(manifest['kind'], 'Разбор')} {outcome['id']}"
+    if manifest.get("synthetic"):
+        title += " (синтетические данные)"
+    source, _status = upsert_source(
+        project,
+        report_rel,
+        content_digest(project / report_rel),
+        kind=str(manifest["source_kind"]),
+        title=title,
+        reliability="low" if manifest.get("synthetic") else "med",
+        extra={
+            "inspect_id": outcome["id"],
+            "snapshot_path": manifest.get("input_path"),
+            "snapshot_sha256": manifest.get("input_sha256"),
+        },
+        refresh=True,
+    )
+    print(f"inspect_id: {outcome['id']}")
+    print(f"source_id: {source['id']}")
+    print(f"snapshot: {manifest.get('input_path')}")
+    print(f"sha256: {manifest.get('input_sha256')}")
+    print(f"report: {report_rel}")
+    if manifest.get("description_path"):
+        description_source, _description_status = upsert_source(
+            project,
+            str(manifest["description_path"]),
+            content_digest(project / str(manifest["description_path"])),
+            kind="media",
+            title=f"Описание модели IDE {outcome['id']}",
+            reliability="low",
+            extra={
+                "inspect_id": outcome["id"],
+                "snapshot_path": manifest.get("input_path"),
+                "snapshot_sha256": manifest.get("input_sha256"),
+                "model_description": True,
+            },
+            refresh=True,
+        )
+        print(f"description_source_id: {description_source['id']}")
+    if outcome.get("gap"):
+        print((project / report_rel).read_text(encoding="utf-8"))
+    _print_inspect_summary(outcome)
+    claim = _resolve_optional_text(
+        getattr(args, "claim", None), getattr(args, "claim_file", None), "тезис", "STRAT_CLAIM"
+    )
+    if claim:
+        if outcome.get("gap") and (getattr(args, "etype", None) or "fact") == "fact":
+            die("Нельзя записать fact: текст из файла не извлечён. Содержимое не выдумывается.")
+        quote = _resolve_optional_text(
+            getattr(args, "quote", None), getattr(args, "quote_file", None), "цитата", "STRAT_QUOTE"
+        )
+        evidence_args = argparse.Namespace(
+            project=project.name,
+            claim=claim,
+            claim_file=None,
+            etype=getattr(args, "etype", None) or "fact",
+            source=source["id"],
+            quote=quote or "",
+            quote_file=None,
+            locator=report_rel,
+            locator_file=None,
+            confidence=getattr(args, "confidence", None) or "med",
+            date=None,
+            depends_on="",
+            analysis=None,
+            metric=None,
+            inspect=outcome["id"],
+        )
+        cmd_add_evidence(evidence_args)
+    remember_step(project, f"inspect:{outcome['id']}", "done", str(manifest.get("input_sha256")), outcome["id"])
+    return 0
+
+
+def _inspect_sources(project: Path, inspect_id: str) -> tuple[dict | None, dict | None]:
+    rows, errors = load_jsonl(project / "sources.jsonl")
+    if errors:
+        die("sources.jsonl повреждён:\n" + "\n".join(errors))
+    primary = None
+    described = None
+    for row in rows:
+        if row.get("inspect_id") != inspect_id:
+            continue
+        if row.get("model_description"):
+            described = row
+        elif primary is None:
+            primary = row
+    return primary, described
+
+
+def _print_existing_inspect(project: Path, outcome: dict) -> None:
+    manifest = outcome["manifest"]
+    primary, described = _inspect_sources(project, str(outcome["id"]))
+    print(f"inspect_id: {outcome['id']}")
+    if primary is not None:
+        print(f"source_id: {primary['id']}")
+    print(f"snapshot: {manifest.get('input_path')}")
+    print(f"sha256: {manifest.get('input_sha256')}")
+    print(f"report: {outcome.get('report_rel')}")
+    if described is not None:
+        print(f"description_source_id: {described['id']}")
+    print("Уже разобрано.")
+    _print_inspect_summary(outcome)
+
+
+def _print_inspect_summary(outcome: dict) -> None:
+    kind = str((outcome.get("manifest") or {}).get("kind") or "")
+    summary = inspect_media.format_summary(kind, outcome.get("structured") or {})
+    if summary.strip():
+        print(summary)
+
+
+def _add_inspect_evidence(project: Path, outcome: dict, args: argparse.Namespace, claim: str) -> None:
+    primary, _described = _inspect_sources(project, str(outcome["id"]))
+    if primary is None:
+        die(f"Разбор {outcome['id']} ещё не зарегистрирован как источник.")
+    if outcome.get("gap") and (getattr(args, "etype", None) or "fact") == "fact":
+        die("Нельзя записать fact: текст из файла не извлечён. Содержимое не выдумывается.")
+    quote = _resolve_optional_text(
+        getattr(args, "quote", None), getattr(args, "quote_file", None), "цитата", "STRAT_QUOTE"
+    )
+    cmd_add_evidence(
+        argparse.Namespace(
+            project=project.name,
+            claim=claim,
+            claim_file=None,
+            etype=getattr(args, "etype", None) or "fact",
+            source=primary["id"],
+            quote=quote or "",
+            quote_file=None,
+            locator=str(outcome.get("report_rel") or ""),
+            locator_file=None,
+            confidence=getattr(args, "confidence", None) or "med",
+            date=None,
+            depends_on="",
+            analysis=None,
+            metric=None,
+            inspect=outcome["id"],
+        )
+    )
+
+
 def cmd_doctor(_args: argparse.Namespace) -> int:
     print(f"Python: {sys.version.split()[0]} (нужен 3.10+)")
     print(f"Корень: {ROOT}")
@@ -2682,12 +3108,19 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
         f"По умолчанию: {routing.get('default', 'ide')}. "
         "Без ключа уровни cheap и strong выполняются моделью подписки IDE."
     )
-    for module, purpose in (("pypdf", "pdf"), ("docx", "docx"), ("openpyxl", "xlsx")):
+    optional_packages = (
+        ("pypdf", "PDF: страницы в inspect и текст в read_material"),
+        ("docx", "DOCX через scripts/read_material.py"),
+        ("openpyxl", "XLSX в analyze и read_material"),
+        ("pandas", "запасной путь XLSX; метрики анализа считаются стандартной библиотекой"),
+        ("matplotlib", "PNG-график analyze, если в декларации есть chart"),
+    )
+    for module, purpose in optional_packages:
         try:
             __import__(module)
             print(f"Пакет {module}: установлен ({purpose})")
         except ImportError:
-            print(f"Пакет {module}: нет. Чтение {purpose} через scripts/read_material.py недоступно, ядро работает.")
+            print(f"Пакет {module}: нет ({purpose}). Ядро работает без него.")
     projects = list_user_projects()
     if projects:
         print("Проекты: " + ", ".join(path.name for path in projects))
@@ -2820,6 +3253,9 @@ def build_parser() -> argparse.ArgumentParser:
     add_evidence.add_argument("--confidence", default="med")
     add_evidence.add_argument("--date")
     add_evidence.add_argument("--depends-on", default="")
+    add_evidence.add_argument("--analysis", default=None, help="A001, если тезис из расчёта")
+    add_evidence.add_argument("--metric", default=None, help="имя метрики из result JSON")
+    add_evidence.add_argument("--inspect", default=None, help="M001, если тезис из разбора")
     add_evidence.set_defaults(func=cmd_add_evidence)
 
     add_option = sub.add_parser("add-option", help="выдать варианту стабильный ID один раз")
@@ -2900,6 +3336,48 @@ def build_parser() -> argparse.ArgumentParser:
     complete.add_argument("--project", help="куда писать журнал вызова; иначе текущий проект, если он один")
     complete.add_argument("--stage", type=int, help="этап журнала; по умолчанию текущий этап проекта")
     complete.set_defaults(func=cmd_complete)
+
+    analyze_cmd = sub.add_parser("analyze", help="воспроизводимый расчёт по CSV, JSON или XLSX")
+    analyze_cmd.add_argument("rest", nargs="*", help="необязательный проект")
+    analyze_cmd.add_argument("--input", help="CSV, JSON или XLSX внутри проекта")
+    analyze_cmd.add_argument("--spec", help="декларация JSON; на Windows надёжнее --spec-file")
+    analyze_cmd.add_argument("--spec-file", help="декларация JSON из файла UTF-8 внутри проекта")
+    analyze_cmd.add_argument("--script", help="свой .py внутри проекта, не из sources/")
+    analyze_cmd.add_argument("--id", dest="analysis_id", help="повторить сохранённый расчёт, например A001")
+    analyze_cmd.add_argument("--timeout", type=float, default=5, help="лимит скрипта в секундах, от 0.2 до 30")
+    analyze_cmd.add_argument("--synthetic", action="store_true", help="вход помечен как синтетические данные")
+    analyze_cmd.add_argument("--verify", action="store_true", help="пересчитать и завершиться с ошибкой при расхождении")
+    analyze_cmd.add_argument("--metric", help="какую метрику положить в свидетельство")
+    analyze_cmd.add_argument("--claim", help="тезис; «-» читает stdin")
+    analyze_cmd.add_argument("--claim-file")
+    analyze_cmd.add_argument("--quote", default=None, help="если пусто, берётся строка отчёта метрики")
+    analyze_cmd.add_argument("--quote-file")
+    analyze_cmd.add_argument("--type", dest="etype", default="fact")
+    analyze_cmd.add_argument("--confidence", default="med")
+    analyze_cmd.set_defaults(func=cmd_analyze)
+
+    inspect_cmd = sub.add_parser("inspect", help="разбор HTML, изображения, PDF или аудио/видео")
+    inspect_cmd.add_argument("rest", nargs="*", help="необязательный проект")
+    inspect_cmd.add_argument("--html", help="снимок HTML внутри проекта")
+    inspect_cmd.add_argument("--image", help="PNG или JPG внутри проекта")
+    inspect_cmd.add_argument("--pdf", help="PDF внутри проекта")
+    inspect_cmd.add_argument("--av", help="аудио или видео внутри проекта")
+    inspect_cmd.add_argument("--transcript", help="готовые субтитры .vtt/.srt/.txt/.md")
+    inspect_cmd.add_argument("--description", help="описание изображения моделью IDE")
+    inspect_cmd.add_argument("--description-file", help="описание из файла UTF-8")
+    inspect_cmd.add_argument("--synthetic", action="store_true", help="материал помечен как синтетический")
+    inspect_cmd.add_argument(
+        "--force",
+        action="store_true",
+        help="новый разбор, даже если снимок с этим sha256 уже есть",
+    )
+    inspect_cmd.add_argument("--claim")
+    inspect_cmd.add_argument("--claim-file")
+    inspect_cmd.add_argument("--quote", default=None)
+    inspect_cmd.add_argument("--quote-file")
+    inspect_cmd.add_argument("--type", dest="etype", default="fact")
+    inspect_cmd.add_argument("--confidence", default="med")
+    inspect_cmd.set_defaults(func=cmd_inspect)
 
     doctor = sub.add_parser("doctor", help="Python, ключ API, MCP, необязательные пакеты")
     doctor.set_defaults(func=cmd_doctor)

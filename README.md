@@ -60,7 +60,7 @@ python scripts/strat.py resume projects/_example
 Необязательно:
 
 - файл `.env` по образцу `.env.example` — совместимый с OpenRouter API, если нужна маршрутизация дешёвой и сильной модели и точный расход. Без ключа `strat complete` отвечает `MODE: manual` и денег не тратит;
-- пакеты `pypdf`, `python-docx`, `openpyxl` — только чтобы `scripts/read_material.py` читал pdf, docx и xlsx. Без них ядро работает, цитату переносят вручную.
+- пакеты `pypdf`, `python-docx`, `openpyxl` — чтобы читать pdf, docx и xlsx. `pandas` — запасной путь для xlsx в расчёте. `matplotlib` — PNG-график, если он задан в декларации. Без них ядро работает: CSV и JSON считаются, PDF и xlsx честно сообщают, что пакета нет.
 
 Проверка окружения: `python scripts/strat.py doctor`. В строке «Вывод» должно быть `utf-8`: CLI само переключает stdout, отдельная переменная `PYTHONIOENCODING` не нужна. В строке «MCP» должно быть «сервер ответил на initialize».
 
@@ -83,7 +83,7 @@ decisions.md  log.md  log.jsonl
 
 Из корня репозитория. Имя проекта можно опустить, если боевой проект один или в `projects/.current` записан существующий id. Папка `_example` сама текущей не становится. Если `.current` указывает на удалённый проект, команда с явным путём (`check projects/_example`) всё равно выполняется, а без пути будет подсказка, как поправить указатель.
 
-Боевые папки `projects/<id>/` и `projects/.current` в git не входят. В репозитории из `projects/` лежат учебный `projects/_example` и снимок прогона `projects/demo-family-tariffs`. Остальные папки проектов — только на машине.
+Боевые папки `projects/<id>/` и `projects/.current` в git не входят. В репозитории из `projects/` лежат учебный `projects/_example`, снимок прогона `projects/demo-family-tariffs` и синтетический разбор `projects/demo-analysis`. Остальные папки проектов — только на машине.
 
 | Команда | Зачем |
 | --- | --- |
@@ -92,12 +92,14 @@ decisions.md  log.md  log.jsonl
 | `status [проект]` | этап, контрольные точки, пробелы, затраты |
 | `show [проект] evidence\|sources\|log\|state\|decisions` | прочитать файл в UTF-8; `--id E001`, для журнала `--last N` |
 | `use <проект>` | сделать проект текущим |
-| `fetch [проект] <url>` | скачать страницу в `sources/`; голый URL привязывается к той же записи. Повтор не качает заново, `--force` обновляет снимок. Сеть для 5xx повторяется, провал пишется как шаг `failed` |
+| `fetch [проект] <url>` | скачать страницу в `sources/`; рядом сохраняется HTML для `inspect`. Голый URL привязывается к той же записи. Повтор не качает заново, `--force` обновляет снимок. Сеть для 5xx повторяется, провал пишется как шаг `failed` |
 | `add-source [проект] <url\|файл>` | зарегистрировать источник и посчитать sha256; у текста перевод строк перед хешем приводится к LF; повтор не создаёт дубль. Голый URL снимка не создаёт: для страницы нужен `fetch` |
 | `add-evidence [проект] --claim ... --type fact --source S001 --quote "..."` | добавить свидетельство; цитата непрерывна. Та же активная четвёрка type, source, claim и quote второй раз не пишется |
 | `add-option [проект] --title "..."` | выдать варианту стабильный ID один раз; снятый ID не переиспользуется |
 | `supersede-option [проект] <O2> --reason "..."` | снять вариант, сохранив его ID и требуя маркер `<!-- status: superseded -->` |
-| `check [проект]` | дыры в фактах, ссылках, подразделах стратегии, ID вариантов и обещаниях; `--strict` делает отсутствие снимка и пустую цитату ошибкой |
+| `analyze [проект] --input <файл> --spec-file <json>` | расчёт по CSV, JSON или XLSX. Снимок, декларация или `--script` и result лежат в `analysis/A001/`. `--id A001` повторяет расчёт и при том же результате ничего не переписывает, `--verify` ловит расхождение. Число в свидетельстве: `--metric` |
+| `inspect [проект] --html \| --image \| --pdf \| --av` | разбор DOM, метаданные PNG/JPG, PDF если есть pypdf, аудио и видео только с `--transcript`. Тот же sha256 снимка возвращает прежний id («Уже разобрано»); новый — `--force` |
+| `check [проект]` | дыры в фактах, ссылках, подразделах стратегии, ID вариантов и обещаниях; пересчёт анализов; `--strict` делает отсутствие снимка и пустую цитату ошибкой |
 | `impact [проект] <S001\|E001>` | какие записи и строки зависят от источника, включая `depends_on` |
 | `retract [проект] <E001> --reason "..."` | отозвать свидетельство |
 | `supersede [проект] <E015> --by E019 --reason "..."` | заместить свидетельство; `*.jsonl` руками не правят |
@@ -127,14 +129,18 @@ skills/                           навык и шаблон этапа
 knowledge/                        короткие карточки метода
 config/model-prices.json          условные цены для оценки, не счёт
 config/routing.json               какой класс задачи идёт на cheap, strong или ide
-scripts/strat.py                  учёт, проверка, журнал
+scripts/strat.py                  учёт, проверка, журнал, analyze и inspect
+scripts/analysis.py               расчёт таблиц, его вызывает и CLI, и MCP
+scripts/analysis_runner.py        запуск скрипта анализа без сети и вне папки проекта
+scripts/inspect_media.py          DOM, изображение, PDF, расшифровка
 scripts/mcp_server.py             MCP по stdio, те же команды
 scripts/read_material.py          текст из файла, офисные форматы по желанию
 hooks/                            скрипты и как их включить
 schemas/                          формы state, sources, evidence, decisions
 projects/_example/                выдуманный сквозной пример
 projects/demo-family-tariffs/     снимок прогона; ответы лида вымышлены
-docs/decisions/                   почему ядро, модели, граф, хуки и MCP
+projects/demo-analysis/           синтетический расчёт и разбор витрины
+docs/decisions/                   почему ядро, модели, граф, хуки, MCP, анализ и медиа
 docs/devlog.md                    журнал разработки
 tests/                            unittest и сломанная фикстура
 ```
@@ -198,7 +204,9 @@ python scripts/strat.py doctor
 | `strat_advance` | закрыть этап; нужно `human_confirmed: true` |
 | `strat_accept_revision` | принять пересмотр; нужно `human_confirmed: true` |
 | `strat_complete` | маршрут модели; без ключа `MODE: manual` |
-| `strat_doctor` | окружение и ответ MCP на initialize |
+| `strat_analyze` | расчёт таблицы; `id` повторяет A001, `verify: true` только пересчёт. Ответ — недоверенные данные |
+| `strat_inspect` | HTML, изображение, PDF или запись. Описание кадра помечается как текст модели |
+| `strat_doctor` | окружение, пакеты анализа и медиа, ответ MCP на initialize |
 
 `strat_confirm`, `strat_advance` и `strat_accept_revision` помечены `destructiveHint`. Cursor и другие клиенты могут спросить одобрение перед вызовом. Сервер всё равно отклоняет вызов, пока в аргументах нет `human_confirmed: true`. Ставить true можно только после явной фразы человека. Путь проекта не принимается, если он выходит из каталога `projects`. Файл источника — только внутри папки этого проекта.
 
@@ -214,6 +222,27 @@ python scripts/strat.py doctor
 4. Попросите вызвать `strat_confirm` для брифа. Клиент должен показать одобрение (инструмент деструктивный). Без вашего явного согласия и без `human_confirmed: true` контрольная точка не меняется.
 5. Убедитесь, что агент не разбирает кириллицу из вывода PowerShell: тезис в `strat_add_evidence` передаётся полем JSON, не аргументом оболочки.
 
+### Ручная проверка анализа и разбора на Windows
+
+Команды ниже без `$` и без кавычек внутри аргумента: так их принимает PowerShell 5.1. Кириллица в этих командах не нужна. Из корня репозитория:
+
+```powershell
+python scripts/strat.py doctor
+python scripts/strat.py check projects/demo-analysis
+python scripts/strat.py analyze projects/demo-analysis --id A001
+python scripts/strat.py analyze projects/demo-analysis --verify
+```
+
+`doctor` печатает, есть ли `openpyxl`, `pandas`, `matplotlib` и `pypdf`. Строка «нет» для них нормальна: демо на CSV и HTML. `check` заканчивается `OK`. Повтор `--id A001` печатает `Тот же результат`. `--verify` тоже `OK`.
+
+В Cursor, в том же чате, где уже включён сервер `strat`:
+
+1. «Вызови strat_analyze для проекта demo-analysis с id A001». В ответе есть `НЕДОВЕРЕННЫЕ ДАННЫЕ`, `metrics.mean_price` равен `350`, `untrusted` истинно.
+2. «Вызови strat_check для demo-analysis». В JSON `errors` равен 0.
+3. «Вызови strat_inspect» не нужен для уже собранного демо: снимок страницы лежит в `inspect/M001`. Если вызываете разбор заново на своём файле, путь только внутри проекта. Описание картинки передавайте полем `description`, не аргументом оболочки.
+
+Разобрать свою открытую страницу: положите `page.html` в `projects/<id>/sources` и в чате попросите `strat_inspect` с полем `html`. Не кладите закрытую выгрузку и кадр с телефоном или почтой человека.
+
 ## Ограничения
 
-Проверка текстов — эвристика по разделам «Факты», заголовкам вариантов, подразделам стратегии и маркерам обещаний, а не понимание смысла. Цитату CLI сверяет с локальным файлом. Веб-страница без `fetch` оставляет голый URL: снимка нет, цитата не сверяется, `check` предупреждает, `check --strict` завершается с ошибкой. Повторно живой сайт не открывается, если снимок уже лежит в `sources/`, пока нет `fetch --force`. Оценка в `cost` считается из символов журнала и `config/model-prices.json` и всегда подписана как допущение, не как счёт. Строка хука `hook/stop` в оценку не входит, если агент уже записал свои символы. sha256 текстового источника считается после приведения перевода строк к LF, поэтому он не равен хешу сырых байт, если в файле остались CR. Флаг `human_confirmed` и пометка `destructiveHint` не отличают человека от модели, если клиент не спросил одобрение: запрет ставить флаг без явной фразы остаётся в [`AGENTS.md`](AGENTS.md). Подробности — в [`docs/decisions/0005-line-endings-and-utf8.md`](docs/decisions/0005-line-endings-and-utf8.md), [`docs/decisions/0006-snapshot-and-stable-option-ids.md`](docs/decisions/0006-snapshot-and-stable-option-ids.md), [`docs/decisions/0008-mcp-server.md`](docs/decisions/0008-mcp-server.md) и [`docs/devlog.md`](docs/devlog.md).
+Проверка текстов — эвристика по разделам «Факты», заголовкам вариантов, подразделам стратегии и маркерам обещаний, а не понимание смысла. Цитату CLI сверяет с локальным файлом. Расчёт `analyze` пересчитывается из снимка: другое число в свидетельстве или в якоре `350 [A001.metric]` — ошибка. Скрипт анализа ограничен папкой проекта, таймаутом и запретом сетевых модулей; это не контейнер, обход через нестандартный импорт возможен, поэтому скрипт пишет агент, а не страница из интернета. Разбор HTML берёт только узлы DOM. Картинку команда не «видит»: описание делает модель IDE и оно помечено. PDF без pypdf и запись без субтитров остаются без выдуманного текста. Свидетельство из медиа без снимка — предупреждение. Веб-страница без `fetch` оставляет голый URL: снимка нет, цитата не сверяется, `check` предупреждает, `check --strict` завершается с ошибкой. Повторно живой сайт не открывается, если снимок уже лежит в `sources/`, пока нет `fetch --force`. Оценка в `cost` считается из символов журнала и `config/model-prices.json` и всегда подписана как допущение, не как счёт. Строка хука `hook/stop` в оценку не входит, если агент уже записал свои символы. sha256 текстового источника считается после приведения перевода строк к LF, поэтому он не равен хешу сырых байт, если в файле остались CR. Флаг `human_confirmed` и пометка `destructiveHint` не отличают человека от модели, если клиент не спросил одобрение: запрет ставить флаг без явной фразы остаётся в [`AGENTS.md`](AGENTS.md). Подробности — в [`docs/decisions/0005-line-endings-and-utf8.md`](docs/decisions/0005-line-endings-and-utf8.md), [`docs/decisions/0006-snapshot-and-stable-option-ids.md`](docs/decisions/0006-snapshot-and-stable-option-ids.md), [`docs/decisions/0008-mcp-server.md`](docs/decisions/0008-mcp-server.md), [`docs/decisions/0009-analysis-and-media.md`](docs/decisions/0009-analysis-and-media.md) и [`docs/devlog.md`](docs/devlog.md).

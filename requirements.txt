@@ -1,7 +1,10 @@
 # Ядро (scripts/strat.py) не требует пакетов. Нужен Python 3.10+.
 # Раскомментируйте только если нужно читать pdf, docx или xlsx
-# через scripts/read_material.py. Без них агент просит цитату вручную.
+# через scripts/read_material.py, считать xlsx в analyze или строить PNG.
+# CSV и JSON считаются без этих пакетов. Без них агент говорит, чего не хватает.
 
 # pypdf>=4.0
 # python-docx>=1.1
 # openpyxl>=3.1
+# pandas>=2.2
+# matplotlib>=3.8

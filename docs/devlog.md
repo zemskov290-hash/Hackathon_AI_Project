@@ -1,5 +1,11 @@
 # Журнал разработки
 
+## 2026-11-17 — анализ таблиц и разбор интерфейса
+
+Число в стратегии не на что было пересчитать, а страница после `fetch` теряла DOM: цены и кнопки легко было достроить. `analyze` сохраняет снимок CSV/JSON/XLSX, декларацию или скрипт и `result.json` в `analysis/A001/`. Повтор даёт тот же результат, `check` и `analyze --verify` ловят другую цифру в свидетельстве и в якоре `350 [A001.metric]`. Скрипт идёт без сети, только из папки проекта и с таймаутом; файл из `sources/` не запускается. XLSX и PNG-график необязательны: нет openpyxl, pandas или matplotlib — команда говорит об этом, CSV считается стандартной библиотекой.
+
+`fetch` кладёт рядом сырой HTML. `inspect` вынимает из DOM разделы, цены, CTA и шаги, у PNG/JPG берёт метаданные, описание модели помечает `model-description`, PDF читает при наличии pypdf, запись — только если есть субтитры. Источник получает kind `data`, `ui` или `media`, снимок и sha256. Свидетельство из медиа без снимка — предупреждение. CLI и MCP вызывают `scripts/analysis.py` и `scripts/inspect_media.py`. Демо на синтетических данных: `projects/demo-analysis`. Решение: `docs/decisions/0009-analysis-and-media.md`.
+
 ## 2026-11-17 — MCP-сервер поверх CLI
 
 Состояние проекта агент менял через оболочку и разбирал текст. Теперь `scripts/mcp_server.py` отдаёт те же команды как инструменты MCP по stdio: JSON-RPC `initialize`, `tools/list`, `tools/call`, без пакетов. `confirm`, `advance` и `accept-revision` требуют `human_confirmed=true` и помечены `destructiveHint`. Путь не выходит из каталога `projects`, результат `fetch` помечен как недоверенные данные. Подключение: `.cursor/mcp.json`, `.mcp.json`, `.vscode/mcp.json`. Команда — `python -c` с base64, без `$` и без внутренних двойных кавычек: корень ищется в окружении и подъёмом к `AGENTS.md`. `doctor` проверяет, что сервер отвечает на `initialize`. Решение: `docs/decisions/0008-mcp-server.md`.

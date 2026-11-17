@@ -1,0 +1,15 @@
+{
+  "description_path": null,
+  "gap": false,
+  "id": "M001",
+  "input_path": "inspect/M001/input.html",
+  "input_sha256": "4f3ae23229f7c20dedc19b0f2cf8476c9cb64c967c26847c8943326bf5d40939",
+  "kind": "ui",
+  "model_description": false,
+  "origin": "sources/page.html",
+  "report_path": "inspect/M001/report.md",
+  "source_kind": "ui",
+  "synthetic": true,
+  "transcript_path": null,
+  "transcript_sha256": null
+}

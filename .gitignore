@@ -11,6 +11,7 @@ __pycache__/
 projects/*
 !projects/_example/
 !projects/demo-family-tariffs/
+!projects/demo-analysis/
 projects/.current
 *.log
 .claude/settings.local.json

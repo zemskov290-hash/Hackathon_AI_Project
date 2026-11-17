@@ -1,0 +1,15 @@
+{
+  "description_path": "inspect/M002/description.md",
+  "gap": false,
+  "id": "M002",
+  "input_path": "inspect/M002/input.png",
+  "input_sha256": "b1ff9c8ea3a780bad09b346c423d2d0e46815926879b18e841d928376a946640",
+  "kind": "image",
+  "model_description": true,
+  "origin": "sources/pixel.png",
+  "report_path": "inspect/M002/report.md",
+  "source_kind": "media",
+  "synthetic": true,
+  "transcript_path": null,
+  "transcript_sha256": null
+}
