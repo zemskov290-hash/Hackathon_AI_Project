@@ -22,6 +22,19 @@ sys.path.insert(0, str(SCRIPTS))
 
 import mcp_server  # noqa: E402
 
+
+def stop_http_server(server, thread: threading.Thread) -> None:
+    """shutdown, then join, then close the socket.
+
+    Closing the socket while serve_forever is inside select() prints
+    OSError WinError 10038 from the background thread on Windows.
+    addCleanup runs one function so the order cannot flip.
+    """
+    server.shutdown()
+    thread.join()
+    server.server_close()
+
+
 REQUIRED_TOOLS = {
     "strat_init",
     "strat_resume",
@@ -542,8 +555,7 @@ class ProjectRoundtripTests(unittest.TestCase):
         httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         thread = threading.Thread(target=httpd.serve_forever, daemon=True)
         thread.start()
-        self.addCleanup(httpd.shutdown)
-        self.addCleanup(httpd.server_close)
+        self.addCleanup(stop_http_server, httpd, thread)
         port = httpd.server_address[1]
         fetched = tool_body(
             self.server.call(
