@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 import os
@@ -359,6 +360,21 @@ class SummaryTests(unittest.TestCase):
         code = bench.summary(None, bench.SUMMARY_MD, bench.SUMMARY_JSON, check=True)
         self.assertEqual(code, 0)
 
+    def test_committed_runs_fill_the_table(self) -> None:
+        results = bench.score_archive(bench.RUNS_ROOT)
+        scored = [item for item in results if item.get("status") == "scored"]
+        self.assertGreaterEqual(len(scored), 12)
+        text, payload = bench.render_summary(results, bench.historical_block(), bench.load_provenance(bench.RUNS_ROOT))
+        self.assertTrue(payload["generated_from_runs"])
+        self.assertGreater(payload["comparison"]["citation_rate"]["agent_n"], 0)
+        self.assertGreater(payload["comparison"]["citation_rate"]["chat_n"], 0)
+        self.assertIsNotNone(payload["comparison"]["citation_rate"]["agent"])
+        self.assertIsNotNone(payload["comparison"]["citation_rate"]["chat"])
+        self.assertNotIn("Парных прогонов нет. Ячейки пустые намеренно.", text)
+        committed = (ROOT / "docs" / "benchmark.md").read_text(encoding="utf-8")
+        self.assertEqual(committed, text)
+        self.assertIn("cursor-agent 2026.11.13-eacade1", committed)
+
 
 class ResumeWorkspaceTests(unittest.TestCase):
     def test_agent_must_keep_the_step(self) -> None:
@@ -620,6 +636,8 @@ class ArchiveTests(unittest.TestCase):
                 encoding="utf-8",
             )
             dest = root / "runs"
+            before_runs = runs_fingerprint(ROOT / "bench" / "runs")
+            self.assertIn("manifest.json", before_runs)
             bench.archive(work, dest, "модель по умолчанию cursor-agent", os_name="Windows")
             meta = json.loads((dest / "chat__t05-calculation" / "meta.json").read_text(encoding="utf-8"))
             blob = json.dumps(meta)
@@ -656,7 +674,18 @@ class ArchiveTests(unittest.TestCase):
             self.assertIn("модель по умолчанию cursor-agent", text)
             self.assertIn("сохранённого score", text)
             self.assertTrue(payload["generated_from_runs"])
-            self.assertFalse((ROOT / "bench" / "runs").exists())
+            self.assertEqual(runs_fingerprint(ROOT / "bench" / "runs"), before_runs)
+
+
+def runs_fingerprint(path: Path) -> dict[str, str]:
+    """sha256 of every file under bench/runs, including the manifest."""
+    found = {}
+    if not path.is_dir():
+        return found
+    for file in sorted(path.rglob("*")):
+        if file.is_file():
+            found[file.relative_to(path).as_posix()] = hashlib.sha256(file.read_bytes()).hexdigest()
+    return found
 
 
 class CaptureProcessTests(unittest.TestCase):
