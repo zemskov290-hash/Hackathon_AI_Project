@@ -498,6 +498,7 @@ class LauncherTests(unittest.TestCase):
 
 
 class CaptureProcessTests(unittest.TestCase):
+    @unittest.skipUnless(os.name != "nt", "фейковый shell-скрипт не является приложением Win32")
     def test_nonzero_exit_is_reported_and_stored(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "run"
