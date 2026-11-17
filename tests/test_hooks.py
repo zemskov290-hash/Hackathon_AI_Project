@@ -232,7 +232,6 @@ class HookStdinTests(unittest.TestCase):
         for command in configured:
             self.assertNotIn("$", command)
             self.assertNotIn("%", command)
-            self.assertNotIn("base64", command)
             name = command.rsplit(" ", 1)[-1]
             self.assertEqual(command, launcher.command_for(name))
             self.assertEqual(launcher.embedded_program(command), launcher.program_text())
@@ -293,12 +292,12 @@ class HookStdinTests(unittest.TestCase):
         return module
 
     def _run_as_host(self, command: str, cwd: str, env: dict, payload: str) -> subprocess.CompletedProcess[str]:
-        """PowerShell on Windows, the default shell elsewhere. Never WSL bash."""
-        if os.name == "nt":
-            encoded = base64.b64encode(command.encode("utf-16le")).decode("ascii")
-            argv = ["powershell", "-NoProfile", "-EncodedCommand", encoded]
+        """powershell.exe 5.1 on Windows, plus pwsh when it exists. Never WSL bash."""
+        hosts = self._windows_powershells()
+        if not hosts:
             return subprocess.run(
-                argv,
+                command,
+                shell=True,
                 cwd=cwd,
                 env=env,
                 input=payload,
@@ -308,9 +307,32 @@ class HookStdinTests(unittest.TestCase):
                 errors="replace",
                 timeout=60,
             )
+        last = None
+        for host in hosts:
+            last = self._run_powershell(host, command, cwd, env, payload)
+            blob = (last.stdout or "") + (last.stderr or "")
+            if last.returncode != 0 or "SyntaxError" in blob:
+                self.fail(f"{host}\n{blob}")
+        assert last is not None
+        return last
+
+    def _windows_powershells(self) -> list[Path]:
+        if os.name != "nt":
+            return []
+        hosts: list[Path] = []
+        system = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+        if not system.is_file():
+            self.fail(f"powershell.exe 5.1 not found: {system}")
+        hosts.append(system)
+        pwsh = shutil.which("pwsh")
+        if pwsh:
+            hosts.append(Path(pwsh))
+        return hosts
+
+    def _run_powershell(self, host: Path, command: str, cwd: str, env: dict, payload: str) -> subprocess.CompletedProcess[str]:
+        encoded = base64.b64encode(command.encode("utf-16le")).decode("ascii")
         return subprocess.run(
-            command,
-            shell=True,
+            [str(host), "-NoProfile", "-EncodedCommand", encoded],
             cwd=cwd,
             env=env,
             input=payload,

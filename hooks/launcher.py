@@ -13,11 +13,16 @@ Cursor also loads ``.claude/settings.json`` when third-party imports are on
 over allow. A broken Claude hook therefore blocks the action even when
 ``.cursor/hooks.json`` would have allowed it.
 
-The command below is the same in both files. It is ``python -c '<program>'``.
-Single quotes stop PowerShell and sh from expanding ``$`` or ``%``. The
-program text itself contains neither character. It reads ``CURSOR_PROJECT_DIR``
-and ``CLAUDE_PROJECT_DIR`` from the process environment, then ``workspace_roots``
-and ``cwd`` from the JSON on stdin, then walks up to ``AGENTS.md``.
+The command below is the same in both files. It is::
+
+    python -c "import base64;exec(base64.b64decode('<program>'))" <name>
+
+PowerShell 5.1 strips double quotes when it starts python.exe, so inlining the
+program (which needs quotes) becomes a SyntaxError, the hook exits 1, and the
+guard fails open. Base64 has no quotes, no ``$`` and no ``%``. It is only
+``PROGRAM`` encoded. Decode a blob with::
+
+    python -c "import base64; print(base64.b64decode('PASTE').decode())"
 
 Regenerate the configs after editing ``PROGRAM``::
 
@@ -28,12 +33,12 @@ The unit test fails if a committed config drifts from ``command_for``.
 
 from __future__ import annotations
 
+import base64
 import json
 import sys
 from pathlib import Path
 
-# The program embedded in the hook command. Double quotes only: the shell
-# wraps this text in single quotes, so an apostrophe would end the string.
+# The program encoded into the hook command. Edit this, then run the file.
 PROGRAM = """
 import io
 import json
@@ -137,17 +142,23 @@ def program_text() -> str:
 def command_for(name: str) -> str:
     if name not in NAMES:
         raise SystemExit(f"unknown hook name: {name}")
-    # Single quotes: PowerShell and sh do not expand $ or % inside them.
-    return "python -c '" + program_text() + "' " + name
+    encoded = base64.b64encode(program_text().encode("utf-8")).decode("ascii")
+    if any(token in encoded for token in ("$", "%", '"', "'")):
+        raise SystemExit("base64 of the launcher picked up a shell metacharacter")
+    # This quoting matched a live PowerShell 5.1 run: the payload has no quotes.
+    return f'python -c "import base64;exec(base64.b64decode(\'{encoded}\'))" {name}'
 
 
 def embedded_program(command: str) -> str:
-    prefix = "python -c '"
-    if not command.startswith(prefix) or "' " not in command[len(prefix) :]:
-        raise ValueError("command is not the launcher form")
-    body = command[len(prefix) :]
-    code, _name = body.rsplit("' ", 1)
-    return code
+    marker = "base64.b64decode('"
+    start = command.find(marker)
+    if start < 0:
+        raise ValueError("command is not the base64 launcher")
+    start += len(marker)
+    end = command.find("')", start)
+    if end < 0:
+        raise ValueError("command is not the base64 launcher")
+    return base64.b64decode(command[start:end]).decode("utf-8")
 
 
 def _configs() -> tuple[dict, dict]:
