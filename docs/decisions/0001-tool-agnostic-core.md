@@ -9,7 +9,7 @@
 
 ## Решение
 
-Единственный источник правил — `AGENTS.md`. Адаптеры тонкие: `.cursor/rules/strategist.mdc`, `CLAUDE.md`, `.github/copilot-instructions.md`. Они велят прочитать конституцию и не повторяют её. Хуки лежат в `hooks/` и вызывают тот же CLI. Их включение для Cursor и Claude Code — в ADR 0007. Ручной вызов CLI по-прежнему работает везде.
+Единственный источник правил — `AGENTS.md`. Адаптеры тонкие: `.cursor/rules/strategist.mdc`, `CLAUDE.md`, `.github/copilot-instructions.md`. Они велят прочитать конституцию и не повторяют её. Хуки лежат в `hooks/` и вызывают тот же CLI. Их включение для Cursor и Claude Code — в ADR 0007. Ручной вызов CLI по-прежнему работает везде. Тот же CLI отдают инструменты MCP (`scripts/mcp_server.py`, ADR 0008). Если клиент их не подключил, обходной путь прежний: `python scripts/strat.py`.
 
 ## Последствия
 

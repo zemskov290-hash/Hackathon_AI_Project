@@ -2710,7 +2710,24 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
             + ", ".join(dirty[:8])
             + ". В проектной сессии эти папки не правят."
         )
-    return 0
+    ready, detail = _mcp_probe()
+    if ready:
+        print(f"MCP: сервер ответил на initialize ({detail}).")
+        return 0
+    print(f"MCP: сервер не ответил на initialize. {detail}")
+    return 1
+
+
+def _mcp_probe() -> tuple[bool, str]:
+    """Ask the MCP server from .cursor/mcp.json to answer initialize. Never prints the API key."""
+    try:
+        import mcp_server
+    except Exception as exc:  # noqa: BLE001 — doctor must report a broken install, not crash
+        return False, scrub(f"не удалось загрузить mcp_server: {exc}")
+    try:
+        return mcp_server.probe()
+    except Exception as exc:  # noqa: BLE001 — same as above
+        return False, scrub(f"сбой проверки MCP: {exc}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -2884,7 +2901,7 @@ def build_parser() -> argparse.ArgumentParser:
     complete.add_argument("--stage", type=int, help="этап журнала; по умолчанию текущий этап проекта")
     complete.set_defaults(func=cmd_complete)
 
-    doctor = sub.add_parser("doctor", help="Python, ключ API, необязательные пакеты")
+    doctor = sub.add_parser("doctor", help="Python, ключ API, MCP, необязательные пакеты")
     doctor.set_defaults(func=cmd_doctor)
     return parser
 

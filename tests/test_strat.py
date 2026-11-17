@@ -56,6 +56,17 @@ def assert_code(result: subprocess.CompletedProcess[str], code: int = 0) -> None
         )
 
 
+def stop_http_server(server, thread) -> None:
+    """shutdown, then join, then close the socket.
+
+    Closing the socket while serve_forever is inside select() prints
+    OSError WinError 10038 from the background thread on Windows.
+    """
+    server.shutdown()
+    thread.join()
+    server.server_close()
+
+
 def minimal_pdf(text: str) -> bytes:
     """A one-page PDF whose text layer is the given Latin string."""
     stream = f"BT /F1 24 Tf 40 80 Td ({text}) Tj ET".encode("ascii")
@@ -215,6 +226,7 @@ class ExampleAndHelpTests(unittest.TestCase):
         doctor = self.cli("doctor")
         assert_code(doctor)
         self.assertIn("ручной режим", doctor.stdout)
+        self.assertIn("MCP: сервер ответил на initialize", doctor.stdout)
         self.assertIn("utf-8", doctor.stdout.casefold())
         self.assertIn("Маршрутизация", doctor.stdout)
         self.assertIn("extract: cheap", doctor.stdout)
@@ -243,23 +255,20 @@ class ExampleAndHelpTests(unittest.TestCase):
         port = server.server_address[1]
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
+        self.addCleanup(stop_http_server, server, thread)
         secret = "secret-test-key-should-not-leak"
-        try:
-            result = self.cli(
-                "complete",
-                "--role",
-                "cheap",
-                "--prompt",
-                "ping",
-                env={
-                    "STRAT_LLM_API_KEY": secret,
-                    "STRAT_MODEL_CHEAP": "dummy",
-                    "STRAT_LLM_BASE_URL": f"http://127.0.0.1:{port}/v1",
-                },
-            )
-        finally:
-            server.shutdown()
-            server.server_close()
+        result = self.cli(
+            "complete",
+            "--role",
+            "cheap",
+            "--prompt",
+            "ping",
+            env={
+                "STRAT_LLM_API_KEY": secret,
+                "STRAT_MODEL_CHEAP": "dummy",
+                "STRAT_LLM_BASE_URL": f"http://127.0.0.1:{port}/v1",
+            },
+        )
         assert_code(result, 1)
         self.assertNotIn(secret, result.stdout + result.stderr)
         self.assertIn("MODE: error", result.stdout)
@@ -890,30 +899,27 @@ class WorkflowTests(unittest.TestCase):
         port = server.server_address[1]
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        try:
-            assert_code(self.cli("init", "pages", "--title", "Pages"))
-            url = f"http://127.0.0.1:{port}/plans"
-            fetched = self.cli("fetch", "pages", url)
-            assert_code(fetched)
-            self.assertIn("id: S001", fetched.stdout)
-            project = Path(self.tmp.name) / "pages"
-            saved = list((project / "sources").glob("*.md"))
-            saved = [path for path in saved if path.name != "README.md"]
-            self.assertEqual(len(saved), 1)
-            text = saved[0].read_text(encoding="utf-8")
-            self.assertIn(url, text)
-            self.assertIn("Пакет для поездки стоит 5 долларов.", text)
-            self.assertNotIn("secret-token", text)
-            rows = [json.loads(line) for line in (project / "sources.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
-            self.assertEqual(rows[0]["kind"], "web")
-            self.assertTrue(rows[0]["sha256"])
-            again = self.cli("fetch", "pages", url)
-            assert_code(again)
-            self.assertIn("Уже загружено", again.stdout)
-            self.assertEqual(len([path for path in (project / "sources").glob("*.md") if path.name != "README.md"]), 1)
-        finally:
-            server.shutdown()
-            server.server_close()
+        self.addCleanup(stop_http_server, server, thread)
+        assert_code(self.cli("init", "pages", "--title", "Pages"))
+        url = f"http://127.0.0.1:{port}/plans"
+        fetched = self.cli("fetch", "pages", url)
+        assert_code(fetched)
+        self.assertIn("id: S001", fetched.stdout)
+        project = Path(self.tmp.name) / "pages"
+        saved = list((project / "sources").glob("*.md"))
+        saved = [path for path in saved if path.name != "README.md"]
+        self.assertEqual(len(saved), 1)
+        text = saved[0].read_text(encoding="utf-8")
+        self.assertIn(url, text)
+        self.assertIn("Пакет для поездки стоит 5 долларов.", text)
+        self.assertNotIn("secret-token", text)
+        rows = [json.loads(line) for line in (project / "sources.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+        self.assertEqual(rows[0]["kind"], "web")
+        self.assertTrue(rows[0]["sha256"])
+        again = self.cli("fetch", "pages", url)
+        assert_code(again)
+        self.assertIn("Уже загружено", again.stdout)
+        self.assertEqual(len([path for path in (project / "sources").glob("*.md") if path.name != "README.md"]), 1)
         import socket
 
         closed = socket.socket()
@@ -1254,47 +1260,44 @@ class MinimumCheckTests(unittest.TestCase):
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        try:
-            assert_code(self.cli("init", "bind", "--title", "Привязка снимка"))
-            url = f"http://127.0.0.1:{server.server_address[1]}/family"
-            assert_code(self.cli("add-source", "bind", url, "--title", "Уже известный адрес"))
-            fetched = self.cli("fetch", "bind", url)
-            assert_code(fetched)
-            self.assertIn("Снимок привязан", fetched.stdout)
-            self.assertIn("id: S001", fetched.stdout)
-            project = Path(self.tmp.name) / "bind"
-            rows = [
-                json.loads(line)
-                for line in (project / "sources.jsonl").read_text(encoding="utf-8").splitlines()
-                if line.strip()
-            ]
-            self.assertEqual(len(rows), 1)
-            self.assertEqual(rows[0]["id"], "S001")
-            self.assertEqual(rows[0]["origin_url"], url)
-            self.assertTrue(str(rows[0]["sha256"]))
-            self.assertFalse(str(rows[0]["url_or_path"]).startswith("http"))
-            assert_code(
-                self.cli(
-                    "add-evidence",
-                    "bind",
-                    "--claim",
-                    "На странице сказано, что пакет стоит 5 долларов.",
-                    "--type",
-                    "fact",
-                    "--source",
-                    "S001",
-                    "--quote",
-                    "Семейный пакет стоит 5 долларов.",
-                    "--confidence",
-                    "high",
-                )
+        self.addCleanup(stop_http_server, server, thread)
+        assert_code(self.cli("init", "bind", "--title", "Привязка снимка"))
+        url = f"http://127.0.0.1:{server.server_address[1]}/family"
+        assert_code(self.cli("add-source", "bind", url, "--title", "Уже известный адрес"))
+        fetched = self.cli("fetch", "bind", url)
+        assert_code(fetched)
+        self.assertIn("Снимок привязан", fetched.stdout)
+        self.assertIn("id: S001", fetched.stdout)
+        project = Path(self.tmp.name) / "bind"
+        rows = [
+            json.loads(line)
+            for line in (project / "sources.jsonl").read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["id"], "S001")
+        self.assertEqual(rows[0]["origin_url"], url)
+        self.assertTrue(str(rows[0]["sha256"]))
+        self.assertFalse(str(rows[0]["url_or_path"]).startswith("http"))
+        assert_code(
+            self.cli(
+                "add-evidence",
+                "bind",
+                "--claim",
+                "На странице сказано, что пакет стоит 5 долларов.",
+                "--type",
+                "fact",
+                "--source",
+                "S001",
+                "--quote",
+                "Семейный пакет стоит 5 долларов.",
+                "--confidence",
+                "high",
             )
-            checked = self.cli("check", "bind", "--strict")
-            assert_code(checked)
-            self.assertNotIn("[snapshot]", checked.stdout)
-        finally:
-            server.shutdown()
-            server.server_close()
+        )
+        checked = self.cli("check", "bind", "--strict")
+        assert_code(checked)
+        self.assertNotIn("[snapshot]", checked.stdout)
 
     def test_fetch_retries_records_failure_and_skips_snapshot(self) -> None:
         import threading
@@ -1332,44 +1335,41 @@ class MinimumCheckTests(unittest.TestCase):
         port = server.server_address[1]
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
+        self.addCleanup(stop_http_server, server, thread)
         env = {"STRAT_FETCH_RETRIES": "3", "STRAT_FETCH_BACKOFF_SECONDS": "0"}
-        try:
-            assert_code(self.cli("init", "retry", "--title", "Повторы"))
-            flaky = f"http://127.0.0.1:{port}/flaky"
-            fetched = self.cli("fetch", "retry", flaky, env=env)
-            assert_code(fetched)
-            self.assertIn("id: S001", fetched.stdout)
-            self.assertGreaterEqual(Handler.flaky_hits, 3)
-            project = Path(self.tmp.name) / "retry"
-            state = json.loads((project / "state.json").read_text(encoding="utf-8"))
-            self.assertEqual(state["steps"]["fetch:" + flaky]["status"], "done")
-            again = self.cli("fetch", "retry", flaky, env=env)
-            assert_code(again)
-            self.assertIn("Уже загружено", again.stdout)
-            self.assertEqual(Handler.flaky_hits, 3)
-            forced = self.cli("fetch", "retry", flaky, "--force", env=env)
-            assert_code(forced)
-            self.assertIn("Страница обновлена", forced.stdout)
-            pages = [path for path in (project / "sources").glob("*.md") if path.name != "README.md"]
-            self.assertEqual(len(pages), 1)
-            down = f"http://127.0.0.1:{port}/down"
-            failed = self.cli("fetch", "retry", down, env=env)
-            assert_code(failed, 1)
-            self.assertIn("503", failed.stdout)
-            self.assertIn("Попыток: 3", failed.stdout)
-            self.assertIn("failed", failed.stdout)
-            state = json.loads((project / "state.json").read_text(encoding="utf-8"))
-            self.assertEqual(state["steps"]["fetch:" + down]["status"], "failed")
-            self.assertIn("503", state["steps"]["fetch:" + down]["detail"])
-            log_text = (project / "log.jsonl").read_text(encoding="utf-8")
-            self.assertIn("Загрузка не удалась", log_text)
-            resume = self.cli("resume", "retry")
-            assert_code(resume)
-            self.assertIn("503", resume.stdout)
-            self.assertIn("failed", resume.stdout)
-        finally:
-            server.shutdown()
-            server.server_close()
+        assert_code(self.cli("init", "retry", "--title", "Повторы"))
+        flaky = f"http://127.0.0.1:{port}/flaky"
+        fetched = self.cli("fetch", "retry", flaky, env=env)
+        assert_code(fetched)
+        self.assertIn("id: S001", fetched.stdout)
+        self.assertGreaterEqual(Handler.flaky_hits, 3)
+        project = Path(self.tmp.name) / "retry"
+        state = json.loads((project / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(state["steps"]["fetch:" + flaky]["status"], "done")
+        again = self.cli("fetch", "retry", flaky, env=env)
+        assert_code(again)
+        self.assertIn("Уже загружено", again.stdout)
+        self.assertEqual(Handler.flaky_hits, 3)
+        forced = self.cli("fetch", "retry", flaky, "--force", env=env)
+        assert_code(forced)
+        self.assertIn("Страница обновлена", forced.stdout)
+        pages = [path for path in (project / "sources").glob("*.md") if path.name != "README.md"]
+        self.assertEqual(len(pages), 1)
+        down = f"http://127.0.0.1:{port}/down"
+        failed = self.cli("fetch", "retry", down, env=env)
+        assert_code(failed, 1)
+        self.assertIn("503", failed.stdout)
+        self.assertIn("Попыток: 3", failed.stdout)
+        self.assertIn("failed", failed.stdout)
+        state = json.loads((project / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(state["steps"]["fetch:" + down]["status"], "failed")
+        self.assertIn("503", state["steps"]["fetch:" + down]["detail"])
+        log_text = (project / "log.jsonl").read_text(encoding="utf-8")
+        self.assertIn("Загрузка не удалась", log_text)
+        resume = self.cli("resume", "retry")
+        assert_code(resume)
+        self.assertIn("503", resume.stdout)
+        self.assertIn("failed", resume.stdout)
 
     def test_resume_names_unfinished_step_and_evidence_is_idempotent(self) -> None:
         assert_code(self.cli("init", "steps", "--title", "Шаги"))
@@ -1457,6 +1457,7 @@ class MinimumCheckTests(unittest.TestCase):
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
+        self.addCleanup(stop_http_server, server, thread)
         secret = "secret-route-key"
         env = {
             "STRAT_LLM_API_KEY": secret,
@@ -1464,40 +1465,36 @@ class MinimumCheckTests(unittest.TestCase):
             "STRAT_MODEL_STRONG": "dummy-strong",
             "STRAT_LLM_BASE_URL": f"http://127.0.0.1:{server.server_address[1]}/v1",
         }
-        try:
-            assert_code(self.cli("init", "routed", "--title", "Маршрут"))
-            ide = self.cli("complete", "--tier", "ide", "--prompt", "ping", env=env)
-            assert_code(ide)
-            self.assertIn("MODE: manual", ide.stdout)
-            self.assertEqual(calls["n"], 0)
-            missing = self.cli("complete", "--prompt", "ping")
-            assert_code(missing, 1)
-            self.assertIn("Укажите --tier", missing.stdout)
-            api = self.cli("complete", "--tier", "cheap", "--stage", "3", "--prompt", "сожми страницу", env=env)
-            assert_code(api)
-            self.assertEqual(calls["n"], 1)
-            self.assertIn("MODE: api", api.stdout)
-            self.assertIn("TIER: cheap", api.stdout)
-            self.assertIn("черновик выжимки", api.stdout)
-            self.assertIn("tier=cheap", api.stdout)
-            self.assertNotIn(secret, api.stdout + api.stderr)
-            project = Path(self.tmp.name) / "routed"
-            rows = [
-                json.loads(line)
-                for line in (project / "log.jsonl").read_text(encoding="utf-8").splitlines()
-                if line.strip()
-            ]
-            call = next(row for row in rows if row.get("message") == "Вызов complete, уровень cheap")
-            self.assertEqual(call["tier"], "cheap")
-            self.assertEqual(call["model"], "dummy-cheap")
-            self.assertEqual(call["tokens"], 16)
-            self.assertEqual(call["cost"], 0.002)
-            self.assertGreater(call["input_chars"], 0)
-            self.assertGreater(call["output_chars"], 0)
-            self.assertNotIn(secret, json.dumps(call))
-        finally:
-            server.shutdown()
-            server.server_close()
+        assert_code(self.cli("init", "routed", "--title", "Маршрут"))
+        ide = self.cli("complete", "--tier", "ide", "--prompt", "ping", env=env)
+        assert_code(ide)
+        self.assertIn("MODE: manual", ide.stdout)
+        self.assertEqual(calls["n"], 0)
+        missing = self.cli("complete", "--prompt", "ping")
+        assert_code(missing, 1)
+        self.assertIn("Укажите --tier", missing.stdout)
+        api = self.cli("complete", "--tier", "cheap", "--stage", "3", "--prompt", "сожми страницу", env=env)
+        assert_code(api)
+        self.assertEqual(calls["n"], 1)
+        self.assertIn("MODE: api", api.stdout)
+        self.assertIn("TIER: cheap", api.stdout)
+        self.assertIn("черновик выжимки", api.stdout)
+        self.assertIn("tier=cheap", api.stdout)
+        self.assertNotIn(secret, api.stdout + api.stderr)
+        project = Path(self.tmp.name) / "routed"
+        rows = [
+            json.loads(line)
+            for line in (project / "log.jsonl").read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        call = next(row for row in rows if row.get("message") == "Вызов complete, уровень cheap")
+        self.assertEqual(call["tier"], "cheap")
+        self.assertEqual(call["model"], "dummy-cheap")
+        self.assertEqual(call["tokens"], 16)
+        self.assertEqual(call["cost"], 0.002)
+        self.assertGreater(call["input_chars"], 0)
+        self.assertGreater(call["output_chars"], 0)
+        self.assertNotIn(secret, json.dumps(call))
 
 
 if __name__ == "__main__":

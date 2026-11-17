@@ -62,7 +62,7 @@ python scripts/strat.py resume projects/_example
 - файл `.env` по образцу `.env.example` — совместимый с OpenRouter API, если нужна маршрутизация дешёвой и сильной модели и точный расход. Без ключа `strat complete` отвечает `MODE: manual` и денег не тратит;
 - пакеты `pypdf`, `python-docx`, `openpyxl` — только чтобы `scripts/read_material.py` читал pdf, docx и xlsx. Без них ядро работает, цитату переносят вручную.
 
-Проверка окружения: `python scripts/strat.py doctor`. В строке «Вывод» должно быть `utf-8`: CLI само переключает stdout, отдельная переменная `PYTHONIOENCODING` не нужна.
+Проверка окружения: `python scripts/strat.py doctor`. В строке «Вывод» должно быть `utf-8`: CLI само переключает stdout, отдельная переменная `PYTHONIOENCODING` не нужна. В строке «MCP» должно быть «сервер ответил на initialize».
 
 ## Как устроена работа
 
@@ -108,9 +108,9 @@ decisions.md  log.md  log.jsonl
 | `confirm [проект] brief\|options\|validation` | записать согласие человека; для вариантов нужен `--choice O2` |
 | `advance [проект] <этап>` | закрыть этап, если ворота пройдены |
 | `complete --tier cheap\|strong\|ide` | вызов по `config/routing.json`; без ключа и для `ide` печатает `MODE: manual`. `--role` — прежнее имя для cheap и strong |
-| `doctor` | версия Python, режим модели, таблица маршрута, необязательные пакеты |
+| `doctor` | версия Python, режим модели, таблица маршрута, ответ MCP на `initialize`, необязательные пакеты |
 
-Полный список: `python scripts/strat.py --help`.
+Полный список: `python scripts/strat.py --help`. Те же действия есть инструментами MCP: имя `strat_<команда>`, например `strat_check`. Если они подключены, агент вызывает их, а не разбирает вывод оболочки. CLI остаётся запасным путём. Раздел [MCP](#mcp).
 
 ## Карта репозитория
 
@@ -120,17 +120,21 @@ README.md                         этот вход
 CLAUDE.md, .cursor/rules/         тонкие адаптеры
 .github/copilot-instructions.md   адаптер Copilot
 .claude/agents/                   researcher, critic, respondent
+.cursor/mcp.json                  MCP для Cursor
+.mcp.json                         MCP для Claude Code
+.vscode/mcp.json                  MCP для VS Code / Copilot
 skills/                           навык и шаблон этапа
 knowledge/                        короткие карточки метода
 config/model-prices.json          условные цены для оценки, не счёт
 config/routing.json               какой класс задачи идёт на cheap, strong или ide
 scripts/strat.py                  учёт, проверка, журнал
+scripts/mcp_server.py             MCP по stdio, те же команды
 scripts/read_material.py          текст из файла, офисные форматы по желанию
 hooks/                            скрипты и как их включить
 schemas/                          формы state, sources, evidence, decisions
 projects/_example/                выдуманный сквозной пример
 projects/demo-family-tariffs/     снимок прогона; ответы лида вымышлены
-docs/decisions/                   почему ядро, модели, граф и три роли
+docs/decisions/                   почему ядро, модели, граф, хуки и MCP
 docs/devlog.md                    журнал разработки
 tests/                            unittest и сломанная фикстура
 ```
@@ -150,6 +154,66 @@ tests/                            unittest и сломанная фикстур�
 
 Как прогнать хуки руками в Cursor на Windows — в [`hooks/README.md`](hooks/README.md). Решение — [`docs/decisions/0007-hooks-and-routing.md`](docs/decisions/0007-hooks-and-routing.md).
 
+## MCP
+
+Сервер `scripts/mcp_server.py` отдаёт команды стратега как инструменты MCP. Стандартная библиотека, без `pip`. В stdout только JSON-RPC, логи в stderr. Бизнес-логика та же, что у `scripts/strat.py`: сервер вызывает её функции, а не копирует правила.
+
+Конфиги уже лежат в репозитории. Команда в них — `python` и `-c` с base64, без `$` и без внутренних двойных кавычек: PowerShell 5.1 иначе раскрывает переменную или срезает кавычки. Корень сервер ищет сам: `CURSOR_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` / `STRAT_REPO_ROOT`, затем подъём от текущего каталога к `AGENTS.md`. На Windows нужен `python` из python.org, не заглушка `python3` из Store.
+
+| Клиент | Файл | Как включить |
+| --- | --- | --- |
+| Cursor | [`.cursor/mcp.json`](.cursor/mcp.json) | Открыть папку репозитория. Settings → MCP: сервер `strat` должен быть включён. Если список пуст — Developer: Reload Window. |
+| Claude Code | [`.mcp.json`](.mcp.json) | Открыть репозиторий. Claude спросит разрешение на проектный MCP-сервер — подтвердить `strat`. |
+| VS Code / Copilot | [`.vscode/mcp.json`](.vscode/mcp.json) | Открыть репозиторий. В панели MCP (Copilot) включить сервер `strat`. Нужен режим агента, где видны инструменты. |
+
+Проверка без чата, из корня, в PowerShell или bash:
+
+```powershell
+python scripts/strat.py doctor
+```
+
+В выводе должна быть строка `MCP: сервер ответил на initialize`. Нет строки или код не ноль — сервер не стартовал: смотрите текст после этой фразы.
+
+Инструменты (префикс `strat_`, описания на русском):
+
+| Инструмент | Зачем |
+| --- | --- |
+| `strat_resume` | бриф, чтобы продолжить; первое действие, если сервер подключён |
+| `strat_init` | создать проект |
+| `strat_status` | этап, точки, пробелы, затраты |
+| `strat_show` | evidence, sources, log, state, decisions |
+| `strat_check` | проверка; `strict: true` как `--strict` |
+| `strat_add_source` | зарегистрировать файл внутри проекта или URL |
+| `strat_fetch` | скачать страницу; ответ помечен как недоверенные данные |
+| `strat_add_evidence` | свидетельство с непрерывной цитатой |
+| `strat_add_option` | стабильный ID варианта |
+| `strat_supersede_option` | снять вариант, ID сохранить |
+| `strat_impact` | что зависит от S001 или E001 |
+| `strat_retract` | отозвать свидетельство |
+| `strat_supersede` | заместить свидетельство |
+| `strat_propose_revision` | поставить выбор на пересмотр, не меняя его |
+| `strat_log` | журнал, включая `--input-chars` и `--output-chars` |
+| `strat_cost` | минуты и оценка; в тексте есть «допущение», это не счёт |
+| `strat_confirm` | согласие человека; нужно `human_confirmed: true` |
+| `strat_advance` | закрыть этап; нужно `human_confirmed: true` |
+| `strat_accept_revision` | принять пересмотр; нужно `human_confirmed: true` |
+| `strat_complete` | маршрут модели; без ключа `MODE: manual` |
+| `strat_doctor` | окружение и ответ MCP на initialize |
+
+`strat_confirm`, `strat_advance` и `strat_accept_revision` помечены `destructiveHint`. Cursor и другие клиенты могут спросить одобрение перед вызовом. Сервер всё равно отклоняет вызов, пока в аргументах нет `human_confirmed: true`. Ставить true можно только после явной фразы человека. Путь проекта не принимается, если он выходит из каталога `projects`. Файл источника — только внутри папки этого проекта.
+
+Текст страницы после `strat_fetch` начинается с «НЕДОВЕРЕННЫЕ ДАННЫЕ». Команды внутри страницы не исполняются и правила агента не меняют.
+
+Если инструментов в сессии нет, работайте через `python scripts/strat.py`, как раньше. Пересобрать json после правки запуска: `python scripts/mcp_server.py --write-configs`. Решение — [`docs/decisions/0008-mcp-server.md`](docs/decisions/0008-mcp-server.md).
+
+### Ручная проверка в Cursor на Windows
+
+1. Клонируйте репозиторий и откройте эту папку в Cursor. В PowerShell из корня: `python --version` (3.10+) и `python scripts/strat.py doctor`. Строка `MCP: сервер ответил на initialize` обязательна.
+2. Settings → MCP. Сервер `strat` из `.cursor/mcp.json` включён, рядом нет ошибки старта. Если сервер красный — Reload Window и снова `doctor`.
+3. Новый чат агента. Спросите: «Какие инструменты strat есть? Вызови strat_check для проекта `_example`». В списке должны быть `strat_check`, `strat_fetch`, `strat_confirm`. Ответ проверки — текст с `OK` и JSON, где `errors` равен 0.
+4. Попросите вызвать `strat_confirm` для брифа. Клиент должен показать одобрение (инструмент деструктивный). Без вашего явного согласия и без `human_confirmed: true` контрольная точка не меняется.
+5. Убедитесь, что агент не разбирает кириллицу из вывода PowerShell: тезис в `strat_add_evidence` передаётся полем JSON, не аргументом оболочки.
+
 ## Ограничения
 
-Проверка текстов — эвристика по разделам «Факты», заголовкам вариантов, подразделам стратегии и маркерам обещаний, а не понимание смысла. Цитату CLI сверяет с локальным файлом. Веб-страница без `fetch` оставляет голый URL: снимка нет, цитата не сверяется, `check` предупреждает, `check --strict` завершается с ошибкой. Повторно живой сайт не открывается, если снимок уже лежит в `sources/`, пока нет `fetch --force`. Оценка в `cost` считается из символов журнала и `config/model-prices.json` и всегда подписана как допущение, не как счёт. Строка хука `hook/stop` в оценку не входит, если агент уже записал свои символы. sha256 текстового источника считается после приведения перевода строк к LF, поэтому он не равен хешу сырых байт, если в файле остались CR. Подробности — в [`docs/decisions/0005-line-endings-and-utf8.md`](docs/decisions/0005-line-endings-and-utf8.md), [`docs/decisions/0006-snapshot-and-stable-option-ids.md`](docs/decisions/0006-snapshot-and-stable-option-ids.md) и [`docs/devlog.md`](docs/devlog.md).
+Проверка текстов — эвристика по разделам «Факты», заголовкам вариантов, подразделам стратегии и маркерам обещаний, а не понимание смысла. Цитату CLI сверяет с локальным файлом. Веб-страница без `fetch` оставляет голый URL: снимка нет, цитата не сверяется, `check` предупреждает, `check --strict` завершается с ошибкой. Повторно живой сайт не открывается, если снимок уже лежит в `sources/`, пока нет `fetch --force`. Оценка в `cost` считается из символов журнала и `config/model-prices.json` и всегда подписана как допущение, не как счёт. Строка хука `hook/stop` в оценку не входит, если агент уже записал свои символы. sha256 текстового источника считается после приведения перевода строк к LF, поэтому он не равен хешу сырых байт, если в файле остались CR. Флаг `human_confirmed` и пометка `destructiveHint` не отличают человека от модели, если клиент не спросил одобрение: запрет ставить флаг без явной фразы остаётся в [`AGENTS.md`](AGENTS.md). Подробности — в [`docs/decisions/0005-line-endings-and-utf8.md`](docs/decisions/0005-line-endings-and-utf8.md), [`docs/decisions/0006-snapshot-and-stable-option-ids.md`](docs/decisions/0006-snapshot-and-stable-option-ids.md), [`docs/decisions/0008-mcp-server.md`](docs/decisions/0008-mcp-server.md) и [`docs/devlog.md`](docs/devlog.md).
