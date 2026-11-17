@@ -14,6 +14,8 @@
     "validation": "strong",
     "interview": "ide",
     "respondent": "cheap",
-    "revise": "strong"
+    "revise": "strong",
+    "analysis": "cheap",
+    "ux-media": "ide"
   }
 }

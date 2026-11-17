@@ -57,6 +57,8 @@ REQUIRED_TOOLS = {
     "strat_advance",
     "strat_complete",
     "strat_doctor",
+    "strat_analyze",
+    "strat_inspect",
 }
 HUMAN_TOOLS = {"strat_confirm", "strat_advance", "strat_accept_revision"}
 

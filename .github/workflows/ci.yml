@@ -25,3 +25,5 @@ jobs:
         run: python scripts/strat.py check projects/demo-family-tariffs
       - name: Check the committed demo
         run: python scripts/strat.py check projects/demo-family-tariffs
+      - name: Check the analysis demo
+        run: python scripts/strat.py check projects/demo-analysis

@@ -22,6 +22,15 @@
       "items": { "type": "string", "pattern": "^E\\d{3,}$" }
     },
     "retracted_reason": { "type": "string" },
-    "retracted_at": { "type": "string" }
+    "retracted_at": { "type": "string" },
+    "analysis_id": { "type": "string", "pattern": "^A\\d{3,}$" },
+    "metric": { "type": "string" },
+    "value": { "type": "string" },
+    "input_sha256": { "type": "string" },
+    "analysis_input": { "type": "string" },
+    "inspect_id": { "type": "string", "pattern": "^M\\d{3,}$" },
+    "snapshot_path": { "type": "string" },
+    "snapshot_sha256": { "type": "string" },
+    "model_description": { "type": "boolean" }
   }
 }

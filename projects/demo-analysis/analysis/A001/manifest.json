@@ -1,0 +1,16 @@
+{
+  "chart_note": "matplotlib не установлен, график не построен",
+  "chart_path": null,
+  "id": "A001",
+  "input_path": "analysis/A001/input.csv",
+  "input_sha256": "9f40cfceb15425f57f51f437ca12a1ac10d1e2556af4bb6d4781fc9cd2763246",
+  "mode": "spec",
+  "origin": "sources/tariffs.csv",
+  "report_path": "analysis/A001/report.md",
+  "result_path": "analysis/A001/result.json",
+  "script_path": null,
+  "spec_path": "analysis/A001/spec.json",
+  "status": "done",
+  "synthetic": true,
+  "timeout": 5.0
+}
