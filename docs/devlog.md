@@ -4,6 +4,8 @@
 
 Хуки были написаны и не подключены, `complete` никто не вызывал, а обрыв `fetch` не оставлял в состоянии, какой URL пробовали. Включены `.cursor/hooks.json` и `.claude/settings.json`: проверка после правки проекта, отказ писать `.env` и исполнять команду из снимка источника, на `stop` — прирост символов в журнал. Уровень задачи задаёт `config/routing.json`, навык вызывает `complete --tier`, без ключа остаётся подписка IDE. `doctor` печатает таблицу. `fetch` пропускает уже снятый URL без `--force`, повторяет 5xx и пишет шаг `failed`, если страница так и не открылась (тот же класс сбоя, что HTTP 503 у T2). `resume` называет незавершённый шаг. Повторный `add-evidence` с той же активной четвёркой type, source, claim, quote не создаёт вторую запись. Решение: `docs/decisions/0007-hooks-and-routing.md`.
 
+Живой `agent.ps1` на Windows запускал хук не из корня репозитория, а из `C:\`, и `python hooks/guard_shell.py` не открывался. Команда в `.cursor/hooks.json` теперь находит корень по `CURSOR_PROJECT_DIR` внутри Python и вызывает `hooks/run.py`. Claude Code по-прежнему использует `$CLAUDE_PROJECT_DIR`.
+
 ## 2026-11-17 — обязательный минимум: снимки, стратегия, стабильные ID, оценка
 
 Прогон 6 от 4 ноября (headless Cursor, новый проект, `fetch`, 12 активных свидетельств из 8 источников: Holafly, TelecomLead, vefru, четыре страницы Airalo, Digital Trends) оставил три дыры: E005 без цитаты, E012 с низкой уверенностью в опоре рекомендации, номера вариантов съехали между ходами. Отчёт: `docs/manual-tests/run6.md`. Решение: `docs/decisions/0006-snapshot-and-stable-option-ids.md`.

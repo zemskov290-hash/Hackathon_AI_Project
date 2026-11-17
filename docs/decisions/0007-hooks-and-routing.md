@@ -9,7 +9,11 @@
 
 ## Решение
 
-Хуки подключены в формате Cursor (`.cursor/hooks.json`) и Claude Code (`.claude/settings.json`). Команда везде `python hooks/<скрипт>.py`, чтобы один и тот же файл шёл из PowerShell на Windows и из bash. `failClosed` не ставится.
+Хуки подключены в формате Cursor (`.cursor/hooks.json`) и Claude Code (`.claude/settings.json`). `failClosed` не ставится.
+
+Документация Cursor ([Hooks](https://cursor.com/docs/hooks)) пишет, что проектный хук запускается из корня репозитория, путь вида `.cursor/hooks/script.sh` считается от этого корня, а в окружении всегда есть `CURSOR_PROJECT_DIR` и `CLAUDE_PROJECT_DIR`. На Windows команда идёт через PowerShell. Живой `agent.ps1` это нарушил: рабочий каталог был `C:\`, и `python hooks/guard_shell.py` искал `C:\hooks\guard_shell.py`. Относительный путь, даже `.cursor/hooks/run.py`, при таком каталоге тоже не откроется.
+
+Команда в `.cursor/hooks.json` поэтому не зависит от каталога. Это `python -c "…" <имя>`: код на Python читает `CURSOR_PROJECT_DIR` или `CLAUDE_PROJECT_DIR` из окружения процесса (без подстановки `$` оболочкой, чтобы строка была одной и для PowerShell, и для cmd, и для bash), находит `hooks/run.py` и передаёт ему stdin. Если переменных нет, тот же код поднимается от текущего каталога к `AGENTS.md`. Если корня нет, наружу уходит `{"permission":"allow"}` для сторожей и `{}` для остальных, код 0: отсутствующий скрипт не становится замком. Внутренний сбой скрипта тоже не блокирует ход. Claude Code вызывает `python "$CLAUDE_PROJECT_DIR/hooks/run.py" <имя>`: после раскрытия переменной путь абсолютный.
 
 - `afterFileEdit` и `postToolUse` для записи файла в `projects/<проект>/` запускают `strat check` и показывают ошибки. Ненулевой код проверки не становится ненулевым кодом хука.
 - `beforeShellExecution` отклоняет запись `.env`, чтение секрета в контекст, `git add` ключей и команду, которая дословно нашлась в снимке `sources/`. `beforeReadFile` не отдаёт модели `.env` и файлы ключей. `.env.example` не секрет.

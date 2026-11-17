@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -209,6 +212,111 @@ class HookStdinTests(unittest.TestCase):
         no_transcript = run_hook("stage_end.py", json.dumps({"status": "completed", "loop_count": 0}), env=self.env)
         self.assertEqual(no_transcript.returncode, 0)
         self.assertIn("нет транскрипта", no_transcript.stderr)
+
+    def test_configured_commands_find_scripts_from_another_cwd(self) -> None:
+        """Cursor CLI may spawn hooks with cwd outside the repo. The command must still start."""
+        hooks = json.loads((ROOT / ".cursor" / "hooks.json").read_text(encoding="utf-8"))
+        claude = json.loads((ROOT / ".claude" / "settings.json").read_text(encoding="utf-8"))
+        commands = [
+            item["command"]
+            for items in hooks["hooks"].values()
+            for item in items
+        ]
+        claude_commands = [
+            hook["command"]
+            for group in claude["hooks"].values()
+            for entry in group
+            for hook in entry["hooks"]
+        ]
+        self.assertTrue(commands)
+        self.assertTrue(all("$CLAUDE_PROJECT_DIR" in command for command in claude_commands))
+        payloads = {
+            "guard_shell": '{"command":"python --version"}\n',
+            "guard_read": '{"file_path":"note.txt","content":"hi"}\n',
+            "post_write": json.dumps({"file_path": str(ROOT / "README.md"), "edits": []}) + "\n",
+            "stage_end": '{"status":"completed","loop_count":0}\n',
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            env = os.environ.copy()
+            env["CURSOR_PROJECT_DIR"] = str(ROOT)
+            env.pop("CLAUDE_PROJECT_DIR", None)
+            env["STRAT_PROJECTS_DIR"] = tmp
+            bindir = Path(tmp) / "bin"
+            bindir.mkdir()
+            self._ensure_python(env, bindir)
+            for command in commands:
+                name = command.rsplit(" ", 1)[-1]
+                result = subprocess.run(
+                    command,
+                    shell=True,
+                    cwd=tmp,
+                    env=env,
+                    input=payloads[name],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=60,
+                )
+                blob = result.stdout + result.stderr
+                self.assertEqual(result.returncode, 0, command[:80] + "\n" + blob)
+                self.assertNotIn("No such file", blob)
+                self.assertNotIn("Errno 2", blob)
+                self.assertNotIn("can't open file", blob)
+                self.assertNotIn("hook root not found", blob)
+                if name.startswith("guard_"):
+                    self.assertEqual(json.loads(result.stdout)["permission"], "allow")
+                if name == "stage_end":
+                    self.assertEqual(json.loads(result.stdout), {})
+            denied = subprocess.run(
+                hooks["hooks"]["beforeShellExecution"][0]["command"],
+                shell=True,
+                cwd=tmp,
+                env=env,
+                input='{"command":"echo KEY=1 > .env"}\n',
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=30,
+            )
+            self.assertEqual(denied.returncode, 0, denied.stderr)
+            self.assertEqual(json.loads(denied.stdout)["permission"], "deny")
+            bash = shutil.which("bash")
+            if bash:
+                claude_env = dict(env)
+                claude_env["CLAUDE_PROJECT_DIR"] = str(ROOT)
+                claude_env.pop("CURSOR_PROJECT_DIR", None)
+                for command in claude_commands:
+                    name = command.rsplit(" ", 1)[-1]
+                    result = subprocess.run(
+                        [bash, "-c", command],
+                        cwd=tmp,
+                        env=claude_env,
+                        input=payloads[name],
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        timeout=60,
+                    )
+                    blob = result.stdout + result.stderr
+                    self.assertEqual(result.returncode, 0, command + "\n" + blob)
+                    self.assertNotIn("No such file", blob)
+                    self.assertNotIn("Errno 2", blob)
+
+    def _ensure_python(self, env: dict[str, str], bindir: Path) -> None:
+        if shutil.which("python", path=env.get("PATH")):
+            return
+        target = os.environ.get("PYTHON", sys.executable)
+        if os.name == "nt":
+            script = bindir / "python.cmd"
+            script.write_text(f'@echo off\r\n"{target}" %*\r\n', encoding="utf-8")
+        else:
+            script = bindir / "python"
+            script.write_text(f'#!/bin/sh\nexec "{target}" "$@"\n', encoding="utf-8")
+            script.chmod(script.stat().st_mode | stat.S_IEXEC)
+        env["PATH"] = str(bindir) + os.pathsep + env.get("PATH", "")
 
 
 if __name__ == "__main__":

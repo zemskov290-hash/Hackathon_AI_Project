@@ -137,7 +137,7 @@ tests/                            unittest и сломанная фикстур�
 
 ## Хуки, маршрут и повтор шага
 
-Хуки включены. Cursor берёт [`.cursor/hooks.json`](.cursor/hooks.json), Claude Code — [`.claude/settings.json`](.claude/settings.json). Оба запускают `python hooks/<скрипт>.py`. Формат событий Cursor сверен с документацией: `afterFileEdit`, `postToolUse`, `beforeShellExecution`, `beforeReadFile`, `stop`.
+Хуки включены. Cursor берёт [`.cursor/hooks.json`](.cursor/hooks.json), Claude Code — [`.claude/settings.json`](.claude/settings.json). Документация Cursor говорит, что проектный хук стартует из корня репозитория и всегда получает `CURSOR_PROJECT_DIR`. CLI на Windows в живом прогоне стартовал из `C:\`, и относительный `hooks/guard_shell.py` не находился. Поэтому команда в `hooks.json` — это `python -c`, который берёт корень из `CURSOR_PROJECT_DIR` или `CLAUDE_PROJECT_DIR` и только потом запускает `hooks/run.py`. В `$` и `%` она не нуждается, так её одинаково читают PowerShell, cmd и bash. Claude Code по-прежнему раскрывает `python "$CLAUDE_PROJECT_DIR/hooks/run.py"`. События: `afterFileEdit`, `postToolUse`, `beforeShellExecution`, `beforeReadFile`, `stop`.
 
 - После правки файла внутри `projects/<проект>/` хук запускает `strat check` и печатает ошибки. Код проверки не блокирует ход.
 - Оболочка не получит запись `.env`, коммит ключа и команду, которая дословно лежит в снимке `sources/`. `.env.example` не секрет. Чтение `.env` в контекст модели тоже отклоняется.

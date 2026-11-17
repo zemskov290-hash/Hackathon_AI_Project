@@ -2,19 +2,35 @@
   "version": 1,
   "hooks": {
     "afterFileEdit": [
-      { "command": "python hooks/post_write.py", "timeout": 60 }
+      {
+        "command": "python -c \"import os,sys,runpy; from pathlib import Path; r=next((parent for key in ('CURSOR_PROJECT_DIR','CLAUDE_PROJECT_DIR') for start in ([Path(os.environ[key])] if os.environ.get(key) else []) for parent in [start,*start.parents] if (parent/'hooks'/'run.py').is_file() and (parent/'AGENTS.md').is_file()), None); r=r if r is not None else next((parent for parent in [Path.cwd(),*Path.cwd().parents] if (parent/'hooks'/'run.py').is_file() and (parent/'AGENTS.md').is_file()), None); name=sys.argv[1] if len(sys.argv)>1 else ''; q=chr(34); body=('{'+q+'permission'+q+':'+q+'allow'+q+'}') if name.startswith('guard_') else '{}'; None if r is not None else (sys.stdout.write(body+chr(10)), sys.stderr.write('hook root not found'+chr(10)), sys.exit(0)); sys.path[:0]=[str(r/'scripts'),str(r/'hooks')]; import stdio_utf8; stdio_utf8.configure_stdio(); sys.argv=['run.py',name]; runpy.run_path(str(r/'hooks'/'run.py'), run_name='__main__')\" post_write",
+        "timeout": 60
+      }
     ],
     "postToolUse": [
-      { "command": "python hooks/post_write.py", "matcher": "Write", "timeout": 60 }
+      {
+        "command": "python -c \"import os,sys,runpy; from pathlib import Path; r=next((parent for key in ('CURSOR_PROJECT_DIR','CLAUDE_PROJECT_DIR') for start in ([Path(os.environ[key])] if os.environ.get(key) else []) for parent in [start,*start.parents] if (parent/'hooks'/'run.py').is_file() and (parent/'AGENTS.md').is_file()), None); r=r if r is not None else next((parent for parent in [Path.cwd(),*Path.cwd().parents] if (parent/'hooks'/'run.py').is_file() and (parent/'AGENTS.md').is_file()), None); name=sys.argv[1] if len(sys.argv)>1 else ''; q=chr(34); body=('{'+q+'permission'+q+':'+q+'allow'+q+'}') if name.startswith('guard_') else '{}'; None if r is not None else (sys.stdout.write(body+chr(10)), sys.stderr.write('hook root not found'+chr(10)), sys.exit(0)); sys.path[:0]=[str(r/'scripts'),str(r/'hooks')]; import stdio_utf8; stdio_utf8.configure_stdio(); sys.argv=['run.py',name]; runpy.run_path(str(r/'hooks'/'run.py'), run_name='__main__')\" post_write",
+        "matcher": "Write",
+        "timeout": 60
+      }
     ],
     "beforeShellExecution": [
-      { "command": "python hooks/guard_shell.py", "timeout": 15 }
+      {
+        "command": "python -c \"import os,sys,runpy; from pathlib import Path; r=next((parent for key in ('CURSOR_PROJECT_DIR','CLAUDE_PROJECT_DIR') for start in ([Path(os.environ[key])] if os.environ.get(key) else []) for parent in [start,*start.parents] if (parent/'hooks'/'run.py').is_file() and (parent/'AGENTS.md').is_file()), None); r=r if r is not None else next((parent for parent in [Path.cwd(),*Path.cwd().parents] if (parent/'hooks'/'run.py').is_file() and (parent/'AGENTS.md').is_file()), None); name=sys.argv[1] if len(sys.argv)>1 else ''; q=chr(34); body=('{'+q+'permission'+q+':'+q+'allow'+q+'}') if name.startswith('guard_') else '{}'; None if r is not None else (sys.stdout.write(body+chr(10)), sys.stderr.write('hook root not found'+chr(10)), sys.exit(0)); sys.path[:0]=[str(r/'scripts'),str(r/'hooks')]; import stdio_utf8; stdio_utf8.configure_stdio(); sys.argv=['run.py',name]; runpy.run_path(str(r/'hooks'/'run.py'), run_name='__main__')\" guard_shell",
+        "timeout": 15
+      }
     ],
     "beforeReadFile": [
-      { "command": "python hooks/guard_read.py", "timeout": 10 }
+      {
+        "command": "python -c \"import os,sys,runpy; from pathlib import Path; r=next((parent for key in ('CURSOR_PROJECT_DIR','CLAUDE_PROJECT_DIR') for start in ([Path(os.environ[key])] if os.environ.get(key) else []) for parent in [start,*start.parents] if (parent/'hooks'/'run.py').is_file() and (parent/'AGENTS.md').is_file()), None); r=r if r is not None else next((parent for parent in [Path.cwd(),*Path.cwd().parents] if (parent/'hooks'/'run.py').is_file() and (parent/'AGENTS.md').is_file()), None); name=sys.argv[1] if len(sys.argv)>1 else ''; q=chr(34); body=('{'+q+'permission'+q+':'+q+'allow'+q+'}') if name.startswith('guard_') else '{}'; None if r is not None else (sys.stdout.write(body+chr(10)), sys.stderr.write('hook root not found'+chr(10)), sys.exit(0)); sys.path[:0]=[str(r/'scripts'),str(r/'hooks')]; import stdio_utf8; stdio_utf8.configure_stdio(); sys.argv=['run.py',name]; runpy.run_path(str(r/'hooks'/'run.py'), run_name='__main__')\" guard_read",
+        "timeout": 10
+      }
     ],
     "stop": [
-      { "command": "python hooks/stage_end.py", "timeout": 20 }
+      {
+        "command": "python -c \"import os,sys,runpy; from pathlib import Path; r=next((parent for key in ('CURSOR_PROJECT_DIR','CLAUDE_PROJECT_DIR') for start in ([Path(os.environ[key])] if os.environ.get(key) else []) for parent in [start,*start.parents] if (parent/'hooks'/'run.py').is_file() and (parent/'AGENTS.md').is_file()), None); r=r if r is not None else next((parent for parent in [Path.cwd(),*Path.cwd().parents] if (parent/'hooks'/'run.py').is_file() and (parent/'AGENTS.md').is_file()), None); name=sys.argv[1] if len(sys.argv)>1 else ''; q=chr(34); body=('{'+q+'permission'+q+':'+q+'allow'+q+'}') if name.startswith('guard_') else '{}'; None if r is not None else (sys.stdout.write(body+chr(10)), sys.stderr.write('hook root not found'+chr(10)), sys.exit(0)); sys.path[:0]=[str(r/'scripts'),str(r/'hooks')]; import stdio_utf8; stdio_utf8.configure_stdio(); sys.argv=['run.py',name]; runpy.run_path(str(r/'hooks'/'run.py'), run_name='__main__')\" stage_end",
+        "timeout": 20
+      }
     ]
   }
 }

@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/hooks/guard_shell.py\""
+            "command": "python \"$CLAUDE_PROJECT_DIR/hooks/run.py\" guard_shell"
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/hooks/post_write.py\""
+            "command": "python \"$CLAUDE_PROJECT_DIR/hooks/run.py\" post_write"
           }
         ]
       }
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/hooks/stage_end.py\""
+            "command": "python \"$CLAUDE_PROJECT_DIR/hooks/run.py\" stage_end"
           }
         ]
       }
