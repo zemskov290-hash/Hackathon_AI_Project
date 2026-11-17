@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import importlib.util
 import json
 import os
 import shutil
@@ -214,22 +216,24 @@ class HookStdinTests(unittest.TestCase):
         self.assertIn("нет транскрипта", no_transcript.stderr)
 
     def test_configured_commands_find_scripts_from_another_cwd(self) -> None:
-        """Cursor CLI may spawn hooks with cwd outside the repo. The command must still start."""
+        """Both hook files must start when cwd is outside the repo, including under PowerShell."""
+        launcher = self._launcher()
         hooks = json.loads((ROOT / ".cursor" / "hooks.json").read_text(encoding="utf-8"))
         claude = json.loads((ROOT / ".claude" / "settings.json").read_text(encoding="utf-8"))
-        commands = [
-            item["command"]
-            for items in hooks["hooks"].values()
-            for item in items
-        ]
+        cursor_commands = [item["command"] for items in hooks["hooks"].values() for item in items]
         claude_commands = [
             hook["command"]
             for group in claude["hooks"].values()
             for entry in group
             for hook in entry["hooks"]
         ]
-        self.assertTrue(commands)
-        self.assertTrue(all("$CLAUDE_PROJECT_DIR" in command for command in claude_commands))
+        configured = cursor_commands + claude_commands
+        self.assertTrue(configured)
+        for command in configured:
+            self.assertNotIn("$", command)
+            self.assertNotIn("%", command)
+            name = command.rsplit(" ", 1)[-1]
+            self.assertEqual(command, launcher.command_for(name))
         payloads = {
             "guard_shell": '{"command":"python --version"}\n',
             "guard_read": '{"file_path":"note.txt","content":"hi"}\n',
@@ -244,22 +248,11 @@ class HookStdinTests(unittest.TestCase):
             bindir = Path(tmp) / "bin"
             bindir.mkdir()
             self._ensure_python(env, bindir)
-            for command in commands:
+            for command in configured:
                 name = command.rsplit(" ", 1)[-1]
-                result = subprocess.run(
-                    command,
-                    shell=True,
-                    cwd=tmp,
-                    env=env,
-                    input=payloads[name],
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    timeout=60,
-                )
+                result = self._run_as_host(command, tmp, env, payloads[name])
                 blob = result.stdout + result.stderr
-                self.assertEqual(result.returncode, 0, command[:80] + "\n" + blob)
+                self.assertEqual(result.returncode, 0, blob)
                 self.assertNotIn("No such file", blob)
                 self.assertNotIn("Errno 2", blob)
                 self.assertNotIn("can't open file", blob)
@@ -268,42 +261,63 @@ class HookStdinTests(unittest.TestCase):
                     self.assertEqual(json.loads(result.stdout)["permission"], "allow")
                 if name == "stage_end":
                     self.assertEqual(json.loads(result.stdout), {})
-            denied = subprocess.run(
+            bare = os.environ.copy()
+            bare.pop("CURSOR_PROJECT_DIR", None)
+            bare.pop("CLAUDE_PROJECT_DIR", None)
+            bare["PATH"] = env["PATH"]
+            bare["STRAT_PROJECTS_DIR"] = tmp
+            rooted = json.dumps(
+                {"command": "echo KEY=1 > .env", "cwd": tmp, "workspace_roots": [str(ROOT)]}
+            ) + "\n"
+            decisions = []
+            for command in (
                 hooks["hooks"]["beforeShellExecution"][0]["command"],
-                shell=True,
-                cwd=tmp,
+                claude["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
+            ):
+                result = self._run_as_host(command, tmp, bare, rooted)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                body = json.loads(result.stdout)
+                self.assertEqual(body["permission"], "deny", result.stdout)
+                self.assertNotIn("hooks\\run.py", result.stderr)
+                self.assertNotIn("hooks/run.py", result.stderr + result.stdout)
+                decisions.append(body["permission"])
+            self.assertEqual(decisions, ["deny", "deny"])
+
+    def _launcher(self):
+        spec = importlib.util.spec_from_file_location("strat_hook_launcher", ROOT / "hooks" / "launcher.py")
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        return module
+
+    def _run_as_host(self, command: str, cwd: str, env: dict, payload: str) -> subprocess.CompletedProcess[str]:
+        """PowerShell on Windows, the default shell elsewhere. Never WSL bash."""
+        if os.name == "nt":
+            encoded = base64.b64encode(command.encode("utf-16le")).decode("ascii")
+            argv = ["powershell", "-NoProfile", "-EncodedCommand", encoded]
+            return subprocess.run(
+                argv,
+                cwd=cwd,
                 env=env,
-                input='{"command":"echo KEY=1 > .env"}\n',
+                input=payload,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                timeout=30,
+                timeout=60,
             )
-            self.assertEqual(denied.returncode, 0, denied.stderr)
-            self.assertEqual(json.loads(denied.stdout)["permission"], "deny")
-            bash = shutil.which("bash")
-            if bash:
-                claude_env = dict(env)
-                claude_env["CLAUDE_PROJECT_DIR"] = str(ROOT)
-                claude_env.pop("CURSOR_PROJECT_DIR", None)
-                for command in claude_commands:
-                    name = command.rsplit(" ", 1)[-1]
-                    result = subprocess.run(
-                        [bash, "-c", command],
-                        cwd=tmp,
-                        env=claude_env,
-                        input=payloads[name],
-                        capture_output=True,
-                        text=True,
-                        encoding="utf-8",
-                        errors="replace",
-                        timeout=60,
-                    )
-                    blob = result.stdout + result.stderr
-                    self.assertEqual(result.returncode, 0, command + "\n" + blob)
-                    self.assertNotIn("No such file", blob)
-                    self.assertNotIn("Errno 2", blob)
+        return subprocess.run(
+            command,
+            shell=True,
+            cwd=cwd,
+            env=env,
+            input=payload,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
 
     def _ensure_python(self, env: dict[str, str], bindir: Path) -> None:
         if shutil.which("python", path=env.get("PATH")):

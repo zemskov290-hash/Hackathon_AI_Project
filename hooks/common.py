@@ -26,7 +26,8 @@ def write_json(body: dict) -> None:
 
 
 def read_payload() -> dict:
-    if sys.stdin.isatty():
+    probe = getattr(sys.stdin, "isatty", None)
+    if callable(probe) and probe():
         return {}
     raw = sys.stdin.read()
     if not raw.strip():

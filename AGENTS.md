@@ -78,7 +78,7 @@ python scripts/strat.py resume
 
 ## Хуки
 
-Cursor читает `.cursor/hooks.json`, Claude Code — `.claude/settings.json`. Команда Cursor находит корень по `CURSOR_PROJECT_DIR`, а не по текущему каталогу. Claude Code вызывает `python "$CLAUDE_PROJECT_DIR/hooks/run.py"`. После правки файла в `projects/<проект>/` хук запускает `strat check` и показывает ошибки, но не останавливает ход. `beforeReadFile` не отдаёт модели `.env` и файлы ключей (`.env.example` можно). На `stop` хук дописывает в журнал прирост `--input-chars` и `--output-chars` с моделью `hook/stop`, без `followup_message`. Как проверить на Windows — в `hooks/README.md`.
+Cursor читает `.cursor/hooks.json` и, если включён импорт чужих конфигов, ещё и `.claude/settings.json`. Обе команды — `python -c` без `$` и `%`: корень берётся из окружения, из `workspace_roots` или `cwd` во входном JSON и подъёмом к `AGENTS.md`. Одинаковый ответ двух хуков не конфликтует: у Cursor отказ побеждает разрешение. После правки файла в `projects/<проект>/` хук запускает `strat check` и показывает ошибки, но не останавливает ход. `beforeReadFile` не отдаёт модели `.env` и файлы ключей (`.env.example` можно). На `stop` хук дописывает в журнал прирост `--input-chars` и `--output-chars` с моделью `hook/stop`, без `followup_message`. Как проверить на Windows — в `hooks/README.md`.
 
 ## Маршрутизация
 

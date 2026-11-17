@@ -2,7 +2,9 @@
 
 Хуки включены. Cursor читает `.cursor/hooks.json`, Claude Code — `.claude/settings.json`.
 
-Документация Cursor говорит, что проектный хук стартует из корня и путь пишется как `.cursor/hooks/script.sh`, а в окружении всегда есть `CURSOR_PROJECT_DIR` (и алиас `CLAUDE_PROJECT_DIR`). На Windows команда выполняется через PowerShell. Живой прогон `agent.ps1` стартовал из `C:\`: относительный `python hooks/guard_shell.py` искал `C:\hooks\guard_shell.py` и не находил файл. Поэтому команда Cursor — `python -c "…" <имя>`. Код читает `CURSOR_PROJECT_DIR` сам, без `$` и `%`, и запускает `hooks/run.py`. Так одна строка работает в PowerShell, cmd и bash, даже если текущий каталог не репозиторий. Claude Code раскрывает свою переменную: `python "$CLAUDE_PROJECT_DIR/hooks/run.py" <имя>`.
+Документация Cursor ([Hooks](https://cursor.com/docs/hooks), [Third Party Hooks](https://cursor.com/docs/reference/third-party-hooks)) говорит: проектный хук считается от корня, на Windows команда идёт через PowerShell, в окружении процесса есть `CURSOR_PROJECT_DIR` и `CLAUDE_PROJECT_DIR`, а при включённом импорте исполняются и `.cursor/hooks.json`, и `.claude/settings.json`. Все подходящие хуки запускаются; если ответы расходятся, отказ побеждает разрешение.
+
+Живой `agent.ps1` стартовал из `C:\`. Команда `python "$CLAUDE_PROJECT_DIR/hooks/run.py"` в PowerShell превращает `$CLAUDE_PROJECT_DIR` в пустую переменную PowerShell, и Python ищет `C:\hooks\run.py`. Свой хук из `.cursor/hooks.json` до решения не доходит: ошибка импортированного хука уже останавливает команду. Поэтому в обоих файлах одна команда `python -c` без `$` и `%`. Она читает переменные окружения из Python, затем `workspace_roots` и `cwd` из JSON на stdin, и поднимается к каталогу с `AGENTS.md`. Повтор сторожа возвращает то же решение. Второй `stop` не пишет журнал второй раз.
 
 На Windows в конфигурации имя интерпретатора — `python`. `python3` часто оказывается заглушкой Store.
 
@@ -50,12 +52,13 @@ python scripts/strat.py cost <id> --estimate
 
 Первая команда ничего не проверяет: `README.md` не внутри проекта. Вторая печатает `"permission": "deny"`. Третья печатает `{}` и на stderr напоминание про `advance`.
 
-Та же вторая проверка из другого каталога, как это делает CLI, если `CURSOR_PROJECT_DIR` указывает на репозиторий:
+Та же проверка из другого каталога, как у CLI. Скопируйте поле `command` целиком из `.cursor/hooks.json` или из `.claude/settings.json` (они совпадают) и выполните его не из репозитория:
 
 ```powershell
 cd $env:TEMP
-$env:CURSOR_PROJECT_DIR = "C:\Users\betty\Projects\Hackathon_AI_Project"
-'{"command":"echo KEY=1 > .env"}' | python -c "<команда из .cursor/hooks.json без завершающего guard_shell>" guard_shell
+Remove-Item Env:CURSOR_PROJECT_DIR -ErrorAction SilentlyContinue
+Remove-Item Env:CLAUDE_PROJECT_DIR -ErrorAction SilentlyContinue
+'{"command":"echo KEY=1 > .env","workspace_roots":["C:\\Users\\betty\\Projects\\Hackathon_AI_Project"]}' | <вставленная команда>
 ```
 
-В stdout должен быть `"permission": "deny"`, а не ошибка открытия `C:\hooks\guard_shell.py`. Проще скопировать поле `command` целиком из `.cursor/hooks.json` и подать ему тот же JSON.
+В stdout должен быть `"permission": "deny"`. Строки `C:\hooks\run.py` быть не должно. В команде нет `$` и `%`.

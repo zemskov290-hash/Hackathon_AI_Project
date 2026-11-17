@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -136,6 +137,33 @@ def previous_hook_counts(state: dict) -> tuple[int, int]:
     return cumulative_in, cumulative_out
 
 
+def _hold_stop_lock(folder: Path | None) -> tuple[int, Path] | None:
+    """One stop record when Cursor runs both its own hook and the Claude import."""
+    if folder is None:
+        return None
+    lock = folder / ".stop-hook.lock"
+    deadline = time.time() + 2
+    while True:
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            return fd, lock
+        except FileExistsError:
+            if time.time() >= deadline:
+                return None
+            time.sleep(0.05)
+
+
+def _release_stop_lock(held: tuple[int, Path] | None) -> None:
+    if held is None:
+        return
+    fd, lock = held
+    os.close(fd)
+    try:
+        lock.unlink()
+    except OSError:
+        pass
+
+
 def write_log(stage: int, incoming: int, outgoing: int) -> None:
     message = Path(tempfile.mkstemp(suffix="-stop-message.txt")[1])
     grounds = Path(tempfile.mkstemp(suffix="-stop-grounds.txt")[1])
@@ -196,15 +224,23 @@ def main() -> int:
         state = json.loads(shown.stdout)
         stage = int(state.get("stage") or 0)
         incoming, outgoing = count_transcript(path)
-        prev_in, prev_out = previous_hook_counts(state)
-        delta_in = incoming - prev_in
-        delta_out = outgoing - prev_out
-        if delta_in < 0 or delta_out < 0:
-            delta_in, delta_out = incoming, outgoing
-        if delta_in == 0 and delta_out == 0:
-            sys.stderr.write("объём хода уже записан\n")
-            return 0
-        write_log(stage, delta_in, delta_out)
+        folder = project_dir(state)
+        lock = _hold_stop_lock(folder)
+        try:
+            prev_in, prev_out = previous_hook_counts(state)
+            delta_in = incoming - prev_in
+            delta_out = outgoing - prev_out
+            if delta_in < 0 or delta_out < 0:
+                delta_in, delta_out = incoming, outgoing
+            if delta_in == 0 and delta_out == 0:
+                sys.stderr.write("объём хода уже записан\n")
+                return 0
+            if lock is None and folder is not None:
+                sys.stderr.write("второй хук stop уже пишет журнал, повтор пропущен\n")
+                return 0
+            write_log(stage, delta_in, delta_out)
+        finally:
+            _release_stop_lock(lock)
     except Exception as exc:  # noqa: BLE001 — fail open
         sys.stderr.write(f"хук stop пропущен: {exc}\n")
     return 0
