@@ -215,6 +215,7 @@ class ExampleAndHelpTests(unittest.TestCase):
         doctor = self.cli("doctor")
         assert_code(doctor)
         self.assertIn("ручной режим", doctor.stdout)
+        self.assertIn("MCP: сервер ответил на initialize", doctor.stdout)
         self.assertIn("utf-8", doctor.stdout.casefold())
         self.assertIn("Маршрутизация", doctor.stdout)
         self.assertIn("extract: cheap", doctor.stdout)
