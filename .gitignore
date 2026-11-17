@@ -16,3 +16,6 @@ projects/.current
 *.log
 .claude/settings.local.json
 .stop-hook.lock
+# Рабочие папки бенчмарка собираются локально и в git не входят.
+bench/work/
+bench/runs/

@@ -27,3 +27,7 @@ jobs:
         run: python scripts/strat.py check projects/demo-family-tariffs
       - name: Check the analysis demo
         run: python scripts/strat.py check projects/demo-analysis
+      - name: Portability matrix
+        run: python scripts/portability.py --check
+      - name: Benchmark summary matches the committed empty table
+        run: python scripts/bench.py summary --check

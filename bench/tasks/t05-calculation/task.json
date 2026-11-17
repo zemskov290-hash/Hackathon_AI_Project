@@ -1,0 +1,12 @@
+{
+  "id": "t05-calculation",
+  "title": "Расчёт по таблице",
+  "scenario": "Сумма субботы и сумма всех ячеек посещений считаются по CSV. Ключ лежит только в этом файле и в тестах, в рабочую папку он не копируется.",
+  "project_id": "bench-calculation",
+  "strategy": false,
+  "canary": null,
+  "expected_numbers": ["440", "1174"],
+  "contradiction": null,
+  "revision": false,
+  "resume": null
+}

@@ -3143,12 +3143,34 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
             + ", ".join(dirty[:8])
             + ". В проектной сессии эти папки не правят."
         )
+    try:
+        import portability
+
+        report = portability.evaluate(ROOT, live=False)
+        print(portability.summary_line(report))
+        port_ok = bool(report["ok"])
+    except Exception as exc:  # noqa: BLE001 — doctor reports a broken install instead of crashing
+        print(f"Переносимость: проверка не выполнена. {scrub(str(exc))}")
+        port_ok = False
     ready, detail = _mcp_probe()
     if ready:
         print(f"MCP: сервер ответил на initialize ({detail}).")
-        return 0
-    print(f"MCP: сервер не ответил на initialize. {detail}")
-    return 1
+    else:
+        print(f"MCP: сервер не ответил на initialize. {detail}")
+    return 0 if ready and port_ok else 1
+
+
+def cmd_portability(args: argparse.Namespace) -> int:
+    import portability
+
+    forwarded = []
+    if args.static:
+        forwarded.append("--static")
+    if args.write:
+        forwarded.append("--write")
+    if args.check:
+        forwarded.append("--check")
+    return portability.main(forwarded)
 
 
 def _mcp_probe() -> tuple[bool, str]:
@@ -3381,6 +3403,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor = sub.add_parser("doctor", help="Python, ключ API, MCP, необязательные пакеты")
     doctor.set_defaults(func=cmd_doctor)
+
+    portability_cmd = sub.add_parser(
+        "portability",
+        help="матрица адаптеров: файлы, ссылка на AGENTS.md, запуск MCP и хуков",
+    )
+    portability_cmd.add_argument("--static", action="store_true", help="не запускать процессы")
+    portability_cmd.add_argument("--write", action="store_true", help="обновить docs/portability.md, если текст изменился")
+    portability_cmd.add_argument("--check", action="store_true", help="код 1, если docs/portability.md отличается")
+    portability_cmd.set_defaults(func=cmd_portability)
     return parser
 
 

@@ -1,0 +1,12 @@
+{
+  "id": "t01-brief-strategy",
+  "title": "От брифа к стратегии",
+  "scenario": "По мотивам прогонов 4 и 5: из запроса и двух заметок собрать стратегию, а не остановиться без опоры на материалы.",
+  "project_id": "bench-strategy",
+  "strategy": true,
+  "canary": null,
+  "expected_numbers": null,
+  "contradiction": null,
+  "revision": false,
+  "resume": null
+}

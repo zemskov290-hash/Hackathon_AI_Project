@@ -110,7 +110,8 @@ decisions.md  log.md  log.jsonl
 | `confirm [проект] brief\|options\|validation` | записать согласие человека; для вариантов нужен `--choice O2` |
 | `advance [проект] <этап>` | закрыть этап, если ворота пройдены |
 | `complete --tier cheap\|strong\|ide` | вызов по `config/routing.json`; без ключа и для `ide` печатает `MODE: manual`. `--role` — прежнее имя для cheap и strong |
-| `doctor` | версия Python, режим модели, таблица маршрута, ответ MCP на `initialize`, необязательные пакеты |
+| `doctor` | версия Python, режим модели, таблица маршрута, ответ MCP на `initialize`, статическая переносимость, необязательные пакеты |
+| `portability` | матрица сред: правила, навыки, субагенты, хуки, MCP и CLI. `--check` сверяет `docs/portability.md` |
 
 Полный список: `python scripts/strat.py --help`. Те же действия есть инструментами MCP: имя `strat_<команда>`, например `strat_check`. Если они подключены, агент вызывает их, а не разбирает вывод оболочки. CLI остаётся запасным путём. Раздел [MCP](#mcp).
 
@@ -130,6 +131,8 @@ knowledge/                        короткие карточки метода
 config/model-prices.json          условные цены для оценки, не счёт
 config/routing.json               какой класс задачи идёт на cheap, strong или ide
 scripts/strat.py                  учёт, проверка, журнал, analyze и inspect
+scripts/bench.py                  бенчмарк: папки, оценка без судьи-модели, сводка
+scripts/portability.py            матрица адаптеров Cursor, Claude, Copilot, Codex
 scripts/analysis.py               расчёт таблиц, его вызывает и CLI, и MCP
 scripts/analysis_runner.py        запуск скрипта анализа без сети и вне папки проекта
 scripts/inspect_media.py          DOM, изображение, PDF, расшифровка
@@ -140,7 +143,10 @@ schemas/                          формы state, sources, evidence, decisions
 projects/_example/                выдуманный сквозной пример
 projects/demo-family-tariffs/     снимок прогона; ответы лида вымышлены
 projects/demo-analysis/           синтетический расчёт и разбор витрины
-docs/decisions/                   почему ядро, модели, граф, хуки, MCP, анализ и медиа
+bench/                            задачи бенчмарка на синтетических данных
+docs/benchmark.md                 сводка агент vs чат; пустая, пока нет прогонов
+docs/portability.md               матрица сред
+docs/decisions/                   почему ядро, модели, граф, хуки, MCP, анализ, бенчмарк
 docs/devlog.md                    журнал разработки
 tests/                            unittest и сломанная фикстура
 ```
@@ -243,6 +249,30 @@ python scripts/strat.py analyze projects/demo-analysis --verify
 
 Разобрать свою открытую страницу: положите `page.html` в `projects/<id>/sources` и в чате попросите `strat_inspect` с полем `html`. Не кладите закрытую выгрузку и кадр с телефоном или почтой человека.
 
+## Бенчмарк и переносимость
+
+Сравнение с обычным чатом не придумывается. Пока человек не прогнал задачи, в [`docs/benchmark.md`](docs/benchmark.md) стоят прочерки. Оценщик считает ссылки, числа, цитаты, канарейку, целые из ключа, пересмотр, разделы стратегии и `check` по файлам. Языковую модель в судьи он не зовёт. Материалы синтетические и так подписаны. Закрытых данных МегаФона в наборе нет.
+
+Подготовка папок и запуск на Windows, PowerShell 5.1, из корня репозитория. Каталог `--out` вне репозитория, иначе чат найдёт `AGENTS.md`.
+
+```powershell
+python scripts/bench.py prepare --out 'C:\strat-bench'
+python scripts/bench.py capture --workspace 'C:\strat-bench\agent\t01-brief-strategy'
+python scripts/bench.py capture --workspace 'C:\strat-bench\chat\t01-brief-strategy'
+python scripts/bench.py score --work 'C:\strat-bench'
+python scripts/bench.py summary --work 'C:\strat-bench'
+```
+
+`prepare` пишет `commands.ps1` со всеми шестью задачами и обоими режимами. В строках нет `$` и внутренних двойных кавычек. `capture` читает `PROMPT.txt` как UTF-8 и вызывает:
+
+```text
+agent -p --force --trust --approve-mcps --output-format text <текст PROMPT.txt>
+```
+
+Рабочий каталог агента — копия репозитория с `AGENTS.md`, навыками, хуками и MCP. Рабочий каталог чата — пустая папка вне репозитория: те же материалы вставлены в промпт и лежат файлами, правил и инструментов стратега там нет. Прямой вызов `agent` тоже есть в `commands.ps1`; для оценщика нужен `capture`, он сохраняет `response.txt` и секунды. Имя модели оценщик не подставляет.
+
+Переносимость: `python scripts/portability.py` или `python scripts/strat.py portability`. `doctor` печатает итог статической проверки. Матрица — [`docs/portability.md`](docs/portability.md). `live` значит, что процесс команды запустился, а не что открыт клиент IDE. Протокол ручной проверки VS Code/Copilot и Claude Code лежит в том же файле.
+
 ## Ограничения
 
-Проверка текстов — эвристика по разделам «Факты», заголовкам вариантов, подразделам стратегии и маркерам обещаний, а не понимание смысла. Цитату CLI сверяет с локальным файлом. Расчёт `analyze` пересчитывается из снимка: другое число в свидетельстве или в якоре `350 [A001.metric]` — ошибка. Скрипт анализа ограничен папкой проекта, таймаутом и запретом сетевых модулей; это не контейнер, обход через нестандартный импорт возможен, поэтому скрипт пишет агент, а не страница из интернета. Разбор HTML берёт только узлы DOM. Картинку команда не «видит»: описание делает модель IDE и оно помечено. PDF без pypdf и запись без субтитров остаются без выдуманного текста. Свидетельство из медиа без снимка — предупреждение. Веб-страница без `fetch` оставляет голый URL: снимка нет, цитата не сверяется, `check` предупреждает, `check --strict` завершается с ошибкой. Повторно живой сайт не открывается, если снимок уже лежит в `sources/`, пока нет `fetch --force`. Оценка в `cost` считается из символов журнала и `config/model-prices.json` и всегда подписана как допущение, не как счёт. Строка хука `hook/stop` в оценку не входит, если агент уже записал свои символы. sha256 текстового источника считается после приведения перевода строк к LF, поэтому он не равен хешу сырых байт, если в файле остались CR. Флаг `human_confirmed` и пометка `destructiveHint` не отличают человека от модели, если клиент не спросил одобрение: запрет ставить флаг без явной фразы остаётся в [`AGENTS.md`](AGENTS.md). Подробности — в [`docs/decisions/0005-line-endings-and-utf8.md`](docs/decisions/0005-line-endings-and-utf8.md), [`docs/decisions/0006-snapshot-and-stable-option-ids.md`](docs/decisions/0006-snapshot-and-stable-option-ids.md), [`docs/decisions/0008-mcp-server.md`](docs/decisions/0008-mcp-server.md), [`docs/decisions/0009-analysis-and-media.md`](docs/decisions/0009-analysis-and-media.md) и [`docs/devlog.md`](docs/devlog.md).
+Проверка текстов — эвристика по разделам «Факты», заголовкам вариантов, подразделам стратегии и маркерам обещаний, а не понимание смысла. Цитату CLI сверяет с локальным файлом. Расчёт `analyze` пересчитывается из снимка: другое число в свидетельстве или в якоре `350 [A001.metric]` — ошибка. Скрипт анализа ограничен папкой проекта, таймаутом и запретом сетевых модулей; это не контейнер, обход через нестандартный импорт возможен, поэтому скрипт пишет агент, а не страница из интернета. Разбор HTML берёт только узлы DOM. Картинку команда не «видит»: описание делает модель IDE и оно помечено. PDF без pypdf и запись без субтитров остаются без выдуманного текста. Свидетельство из медиа без снимка — предупреждение. Веб-страница без `fetch` оставляет голый URL: снимка нет, цитата не сверяется, `check` предупреждает, `check --strict` завершается с ошибкой. Повторно живой сайт не открывается, если снимок уже лежит в `sources/`, пока нет `fetch --force`. Оценка в `cost` считается из символов журнала и `config/model-prices.json` и всегда подписана как допущение, не как счёт. Строка хука `hook/stop` в оценку не входит, если агент уже записал свои символы. sha256 текстового источника считается после приведения перевода строк к LF, поэтому он не равен хешу сырых байт, если в файле остались CR. Флаг `human_confirmed` и пометка `destructiveHint` не отличают человека от модели, если клиент не спросил одобрение: запрет ставить флаг без явной фразы остаётся в [`AGENTS.md`](AGENTS.md). Подробности — в [`docs/decisions/0005-line-endings-and-utf8.md`](docs/decisions/0005-line-endings-and-utf8.md), [`docs/decisions/0006-snapshot-and-stable-option-ids.md`](docs/decisions/0006-snapshot-and-stable-option-ids.md), [`docs/decisions/0008-mcp-server.md`](docs/decisions/0008-mcp-server.md), [`docs/decisions/0009-analysis-and-media.md`](docs/decisions/0009-analysis-and-media.md), [`docs/decisions/0010-benchmark-and-portability.md`](docs/decisions/0010-benchmark-and-portability.md) и [`docs/devlog.md`](docs/devlog.md). Бенчмарк измеряет файлы и строки, не смысл ответа.
