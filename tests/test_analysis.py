@@ -316,6 +316,39 @@ class AnalysisCliTests(unittest.TestCase):
             result.stdout,
         )
 
+    def test_written_artifacts_use_lf_only(self) -> None:
+        project = self.project("lf")
+        (project / "sources" / "tariffs.csv").write_bytes(
+            b"operator,segment,price\r\n\xd0\x90\xd0\xbb\xd1\x8c\xd1\x84\xd0\xb0,family,300\r\n"
+        )
+        (project / "spec.json").write_text(
+            json.dumps({"metrics": [{"id": "n", "fn": "count"}, {"id": "mean_price", "fn": "mean", "column": "price"}]}),
+            encoding="utf-8",
+            newline="\n",
+        )
+        (project / "sources" / "page.html").write_bytes(FIXTURE_HTML.replace("\n", "\r\n").encode("utf-8"))
+        assert_code(self.cli("analyze", "lf", "--input", "sources/tariffs.csv", "--spec-file", "spec.json", "--metric", "n", "--claim", "В таблице одна семейная строка."))
+        assert_code(self.cli("inspect", "lf", "--html", "sources/page.html"))
+        checked = (
+            "state.json",
+            "sources.jsonl",
+            "evidence.jsonl",
+            "log.jsonl",
+            "log.md",
+            "analysis/A001/manifest.json",
+            "analysis/A001/report.md",
+            "analysis/A001/result.json",
+            "analysis/A001/spec.json",
+            "analysis/A001/input.csv",
+            "inspect/M001/manifest.json",
+            "inspect/M001/report.md",
+            "inspect/M001/input.html",
+        )
+        for relative in checked:
+            data = (project / relative).read_bytes()
+            self.assertNotIn(b"\r\n", data, relative)
+            self.assertNotIn(b"\r", data, relative)
+
     def test_json_table(self) -> None:
         project = self.project("rows")
         (project / "sources" / "rows.json").write_text(

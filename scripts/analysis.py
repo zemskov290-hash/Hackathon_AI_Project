@@ -657,7 +657,11 @@ def metric_value(project: Path, analysis_id: str, metric: str) -> str:
 
 
 def write_json(path: Path, payload: dict) -> None:
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
 
 
 def _compute_saved(project: Path, folder: Path, manifest: dict, timeout: float) -> tuple[dict, str | None]:
@@ -738,6 +742,7 @@ def _create(
         (folder / "spec.json").write_text(
             json.dumps(spec, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
+            newline="\n",
         )
     else:
         mode = "script"
@@ -750,7 +755,11 @@ def _create(
         script_text = script_path.read_text(encoding="utf-8")
         if len(script_text) > MAX_SCRIPT_CHARS:
             raise AnalysisError("Скрипт анализа длиннее 100000 символов.")
-        (folder / "script.py").write_text(script_text.replace("\r\n", "\n").replace("\r", "\n"), encoding="utf-8")
+        (folder / "script.py").write_text(
+            script_text.replace("\r\n", "\n").replace("\r", "\n"),
+            encoding="utf-8",
+            newline="\n",
+        )
         spec = None
     manifest = {
         "id": analysis_id,
@@ -789,8 +798,8 @@ def _create(
         manifest["chart_note"] = None
     else:
         manifest["chart_note"] = chart_note
-    (folder / "result.json").write_text(dump_result(metrics), encoding="utf-8")
-    (folder / "report.md").write_text(render_report(manifest, metrics), encoding="utf-8")
+    (folder / "result.json").write_text(dump_result(metrics), encoding="utf-8", newline="\n")
+    (folder / "report.md").write_text(render_report(manifest, metrics), encoding="utf-8", newline="\n")
     write_json(folder / "manifest.json", manifest)
     return {"id": analysis_id, "manifest": manifest, "metrics": metrics, "same": False}
 
@@ -834,8 +843,8 @@ def _rerun(project: Path, analysis_id: str, timeout: float) -> dict:
         manifest["chart_note"] = chart_note
     rendered = dump_result(metrics)
     same = rendered == previous
-    (folder / "result.json").write_text(rendered, encoding="utf-8")
-    (folder / "report.md").write_text(render_report(manifest, metrics), encoding="utf-8")
+    (folder / "result.json").write_text(rendered, encoding="utf-8", newline="\n")
+    (folder / "report.md").write_text(render_report(manifest, metrics), encoding="utf-8", newline="\n")
     write_json(folder / "manifest.json", manifest)
     return {"id": analysis_id, "manifest": manifest, "metrics": metrics, "same": same}
 

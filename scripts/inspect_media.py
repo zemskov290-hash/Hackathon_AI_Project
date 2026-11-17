@@ -804,7 +804,7 @@ def _build(
             raise InspectError("Изображение: PNG или JPG.")
         meta = image_metadata(snapshot)
         report = render_image_report(inspect_id, snapshot_rel, digest, meta, synthetic)
-        (folder / "description.md").write_text(description_document(description), encoding="utf-8")
+        (folder / "description.md").write_text(description_document(description), encoding="utf-8", newline="\n")
         structured = meta
         kind = "image"
     elif pdf is not None:
@@ -844,7 +844,7 @@ def _build(
         structured = {"transcript": plain is not None, "text": plain or ""}
         kind = "av"
     report_path = folder / "report.md"
-    report_path.write_text(report, encoding="utf-8")
+    report_path.write_text(report, encoding="utf-8", newline="\n")
     manifest = {
         "id": inspect_id,
         "kind": kind,
@@ -863,6 +863,7 @@ def _build(
     (folder / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
     return {
         "id": inspect_id,
