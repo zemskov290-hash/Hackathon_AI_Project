@@ -42,7 +42,25 @@ SKIP_DIR_NAMES = {
     ".mypy_cache",
 }
 SKIP_FILE_NAMES = {".env", ".DS_Store", ".stop-hook.lock"}
-PROSE_NAMES = (
+TEXT_SUFFIXES = {".md", ".txt", ".csv", ".json", ".jsonl", ".html", ".htm"}
+CITE_RE = re.compile(r"\[(?:E|S)\d+\]|\[A\d+\.[A-Za-z0-9_]+\]")
+NUMBER_RE = re.compile(r"(?<![\w.])(\d+(?:[.,]\d+)?%?)(?![\w])")
+BOOKKEEPING_RE = re.compile(
+    r"^(?:[-*+]\s+)?(?:уровень|модель|минуты|токены|стоимость|символы входа|символы выхода|"
+    r"input[-_ ]chars|output[-_ ]chars)\s*[:：]",
+    re.IGNORECASE,
+)
+LIST_OR_TABLE_RE = re.compile(r"^(?:[-*+]\s+|\d+[.)]\s+|\|)")
+TABLE_RULE_RE = re.compile(r"^\|?[\s:|-]+\|?$")
+PATH_RE = re.compile(r"(?:[A-Za-z]:\\(?:[^\s\\]+\\)*[^\s\\]+)|(?:[\w.+-]+/)+[\w.+-]+")
+CODE_SPAN_RE = re.compile(r"`[^`]*`")
+ERROR_NUMBER_RE = re.compile(
+    r"(?i)(?:\[?\s*(?:errno|winerror|oserror)\s*[:#-]?\s*\d+\]?)"
+    r"|(?:\b(?:http|https)\s*[:#-]?\s*\d{3}\b)"
+    r"|(?:\b(?:ошибк\w*|error|статус|status)\s*[:#-]?\s*\d+\b)"
+    r"|(?:\b\d{3}\s+(?:ошибк\w*|error)\b)"
+)
+RESULT_FILES = (
     "brief.md",
     "questions.md",
     "situation.md",
@@ -50,11 +68,7 @@ PROSE_NAMES = (
     "strategy.md",
     "validation.md",
     "decisions.md",
-    "log.md",
 )
-TEXT_SUFFIXES = {".md", ".txt", ".csv", ".json", ".jsonl", ".html", ".htm"}
-CITE_RE = re.compile(r"\[(?:E|S)\d+\]|\[A\d+\.[A-Za-z0-9_]+\]")
-NUMBER_RE = re.compile(r"(?<![\w.])(\d+(?:[.,]\d+)?%?)(?![\w])")
 QUOTE_RE = re.compile(r"«([^»]{20,})»|\"([^\"]{20,})\"")
 YEAR_RE = re.compile(r"^(19[9]\d|20[0-2]\d|203[0-5])$")
 AGENT_FLAGS = ["-p", "--force", "--trust", "--approve-mcps", "--output-format", "text"]
@@ -71,8 +85,10 @@ METRICS = (
         "title": "Доля утверждений со ссылкой",
         "better": "выше лучше",
         "limit": (
-            "Утверждение — предложение длиннее 40 букв не из заголовка. "
-            "Ссылка — [E###], [S###], якорь [A###.метрика] или имя файла материала в том же предложении. "
+            "Утверждение — фрагмент длиннее 40 букв. Граница — точка, пункт списка или строка таблицы, не только склейка всего абзаца. "
+            "Ссылка — [E###], [S###], якорь [A###.метрика] или имя файла материала в том же фрагменте. "
+            "Не входят: log.md, строка учёта расхода (минуты, токены, стоимость, символы входа и выхода, уровень и модель с двоеточием) "
+            "и строка, дословно совпадающая с шаблоном init. Одинаково для ответа чата и для файлов агента. "
             "Реестр evidence.jsonl в долю не входит: у него поле source есть по схеме, и с чатом это не сравнить. "
             "Доля по реестру пишется в пояснении, если реестр есть."
         ),
@@ -82,9 +98,10 @@ METRICS = (
         "title": "Числа без происхождения",
         "better": "ниже лучше",
         "limit": (
-            "Считаются числа из двух и более цифр, доли и проценты. Одиночные цифры и годы 1990–2035 не считаются. "
-            "Число без происхождения, если в его предложении нет ссылки. Ноль значит, что таких чисел не найдено, "
-            "в том числе когда чисел нет совсем: это не доказательство аккуратности."
+            "Считаются числа из двух и более цифр, доли и проценты внутри утверждения. Одиночные цифры и годы 1990–2035 не считаются. "
+            "Не считаются числа внутри кода в обратных кавычках, внутри пути файла и коды ошибок: Errno, WinError и HTTP рядом со словом ошибки. "
+            "Число в strategy.md или в ответе без ссылки в том же утверждении считается. "
+            "Ноль значит, что таких чисел не найдено, в том числе когда чисел нет совсем: это не доказательство аккуратности."
         ),
     },
     {
@@ -698,22 +715,70 @@ def capture(
     return 0
 
 
-def sentences(text: str) -> list[str]:
-    cleaned = re.sub(r"<!--.*?-->", " ", text, flags=re.S)
-    cleaned = re.sub(r"```.*?```", " ", cleaned, flags=re.S)
+def normalize_ws(line: str) -> str:
+    return re.sub(r"\s+", " ", line).strip()
+
+
+def all_template_lines() -> set[str]:
+    norms: set[str] = set()
+    for relative in strat.TEMPLATES.values():
+        path = strat.ROOT / relative
+        if not path.is_file():
+            continue
+        for line in read_text(path).splitlines():
+            norm = normalize_ws(line)
+            if norm:
+                norms.add(norm)
+    return norms
+
+
+def prepared_text(text: str) -> str:
+    """Drop init boilerplate and bookkeeping lines. Same filter for chat and agent."""
+    boilerplate = all_template_lines()
     kept = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if BOOKKEEPING_RE.match(stripped):
+            continue
+        if normalize_ws(line) in boilerplate:
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
+def sentences(text: str) -> list[str]:
+    """Split on sentence ends, list items and table rows. Do not glue a bullet list into one claim."""
+    cleaned = prepared_text(text)
+    cleaned = re.sub(r"<!--.*?-->", " ", cleaned, flags=re.S)
+    cleaned = re.sub(r"```.*?```", " ", cleaned, flags=re.S)
+    blocks: list[str] = []
+    paragraph: list[str] = []
+
+    def flush() -> None:
+        if paragraph:
+            blocks.append(" ".join(paragraph))
+            paragraph.clear()
+
     for line in cleaned.splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
+            flush()
             continue
-        kept.append(stripped)
-    blob = " ".join(kept)
-    parts = re.split(r"(?<=[.!?])\s+", blob)
+        if TABLE_RULE_RE.match(stripped) and "-" in stripped:
+            flush()
+            continue
+        if LIST_OR_TABLE_RE.match(stripped):
+            flush()
+            blocks.append(stripped)
+            continue
+        paragraph.append(stripped)
+    flush()
     found = []
-    for part in parts:
-        letters = re.sub(r"[^0-9A-Za-zА-Яа-яЁё]", "", part)
-        if len(letters) >= 40:
-            found.append(part.strip())
+    for block in blocks:
+        for part in re.split(r"(?<=[.!?])\s+", block):
+            letters = re.sub(r"[^0-9A-Za-zА-Яа-яЁё]", "", part)
+            if len(letters) >= 40:
+                found.append(part.strip())
     return found
 
 
@@ -733,9 +798,17 @@ def sentence_cited(sentence: str, names: list[str]) -> bool:
     return any(name.casefold() in folded for name in names if len(name) >= 4)
 
 
+def mask_non_claims(sentence: str) -> str:
+    """Hide numbers that are code, paths or error codes, not claims about the world."""
+    masked = CODE_SPAN_RE.sub(" ", sentence)
+    masked = PATH_RE.sub(" ", masked)
+    masked = ERROR_NUMBER_RE.sub(" ", masked)
+    return masked
+
+
 def number_tokens(sentence: str) -> list[str]:
     found = []
-    for match in NUMBER_RE.finditer(sentence):
+    for match in NUMBER_RE.finditer(mask_non_claims(sentence)):
         token = match.group(1)
         bare = token.rstrip("%").replace(",", ".")
         if YEAR_RE.match(bare):
@@ -745,6 +818,30 @@ def number_tokens(sentence: str) -> list[str]:
             continue
         found.append(token)
     return found
+
+
+def claim_audit(text: str, names: list[str]) -> dict:
+    units = sentences(text)
+    uncited = []
+    cited = 0
+    unsourced = 0
+    total_numbers = 0
+    for unit in units:
+        tokens = number_tokens(unit)
+        total_numbers += len(tokens)
+        if sentence_cited(unit, names):
+            cited += 1
+            continue
+        if tokens:
+            unsourced += len(tokens)
+        uncited.append({"text": unit, "numbers": tokens})
+    return {
+        "sentences": len(units),
+        "cited": cited,
+        "unsourced_numbers": unsourced,
+        "total_numbers": total_numbers,
+        "uncited": uncited,
+    }
 
 
 def prose_quotes(text: str) -> list[str]:
@@ -881,10 +978,12 @@ def score_texts(
     output_chars: int | None = None,
 ) -> dict[str, dict]:
     evidence = evidence or []
-    units = sentences(text)
-    if units:
-        cited = sum(1 for unit in units if sentence_cited(unit, names))
-        citation = metric(cited / len(units), f"{cited} из {len(units)} предложений")
+    audit = claim_audit(text, names)
+    if audit["sentences"]:
+        citation = metric(
+            audit["cited"] / audit["sentences"],
+            f"{audit['cited']} из {audit['sentences']} предложений",
+        )
     else:
         citation = metric(None, "утверждений длиннее 40 букв нет")
     if evidence:
@@ -892,16 +991,12 @@ def score_texts(
         active = sum(1 for row in evidence if row.get("status") == "active")
         citation["detail"] += f"; в реестре с источником {sourced} из {active} активных"
 
-    unsourced = 0
-    total_numbers = 0
-    for unit in units:
-        tokens = number_tokens(unit)
-        total_numbers += len(tokens)
-        if tokens and not sentence_cited(unit, names):
-            unsourced += len(tokens)
-    numbers = metric(unsourced, f"{unsourced} из {total_numbers} чисел без ссылки в том же предложении")
+    numbers = metric(
+        audit["unsourced_numbers"],
+        f"{audit['unsourced_numbers']} из {audit['total_numbers']} чисел без ссылки в том же предложении",
+    )
 
-    quotes = prose_quotes(text)
+    quotes = prose_quotes(prepared_text(text))
     for row in evidence:
         fragment = str(row.get("quote") or "").strip()
         if len(fragment) >= 12 and fragment not in quotes:
@@ -1016,12 +1111,35 @@ def score_texts(
 
 
 def project_prose(project: Path) -> str:
+    """Result files only. log.md is the run journal, not a claim about the product."""
     parts = []
-    for name in PROSE_NAMES:
+    for name in RESULT_FILES:
         path = project / name
         if path.is_file():
             parts.append(read_text(path))
     return "\n".join(parts)
+
+
+def render_audit(mode: str, task_id: str, audit: dict) -> str:
+    lines = [
+        f"# Аудит {mode} / {task_id}",
+        "",
+        f"Предложений: {audit['sentences']}. Со ссылкой: {audit['cited']}.",
+        f"Чисел: {audit['total_numbers']}. Без происхождения: {audit['unsourced_numbers']}.",
+        "",
+        "В список попали только фрагменты без ссылки. Числа в них — те, что метрика считает нецитированными.",
+        "",
+        "## Без ссылки",
+        "",
+    ]
+    if not audit["uncited"]:
+        lines.append("Нет.")
+    else:
+        for item in audit["uncited"]:
+            nums = ", ".join(item["numbers"]) if item["numbers"] else "чисел нет"
+            lines.append(f"- ({nums}) {item['text']}")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def source_corpus(project: Path | None, extra: list[Path]) -> list[tuple[str, str]]:
@@ -1116,7 +1234,13 @@ def score_workspace(workspace: Path, task: dict, mode: str) -> dict:
         elapsed=elapsed_value,
         output_chars=output_chars,
     )
-    return {"task": task["id"], "mode": mode, "status": "scored", "metrics": metrics}
+    return {
+        "task": task["id"],
+        "mode": mode,
+        "status": "scored",
+        "metrics": metrics,
+        "audit": claim_audit(text, names),
+    }
 
 
 def score_historical(project: Path) -> dict:
@@ -1161,8 +1285,15 @@ def score_work(work: Path) -> list[dict]:
             results.append(score_workspace(work / mode / task["id"], task, mode))
     scores = work / "scores"
     for item in results:
+        name = f"{item['mode']}__{item['task']}"
+        audit = item.get("audit")
+        if audit:
+            audit_path = scores / "audit" / f"{name}.md"
+            write_if_changed(audit_path, render_audit(item["mode"], item["task"], audit))
+            item = dict(item)
+            item["audit_file"] = f"scores/audit/{name}.md"
         write_if_changed(
-            scores / f"{item['mode']}__{item['task']}.json",
+            scores / f"{name}.json",
             json.dumps(item, ensure_ascii=False, indent=2) + "\n",
         )
     return results
@@ -1345,6 +1476,8 @@ def render_summary(results: list[dict], historical: dict) -> tuple[str, dict]:
             "Прямая строка для тех, кто хочет видеть agent сам, тоже есть в commands.ps1. Она не пишет response.txt. Кириллицу надёжнее отдаёт capture: Python читает UTF-8 и не просит BOM у PowerShell 5.1.",
             "",
             "Имя модели в meta.json не заполняется. Его можно дописать руками после прогона, оценщик сам его не выставляет.",
+            "",
+            "`score` пишет перечень нецитированных фрагментов и чисел в `scores/audit/<режим>__<задача>.md` и кладёт тот же список в JSON оценки. Это аудит, не вторая метрика.",
             "",
         ]
     )

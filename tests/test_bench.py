@@ -381,6 +381,68 @@ class ResumeWorkspaceTests(unittest.TestCase):
             self.assertEqual(lost["metrics"]["resume_kept"]["value"], 0)
 
 
+class ClaimBoundaryTests(unittest.TestCase):
+    def test_list_items_and_table_rows_are_separate_claims(self) -> None:
+        text = "\n".join(
+            [
+                "- Этот пункт списка описывает поведение читателей без точки в конце фразы",
+                "- Второй пункт списка описывает другой зал и тоже не заканчивается точкой",
+                "| посетители филиала за целый месяц без ссылки на источник | 440 |",
+            ]
+        )
+        found = bench.sentences(text)
+        self.assertEqual(len(found), 3)
+        self.assertTrue(all("пункт" in item or "посетители" in item for item in found))
+        self.assertNotIn("440", found[0])
+
+    def test_template_log_and_service_numbers_are_not_claims(self) -> None:
+        template_line = (
+            "Формат одного вопроса — в skills/02-research-plan/SKILL.md: "
+            "заголовок третьего уровня `Q1.` и три пункта «если да», «если нет», «источник и метод»."
+        )
+        text = "\n".join(
+            [
+                template_line,
+                "- минуты: 3",
+                "- символы входа: 551",
+                "- символы выхода: 900",
+                "Новый вопрос исследования лежит в skills/02-research-plan/SKILL.md и других чисел в предложении нет.",
+                "Загрузка страницы остановилась с ошибкой [Errno 11001] getaddrinfo failed и другого числа здесь нет.",
+                "Сервер расписания ответил ошибкой HTTP 503 и больше чисел в этом предложении нет вообще.",
+                "Значение `440` в коде не считается, а вот 12 человек без ссылки уже число в этом длинном предложении.",
+                "В стратегии записано 440 посетителей в месяц, и ссылки на источник в этом предложении нет.",
+            ]
+        )
+        audit = bench.claim_audit(text, ["visits.csv"])
+        numbers = [token for item in audit["uncited"] for token in item["numbers"]]
+        self.assertNotIn("02", numbers)
+        self.assertNotIn("551", numbers)
+        self.assertNotIn("900", numbers)
+        self.assertNotIn("11001", numbers)
+        self.assertNotIn("503", numbers)
+        self.assertIn("440", numbers)
+        self.assertIn("12", numbers)
+        self.assertTrue(any("440 посетителей" in item["text"] for item in audit["uncited"]))
+
+    def test_log_is_outside_the_project_text_and_a_strategy_number_is_kept(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "bench-demo"
+            project.mkdir()
+            (project / "log.md").write_text(
+                "- минуты: 3\n- символы входа: 551\n- символы выхода: 900\n",
+                encoding="utf-8",
+            )
+            (project / "strategy.md").write_text(
+                "В стратегии записано 440 посетителей в месяц, и ссылки на источник в этом предложении нет.\n",
+                encoding="utf-8",
+            )
+            prose = bench.project_prose(project)
+            self.assertNotIn("551", prose)
+            audit = bench.claim_audit(prose, [])
+            self.assertEqual(audit["unsourced_numbers"], 1)
+            self.assertEqual(audit["uncited"][0]["numbers"], ["440"])
+
+
 class LauncherTests(unittest.TestCase):
     def _tree(self, root: Path, *, sibling: bool = False, versions: list[str] | None = None) -> Path:
         root.mkdir(parents=True)
