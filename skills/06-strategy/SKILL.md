@@ -41,4 +41,18 @@ description: Собрать продуктовую и коммуникацион
 
 `PP1` должен быть описан словами в продуктовом разделе, не только в маркере. Обещание, для которого нет свойства, удали. Проверка ловит разрыв маркеров и пустые подразделы, смысл сверяешь ты.
 
-Затем `check` и `log` этого этапа. Под подпиской IDE в `log` передай `--input-chars` и `--output-chars`, не подставляй оценку в `--cost`. `advance <проект> 6` откажется, если в `log.jsonl` ещё нет записи этапа 6.
+Класс `strategy` — уровень `strong`:
+
+```text
+python scripts/strat.py complete --tier strong --stage 6 --project <проект> --prompt-file стратегия.txt
+```
+
+`MODE: manual` — пиши стратегию моделью подписки. `MODE: api` — черновик сверь с продуктом сам. Оценку в `--cost` не подставляй.
+
+Затем `check` и `log` этого этапа. Под подпиской IDE:
+
+```text
+python scripts/strat.py log <проект> 6 "<действие>" --grounds "<почему>" --input-chars <N> --output-chars <M> --model ide/subscription
+```
+
+Затем `python scripts/strat.py cost <проект> --estimate`. `advance <проект> 6` откажется, если в `log.jsonl` ещё нет записи этапа 6.

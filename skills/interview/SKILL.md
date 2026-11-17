@@ -27,3 +27,5 @@ description: Оформить живые заметки разговора ка�
 Воображаемая персона — не этот навык. Её не оформляют как интервью. Источник `kind=synthetic`, свидетельство `type=synthetic`, надёжность `low`, в тексте слово «синтетическ». Навык `synthetic-respondent`. `check` не примет синтетику без этой пометки и не даст ей kind обычного интервью.
 
 Шаблон заметки: `skills/interview/template.md`.
+
+Класс `interview` — уровень `ide`. В `log` текущего этапа передай `--input-chars` и `--output-chars`, модель `ide/subscription`. Оценку в `--cost` не подставляй. Затем `python scripts/strat.py cost <проект> --estimate`.

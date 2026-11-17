@@ -14,3 +14,4 @@ projects/*
 projects/.current
 *.log
 .claude/settings.local.json
+.stop-hook.lock

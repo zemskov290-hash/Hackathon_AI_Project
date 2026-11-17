@@ -35,6 +35,14 @@ python scripts/strat.py supersede-option <проект> O2 --reason "почем�
 
 В каждом блоке строка `Возражение:`. Её пишет роль critic (`.claude/agents/critic.md`) или ты по той же инструкции. Возражение бьёт в сильную версию варианта. Факты в тексте варианта ссылаются на `[E..]`, прогнозы помечены словом «прогноз».
 
+Классы `options` и `critic` — уровень `strong`. Отдельный проход критика:
+
+```text
+python scripts/strat.py complete --tier strong --stage 5 --project <проект> --prompt-file critic.txt
+```
+
+`MODE: manual` — возражения пишешь моделью подписки. `MODE: api` — черновик всё равно проверь на опору `[E..]`. Стоимость API уже в журнале, в `--cost` оценку не подставляй.
+
 Убери пометку шаблона. Покажи варианты человеку и остановись. После явного выбора:
 
 ```text
@@ -43,3 +51,11 @@ python scripts/strat.py advance <проект> 5
 ```
 
 Не подставляй выбор сам, даже если один вариант выглядит сильнее.
+
+Перед ответом человеку, если отвечала подписка:
+
+```text
+python scripts/strat.py log <проект> 5 "<действие>" --grounds "<почему>" --input-chars <N> --output-chars <M> --model ide/subscription
+```
+
+Затем `python scripts/strat.py cost <проект> --estimate`.

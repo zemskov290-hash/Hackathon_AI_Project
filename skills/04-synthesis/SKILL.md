@@ -14,4 +14,20 @@ description: Собрать картину — известно, откуда, �
 
 Запусти `python scripts/strat.py check`. Исправь все строки с ненулевым кодом. Потом `log` и `advance <проект> 4`.
 
+Сборка картины — класс `synthesis`, уровень `strong`:
+
+```text
+python scripts/strat.py complete --tier strong --stage 4 --project <проект> --prompt-file синтез.txt
+```
+
+`MODE: manual` — пиши `situation.md` моделью подписки. `MODE: api` — черновик сверь со свидетельствами сам, стоимость вызова уже в журнале.
+
+Перед ответом человеку, если отвечала подписка:
+
+```text
+python scripts/strat.py log <проект> 4 "<действие>" --grounds "<почему>" --input-chars <N> --output-chars <M> --model ide/subscription
+```
+
+Затем `python scripts/strat.py cost <проект> --estimate`. Оценку в `--cost` не подставляй.
+
 Не выбирай вариант на этом этапе.

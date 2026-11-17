@@ -13,3 +13,11 @@ description: Встроить новый источник и поправить 
 4. Поправь только эти строки в markdown. Спорное оставь противоречием, не усредняй.
 5. `check` до ответа человеку. Если рекомендация сдвинулась, не меняй контрольную точку сам. Допиши черновик решения в `decisions.md` и вызови `propose-revision <проект> --decision D2 --choice O3 --reason "..."`. Выбор человека фиксирует только он: `accept-revision --choice O3`.
 6. `log` с основаниями до любого `advance`. Дату в `decisions.md` не стирай: допиши, что пересмотр случился раньше условия, и почему.
+
+Класс `revise` — уровень `strong`:
+
+```text
+python scripts/strat.py complete --tier strong --project <проект> --prompt-file пересмотр.txt
+```
+
+`MODE: manual` — разбор пишет модель подписки. В `log` передай `--input-chars` и `--output-chars`, если отвечала подписка. Оценку в `--cost` не подставляй. Затем `python scripts/strat.py cost <проект> --estimate`. Готовый шаг из `resume` не повторяй.

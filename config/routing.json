@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "default": "ide",
+  "tasks": {
+    "extract": "cheap",
+    "summarize": "cheap",
+    "research": "cheap",
+    "brief": "ide",
+    "research-plan": "ide",
+    "synthesis": "strong",
+    "options": "strong",
+    "critic": "strong",
+    "strategy": "strong",
+    "validation": "strong",
+    "interview": "ide",
+    "respondent": "cheap",
+    "revise": "strong"
+  }
+}

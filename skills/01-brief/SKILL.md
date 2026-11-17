@@ -16,3 +16,11 @@ description: Переформулировать запрос и останови
 7. После согласия: `python scripts/strat.py confirm <проект> brief --note "кратко, с чем согласен"`, затем `log` и `advance <проект> 1`.
 
 Не предлагай решение и не собирай рынок на этом этапе.
+
+Класс `brief` остаётся на уровне `ide`: `complete` для него не нужен. Перед ответом человеку запиши объём, не выдумывая токены и не подставляя оценку в `--cost`:
+
+```text
+python scripts/strat.py log <проект> 1 "<действие>" --grounds "<почему>" --input-chars <N> --output-chars <M> --model ide/subscription
+```
+
+Затем `python scripts/strat.py cost <проект> --estimate`. N и M — символы прочитанного и написанного.
