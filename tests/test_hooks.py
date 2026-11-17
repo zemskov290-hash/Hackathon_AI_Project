@@ -232,8 +232,10 @@ class HookStdinTests(unittest.TestCase):
         for command in configured:
             self.assertNotIn("$", command)
             self.assertNotIn("%", command)
+            self.assertNotIn("base64", command)
             name = command.rsplit(" ", 1)[-1]
             self.assertEqual(command, launcher.command_for(name))
+            self.assertEqual(launcher.embedded_program(command), launcher.program_text())
         payloads = {
             "guard_shell": '{"command":"python --version"}\n',
             "guard_read": '{"file_path":"note.txt","content":"hi"}\n',
