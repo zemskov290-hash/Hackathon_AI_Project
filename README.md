@@ -260,8 +260,11 @@ python scripts/bench.py prepare --out 'C:\strat-bench'
 python scripts/bench.py capture --workspace 'C:\strat-bench\agent\t01-brief-strategy'
 python scripts/bench.py capture --workspace 'C:\strat-bench\chat\t01-brief-strategy'
 python scripts/bench.py score --work 'C:\strat-bench'
-python scripts/bench.py summary --work 'C:\strat-bench'
+python scripts/bench.py archive --work 'C:\strat-bench' --model-note 'пометка модели'
+python scripts/bench.py summary
 ```
+
+`summary` без `--work` пересчитывает таблицу по `bench/runs`. Пока архива нет, в [`docs/benchmark.md`](docs/benchmark.md) прочерки. `archive` копирует ответы и файлы результата, не весь репозиторий, и убирает из `meta.json` абсолютные пути.
 
 `prepare` пишет `commands.ps1` со всеми шестью задачами и обоими режимами. В строках нет `$` и внутренних двойных кавычек. `capture` читает `PROMPT.txt` как UTF-8. На Windows он не вызывает `agent.cmd` через оболочку: ищет лаунчер и запускает `node.exe` с `index.js`, промпт одним аргументом. Явный путь — `--agent-cmd` или `STRAT_AGENT_CMD`. Команда, которую он собирает:
 

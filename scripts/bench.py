@@ -12,10 +12,12 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -30,6 +32,8 @@ import strat  # noqa: E402
 TASKS_ROOT = ROOT / "bench" / "tasks"
 SUMMARY_JSON = ROOT / "bench" / "summary.json"
 SUMMARY_MD = ROOT / "docs" / "benchmark.md"
+RUNS_ROOT = ROOT / "bench" / "runs"
+USER_HOME_RE = re.compile(r"(?i)(?:[A-Za-z]:\\Users\\[^\\]+|/Users/[^/]+|/home/[^/]+)")
 MODES = ("agent", "chat")
 SKIP_DIR_NAMES = {
     ".git",
@@ -69,6 +73,8 @@ RESULT_FILES = (
     "validation.md",
     "decisions.md",
 )
+PROJECT_PACK = RESULT_FILES + ("state.json", "evidence.jsonl", "sources.jsonl", "log.md", "log.jsonl")
+PROJECT_DIRS = ("sources", "analysis", "inspect")
 QUOTE_RE = re.compile(r"«([^»]{20,})»|\"([^\"]{20,})\"")
 YEAR_RE = re.compile(r"^(19[9]\d|20[0-2]\d|203[0-5])$")
 AGENT_FLAGS = ["-p", "--force", "--trust", "--approve-mcps", "--output-format", "text"]
@@ -1322,6 +1328,234 @@ def cell_text(value, applicable: bool) -> str:
     return str(value)
 
 
+def copy_bytes(src: Path, dest: Path) -> None:
+    data = src.read_bytes()
+    if dest.is_file() and dest.read_bytes() == data:
+        return
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data)
+
+
+def scrub_user_path(value: str) -> str:
+    return USER_HOME_RE.sub("~", value)
+
+
+def relativize_argv(argv: list, version: str) -> list[str]:
+    """Drop absolute paths and Windows user names. Keep the cursor-agent version folder."""
+    rewritten = []
+    for part in argv:
+        text = str(part)
+        norm = text.replace("\\", "/")
+        name = norm.rsplit("/", 1)[-1]
+        if name.lower() in {"node.exe", "node", "index.js"}:
+            match = re.search(r"versions/([^/]+)/", norm)
+            ver = match.group(1) if match else version
+            if ver:
+                rewritten.append(f"cursor-agent/versions/{ver}/{name}")
+            else:
+                rewritten.append(f"cursor-agent/{name}")
+            continue
+        if USER_HOME_RE.search(text) or re.match(r"^[A-Za-z]:[\\/]", text) or text.startswith("/"):
+            rewritten.append(name)
+            continue
+        rewritten.append(scrub_user_path(text))
+    return rewritten
+
+
+def sanitize_meta(meta: dict) -> dict:
+    version = str(meta.get("agent_version") or "")
+    clean = {}
+    for key, value in meta.items():
+        if key == "command" and isinstance(value, list):
+            clean[key] = relativize_argv(value, version)
+        elif isinstance(value, str):
+            clean[key] = scrub_user_path(value)
+        else:
+            clean[key] = value
+    return clean
+
+
+def copy_project_pack(project: Path, dest: Path) -> None:
+    for name in PROJECT_PACK:
+        src = project / name
+        if src.is_file():
+            copy_bytes(src, dest / name)
+    for folder in PROJECT_DIRS:
+        root = project / folder
+        if not root.is_dir():
+            continue
+        for path in root.rglob("*"):
+            if path.is_file():
+                copy_bytes(path, dest / folder / path.relative_to(root))
+
+
+def check_archive_complete(project: Path) -> tuple[bool, str]:
+    """True when strat check can see the same files it saw in the live project."""
+    if not (project / "state.json").is_file():
+        return False, "нет state.json"
+    for name in strat.ARTIFACTS:
+        if not (project / name).is_file():
+            return False, f"нет {name}"
+    for row in load_jsonl_rows(project / "sources.jsonl"):
+        ref = str(row.get("url_or_path") or "")
+        if not ref or re.match(r"https?://", ref):
+            continue
+        if not (project / ref).is_file():
+            return False, f"нет снимка {ref}"
+    for row in load_jsonl_rows(project / "evidence.jsonl"):
+        analysis_id = str(row.get("analysis_id") or "")
+        if analysis_id and not (project / "analysis" / analysis_id / "result.json").is_file():
+            return False, f"нет analysis/{analysis_id}"
+        inspect_id = str(row.get("inspect_id") or "")
+        if inspect_id and not (project / "inspect" / inspect_id / "manifest.json").is_file():
+            return False, f"нет inspect/{inspect_id}"
+    return True, ""
+
+
+def archive(work: Path, dest: Path | None = None, model_note: str = "", *, os_name: str | None = None) -> Path:
+    """Copy run artifacts into the repo. Not the agent workspace and not a user profile path."""
+    if not work.is_dir():
+        raise BenchError(f"Нет каталога прогона: {work}")
+    dest = dest or RUNS_ROOT
+    metas = []
+    copied = 0
+    for task in iter_tasks():
+        for mode in MODES:
+            workspace = work / mode / task["id"]
+            response = workspace / "response.txt"
+            if not response.is_file():
+                continue
+            folder = dest / f"{mode}__{task['id']}"
+            copy_bytes(response, folder / "response.txt")
+            meta_path = workspace / "meta.json"
+            meta = {}
+            if meta_path.is_file():
+                try:
+                    loaded = json.loads(read_text(meta_path))
+                    meta = loaded if isinstance(loaded, dict) else {}
+                except json.JSONDecodeError:
+                    meta = {}
+            clean = sanitize_meta(meta)
+            blob = json.dumps(clean, ensure_ascii=False)
+            if USER_HOME_RE.search(blob) or re.search(r"[A-Za-z]:\\", blob):
+                raise BenchError(f"В meta.json остался абсолютный путь: {folder.name}")
+            write_if_changed(folder / "meta.json", json.dumps(clean, ensure_ascii=False, indent=2) + "\n")
+            metas.append(clean)
+            score_path = work / "scores" / f"{mode}__{task['id']}.json"
+            if score_path.is_file():
+                try:
+                    saved = json.loads(read_text(score_path))
+                except json.JSONDecodeError:
+                    saved = {}
+                if isinstance(saved, dict):
+                    saved["audit_file"] = "audit.md"
+                write_if_changed(folder / "score.json", json.dumps(saved, ensure_ascii=False, indent=2) + "\n")
+            audit_src = work / "scores" / "audit" / f"{mode}__{task['id']}.md"
+            if audit_src.is_file():
+                copy_bytes(audit_src, folder / "audit.md")
+            if mode == "agent":
+                project = workspace / "projects" / str(task["project_id"])
+                if project.is_dir():
+                    copy_project_pack(project, folder / "project")
+            copied += 1
+    if copied == 0:
+        raise BenchError(f"В {work} нет response.txt. Сначала capture.")
+    provenance = {
+        "model_note": model_note,
+        "model_note_is_human": True,
+        "os": os_name or platform.system(),
+        "agent_versions": sorted({str(item.get("agent_version")) for item in metas if item.get("agent_version")}),
+        "ran_on": sorted({str(item.get("started_at") or "")[:10] for item in metas if item.get("started_at")}),
+    }
+    write_if_changed(dest / "provenance.json", json.dumps(provenance, ensure_ascii=False, indent=2) + "\n")
+    files = {}
+    for path in sorted(dest.rglob("*")):
+        if not path.is_file() or path.name == "manifest.json":
+            continue
+        files[path.relative_to(dest).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+    write_if_changed(
+        dest / "manifest.json",
+        json.dumps({"files": files}, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+    )
+    return dest
+
+
+def iter_archived(runs_root: Path) -> list[tuple[str, str, Path]]:
+    found = []
+    if not runs_root.is_dir():
+        return found
+    known = {task["id"] for task in iter_tasks()}
+    for path in sorted(runs_root.iterdir()):
+        if not path.is_dir() or "__" not in path.name:
+            continue
+        mode, task_id = path.name.split("__", 1)
+        if mode in MODES and task_id in known and (path / "response.txt").is_file():
+            found.append((mode, task_id, path))
+    return found
+
+
+def score_archive(runs_root: Path) -> list[dict]:
+    """Recompute metrics from archived files. Saved score json is not the source of the table."""
+    results = []
+    for mode, task_id, folder in iter_archived(runs_root):
+        task = task_by_id(task_id)
+        with tempfile.TemporaryDirectory(prefix="strat-archive-") as tmp:
+            workspace = Path(tmp)
+            copy_bytes(folder / "response.txt", workspace / "response.txt")
+            if (folder / "meta.json").is_file():
+                copy_bytes(folder / "meta.json", workspace / "meta.json")
+            project = None
+            if mode == "agent" and (folder / "project").is_dir():
+                project = workspace / "projects" / str(task["project_id"])
+                copy_project_pack(folder / "project", project)
+            scored = score_workspace(workspace, task, mode)
+        complete, why = (True, "")
+        if mode == "agent":
+            archived_project = folder / "project"
+            if archived_project.is_dir():
+                complete, why = check_archive_complete(archived_project)
+            else:
+                complete, why = False, "в архиве нет каталога project"
+        saved_path = folder / "score.json"
+        saved = {}
+        if saved_path.is_file():
+            try:
+                loaded = json.loads(read_text(saved_path))
+                saved = loaded if isinstance(loaded, dict) else {}
+            except json.JSONDecodeError:
+                saved = {}
+        if mode == "agent" and not complete:
+            stored = (saved.get("metrics") or {}).get("check_errors")
+            if isinstance(stored, dict):
+                replacement = dict(stored)
+                detail = str(replacement.get("detail") or "")
+                replacement["detail"] = (
+                    detail + f" Источник: сохранённый score, архив неполный ({why})."
+                ).strip()
+                replacement["from_saved_score"] = True
+                scored.setdefault("metrics", {})["check_errors"] = replacement
+                scored["from_saved_score"] = ["check_errors"]
+            else:
+                scored["from_saved_score"] = ["check_errors"]
+                if scored.get("metrics", {}).get("check_errors"):
+                    scored["metrics"]["check_errors"]["detail"] = (
+                        f"Архив неполный ({why}), сохранённого score нет. Это не живой check."
+                    )
+        results.append(scored)
+    return results
+
+
+def load_provenance(runs_root: Path) -> dict | None:
+    path = runs_root / "provenance.json"
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(read_text(path))
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def historical_block() -> dict:
     run_reports = ROOT / "docs" / "manual-tests"
     reports = sorted(path.name for path in run_reports.glob("run*.md")) if run_reports.is_dir() else []
@@ -1341,8 +1575,13 @@ def historical_block() -> dict:
     }
 
 
-def render_summary(results: list[dict], historical: dict) -> tuple[str, dict]:
-    paired = any(item.get("status") == "scored" for item in results)
+def render_summary(
+    results: list[dict],
+    historical: dict,
+    provenance: dict | None = None,
+) -> tuple[str, dict]:
+    public = [{key: value for key, value in item.items() if key != "audit"} for item in results]
+    paired = any(item.get("status") == "scored" for item in public)
     comparison = {}
     for spec in METRICS:
         agent_value, agent_n = mean_of(results, "agent", spec["id"])
@@ -1369,14 +1608,16 @@ def render_summary(results: list[dict], historical: dict) -> tuple[str, dict]:
         )
     payload = {
         "generated_from_runs": paired,
+        "provenance": provenance,
         "comparison": comparison,
-        "runs": results,
+        "runs": public,
         "tasks": tasks_meta,
         "historical": historical,
         "limitations": [spec["limit"] for spec in METRICS]
         + [
             "Малая выборка: шесть задач. Один прогон на режим не даёт доверительного интервала.",
-            "Модель в таблицу не подставляется. Имя пишется только если человек положил его в meta.json, поле model.",
+            "Поле model в meta.json capture не заполняет: формат text его не печатает. "
+            "Пометку человека пишет archive --model-note; она не выдаётся за показание CLI.",
             "Судья не языковая модель. Совпадение слов и файлов не является оценкой смысла.",
             "Обе команды agent запускаются с одними флагами. Разница — папка и промпт. "
             "Сборка CLI может всё равно показать shell в пустой папке: промпт чата запрещает инструменты, отдельного выключателя в этой команде нет.",
@@ -1385,13 +1626,44 @@ def render_summary(results: list[dict], historical: dict) -> tuple[str, dict]:
     lines = [
         "# Бенчмарк: агент и обычный чат",
         "",
-        "Цифры считает `python scripts/bench.py summary` по файлам прогона. Пока парных прогонов нет, в сравнении стоят прочерки. Оценщик не подставляет результаты.",
+        "Цифры считает `python scripts/bench.py summary` по файлам прогона. Пока архива `bench/runs` нет, в сравнении стоят прочерки. Оценщик не подставляет результаты.",
         "",
         "## Сравнение",
         "",
     ]
     if not paired:
         lines.append("Парных прогонов нет. Ячейки пустые намеренно.")
+        lines.append("")
+    elif provenance:
+        versions = ", ".join(provenance.get("agent_versions") or []) or "не записана"
+        dates = ", ".join(provenance.get("ran_on") or []) or "не записана"
+        note = provenance.get("model_note") or "не записана"
+        lines.append(
+            f"Архив прогонов: cursor-agent {versions}, ОС {provenance.get('os') or 'не записана'}, дата {dates}."
+        )
+        lines.append(
+            "Пометка модели введена человеком флагом --model-note, это не поле вывода cursor-agent: " + note + "."
+        )
+        lines.append(
+            "Имя модели capture не снимает: --output-format text его не печатает, итоговый --output-format json тоже без модели. "
+            "Честное поле model есть в первом событии --output-format stream-json, событие type=system subtype=init. "
+            "Проверка отдельной короткой командой: agent -p --output-format stream-json --trust --force и строка system.init. "
+            "agent status модель не печатает."
+        )
+        lines.append("")
+    saved = [
+        f"{item.get('mode')}/{item.get('task')}: {', '.join(item.get('from_saved_score') or [])}"
+        for item in public
+        if item.get("from_saved_score")
+    ]
+    if paired and saved:
+        lines.append(
+            "Пересчёт по архиву не включает check там, где не хватает снимка анализа или источника. "
+            "Эти значения взяты из сохранённого score: " + "; ".join(saved) + "."
+        )
+        lines.append("")
+    elif paired:
+        lines.append("Метрики таблицы пересчитаны по файлам архива. Сохранённый score json в числа не подставлялся.")
         lines.append("")
     lines.append("| Метрика | Лучше | Агент | Чат | Прогонов агент | Прогонов чат |")
     lines.append("| --- | --- | --- | --- | --- | --- |")
@@ -1460,8 +1732,13 @@ def render_summary(results: list[dict], historical: dict) -> tuple[str, dict]:
             "python scripts/bench.py capture --workspace 'C:\\strat-bench\\agent\\t01-brief-strategy'",
             "python scripts/bench.py capture --workspace 'C:\\strat-bench\\chat\\t01-brief-strategy'",
             "python scripts/bench.py score --work 'C:\\strat-bench'",
-            "python scripts/bench.py summary --work 'C:\\strat-bench'",
+            "python scripts/bench.py archive --work 'C:\\strat-bench' --model-note 'пометка модели'",
+            "python scripts/bench.py summary",
             "```",
+            "",
+            "summary без --work пересчитывает таблицу по bench/runs. Пока этого каталога нет, таблица пустая. "
+            "В архив входят ответ, meta, score, аудит и файлы результата проекта, не копия репозитория. "
+            "Пути cursor-agent в meta становятся cursor-agent/versions/<версия>/index.js.",
             "",
             "Полный список без переменных пишет `prepare` в `commands.ps1` рядом с рабочими папками. capture вызывает:",
             "",
@@ -1476,6 +1753,10 @@ def render_summary(results: list[dict], historical: dict) -> tuple[str, dict]:
             "Прямая строка для тех, кто хочет видеть agent сам, тоже есть в commands.ps1. Она не пишет response.txt. Кириллицу надёжнее отдаёт capture: Python читает UTF-8 и не просит BOM у PowerShell 5.1.",
             "",
             "Имя модели в meta.json не заполняется. Его можно дописать руками после прогона, оценщик сам его не выставляет.",
+            "Флаг --output-format text и итоговый --output-format json имя модели не печатают. "
+            "Оно есть в первом событии --output-format stream-json: type=system, subtype=init, поле model. "
+            "Коротко проверить: agent -p --output-format stream-json --trust --force и посмотреть эту строку. "
+            "agent status модель не показывает. Пока строка не снята, в архив кладётся только --model-note, и сводка помечает её как слова человека.",
             "",
             "`score` пишет перечень нецитированных фрагментов и чисел в `scores/audit/<режим>__<задача>.md` и кладёт тот же список в JSON оценки. Это аудит, не вторая метрика.",
             "",
@@ -1485,12 +1766,17 @@ def render_summary(results: list[dict], historical: dict) -> tuple[str, dict]:
 
 
 def summary(work: Path | None, markdown_path: Path, json_path: Path, *, check: bool) -> int:
-    results: list[dict] = []
+    provenance = None
     if work is not None:
         if not work.is_dir():
             raise BenchError(f"Нет каталога прогона: {work}")
         results = score_work(work)
-    text, payload = render_summary(results, historical_block())
+    elif iter_archived(RUNS_ROOT):
+        results = score_archive(RUNS_ROOT)
+        provenance = load_provenance(RUNS_ROOT)
+    else:
+        results = []
+    text, payload = render_summary(results, historical_block(), provenance)
     rendered_json = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
     if check:
         current_md = read_text(markdown_path) if markdown_path.is_file() else ""
@@ -1562,12 +1848,26 @@ def build_parser() -> argparse.ArgumentParser:
     score_cmd.add_argument("--work", required=True)
     score_cmd.set_defaults(func=cmd_score)
     summary_cmd = sub.add_parser("summary", help="таблица агент vs чат в Markdown и JSON")
-    summary_cmd.add_argument("--work", help="каталог prepare; без него сравнение пустое")
+    summary_cmd.add_argument("--work", help="каталог prepare; без него читается bench/runs, если архив есть")
     summary_cmd.add_argument("--markdown", help="куда писать Markdown")
     summary_cmd.add_argument("--json", help="куда писать JSON")
     summary_cmd.add_argument("--check", action="store_true", help="код 1, если файлы сводки отличаются")
     summary_cmd.set_defaults(func=cmd_summary)
+    archive_cmd = sub.add_parser("archive", help="скопировать прогоны в bench/runs без абсолютных путей")
+    archive_cmd.add_argument("--work", required=True, help="каталог prepare со scores и response.txt")
+    archive_cmd.add_argument("--dest", help="куда класть архив; по умолчанию bench/runs")
+    archive_cmd.add_argument("--model-note", default="", help="пометка человека о модели, не показание CLI")
+    archive_cmd.set_defaults(func=cmd_archive)
     return parser
+
+
+def cmd_archive(args: argparse.Namespace) -> int:
+    dest = Path(args.dest) if args.dest else None
+    path = archive(Path(args.work), dest, args.model_note)
+    print(f"Архив: {path}")
+    print("Дальше из корня: python scripts/bench.py summary")
+    print("В git вместе с архивом кладут docs/benchmark.md и bench/summary.json.")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

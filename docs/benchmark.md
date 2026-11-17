@@ -1,6 +1,6 @@
 # Бенчмарк: агент и обычный чат
 
-Цифры считает `python scripts/bench.py summary` по файлам прогона. Пока парных прогонов нет, в сравнении стоят прочерки. Оценщик не подставляет результаты.
+Цифры считает `python scripts/bench.py summary` по файлам прогона. Пока архива `bench/runs` нет, в сравнении стоят прочерки. Оценщик не подставляет результаты.
 
 ## Сравнение
 
@@ -38,7 +38,7 @@
 - Берётся только из meta.json, который пишет capture. Оценщик время не угадывает. Одна машина и одна модель не сравниваются с другим прогоном как бенчмарк скорости.
 - Длина response.txt, если файл есть. Иначе длина заметок проекта. Это не токены и не счёт. Длинный ответ не считается лучшим.
 - Малая выборка: шесть задач. Один прогон на режим не даёт доверительного интервала.
-- Модель в таблицу не подставляется. Имя пишется только если человек положил его в meta.json, поле model.
+- Поле model в meta.json capture не заполняет: формат text его не печатает. Пометку человека пишет archive --model-note; она не выдаётся за показание CLI.
 - Судья не языковая модель. Совпадение слов и файлов не является оценкой смысла.
 - Обе команды agent запускаются с одними флагами. Разница — папка и промпт. Сборка CLI может всё равно показать shell в пустой папке: промпт чата запрещает инструменты, отдельного выключателя в этой команде нет.
 
@@ -149,8 +149,11 @@ python scripts/bench.py prepare --out 'C:\strat-bench'
 python scripts/bench.py capture --workspace 'C:\strat-bench\agent\t01-brief-strategy'
 python scripts/bench.py capture --workspace 'C:\strat-bench\chat\t01-brief-strategy'
 python scripts/bench.py score --work 'C:\strat-bench'
-python scripts/bench.py summary --work 'C:\strat-bench'
+python scripts/bench.py archive --work 'C:\strat-bench' --model-note 'пометка модели'
+python scripts/bench.py summary
 ```
+
+summary без --work пересчитывает таблицу по bench/runs. Пока этого каталога нет, таблица пустая. В архив входят ответ, meta, score, аудит и файлы результата проекта, не копия репозитория. Пути cursor-agent в meta становятся cursor-agent/versions/<версия>/index.js.
 
 Полный список без переменных пишет `prepare` в `commands.ps1` рядом с рабочими папками. capture вызывает:
 
@@ -165,5 +168,6 @@ agent -p --force --trust --approve-mcps --output-format text <текст PROMPT.
 Прямая строка для тех, кто хочет видеть agent сам, тоже есть в commands.ps1. Она не пишет response.txt. Кириллицу надёжнее отдаёт capture: Python читает UTF-8 и не просит BOM у PowerShell 5.1.
 
 Имя модели в meta.json не заполняется. Его можно дописать руками после прогона, оценщик сам его не выставляет.
+Флаг --output-format text и итоговый --output-format json имя модели не печатают. Оно есть в первом событии --output-format stream-json: type=system, subtype=init, поле model. Коротко проверить: agent -p --output-format stream-json --trust --force и посмотреть эту строку. agent status модель не показывает. Пока строка не снята, в архив кладётся только --model-note, и сводка помечает её как слова человека.
 
 `score` пишет перечень нецитированных фрагментов и чисел в `scores/audit/<режим>__<задача>.md` и кладёт тот же список в JSON оценки. Это аудит, не вторая метрика.

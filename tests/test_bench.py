@@ -559,6 +559,106 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual((errors, warnings), (1, 1))
 
 
+class ArchiveTests(unittest.TestCase):
+    def test_archive_strips_user_paths_and_summary_recomputes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            work = root / "work"
+            chat = work / "chat" / "t05-calculation"
+            chat.mkdir(parents=True)
+            (chat / "response.txt").write_text(
+                "По файлу visits.csv сумма субботы 440 и всех ячеек 1174.\n",
+                encoding="utf-8",
+            )
+            (chat / "meta.json").write_text(
+                json.dumps(
+                    {
+                        "exit_code": 0,
+                        "started_at": "2026-11-17T18:00:00Z",
+                        "agent_version": "2026.11.13-eacade1",
+                        "model": "",
+                        "elapsed_seconds": 2,
+                        "command": [
+                            r"C:\Users\alice\AppData\Local\cursor-agent\versions\2026.11.13-eacade1\node.exe",
+                            r"C:\Users\alice\AppData\Local\cursor-agent\versions\2026.11.13-eacade1\index.js",
+                            "-p",
+                            "--force",
+                            "--trust",
+                            "--approve-mcps",
+                            "--output-format",
+                            "text",
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            agent = work / "agent" / "t01-brief-strategy"
+            project = agent / "projects" / "bench-strategy"
+            project.mkdir(parents=True)
+            (agent / "response.txt").write_text(
+                "Стратегия опирается на заметку survey-note.md и не выдумывает посещаемость.\n",
+                encoding="utf-8",
+            )
+            (agent / "meta.json").write_text(
+                json.dumps({"exit_code": 0, "agent_version": "2026.11.13-eacade1", "started_at": "2026-11-17T18:05:00Z"}),
+                encoding="utf-8",
+            )
+            (project / "state.json").write_text('{"id": "bench-strategy", "schema_version": 1}\n', encoding="utf-8")
+            (project / "evidence.jsonl").write_text(
+                json.dumps({"id": "E001", "analysis_id": "A001", "status": "active", "source": "S001"}) + "\n",
+                encoding="utf-8",
+            )
+            (project / "strategy.md").write_text(
+                "В стратегии записано 440 посетителей в месяц, и ссылки на источник в этом предложении нет.\n",
+                encoding="utf-8",
+            )
+            (project / "log.md").write_text("- символы входа: 551\n", encoding="utf-8")
+            scores = work / "scores"
+            scores.mkdir()
+            (scores / "agent__t01-brief-strategy.json").write_text(
+                json.dumps({"metrics": {"check_errors": {"value": 3, "detail": "ошибок 3, предупреждений 0"}}}),
+                encoding="utf-8",
+            )
+            dest = root / "runs"
+            bench.archive(work, dest, "модель по умолчанию cursor-agent", os_name="Windows")
+            meta = json.loads((dest / "chat__t05-calculation" / "meta.json").read_text(encoding="utf-8"))
+            blob = json.dumps(meta)
+            self.assertNotIn("alice", blob)
+            self.assertNotIn("Users", blob)
+            self.assertNotIn("C:", blob)
+            self.assertEqual(
+                meta["command"][:2],
+                [
+                    "cursor-agent/versions/2026.11.13-eacade1/node.exe",
+                    "cursor-agent/versions/2026.11.13-eacade1/index.js",
+                ],
+            )
+            manifest = json.loads((dest / "manifest.json").read_text(encoding="utf-8"))
+            response = dest / "chat__t05-calculation" / "response.txt"
+            digest = __import__("hashlib").sha256(response.read_bytes()).hexdigest()
+            self.assertEqual(manifest["files"]["chat__t05-calculation/response.txt"], digest)
+            stamp = (dest / "manifest.json").stat().st_mtime_ns
+            bench.archive(work, dest, "модель по умолчанию cursor-agent", os_name="Windows")
+            self.assertEqual((dest / "manifest.json").stat().st_mtime_ns, stamp)
+            results = bench.score_archive(dest)
+            by_key = {(item["mode"], item["task"]): item for item in results}
+            chat_score = by_key[("chat", "t05-calculation")]
+            self.assertEqual(chat_score["metrics"]["calculation_correct"]["value"], 1)
+            self.assertNotIn("from_saved_score", chat_score)
+            agent_score = by_key[("agent", "t01-brief-strategy")]
+            self.assertEqual(agent_score["from_saved_score"], ["check_errors"])
+            self.assertEqual(agent_score["metrics"]["check_errors"]["value"], 3)
+            self.assertNotIn("551", bench.project_prose(dest / "agent__t01-brief-strategy" / "project"))
+            text, payload = bench.render_summary(results, bench.historical_block(), bench.load_provenance(dest))
+            self.assertIn("2026.11.13-eacade1", text)
+            self.assertIn("Windows", text)
+            self.assertIn("2026-11-17", text)
+            self.assertIn("модель по умолчанию cursor-agent", text)
+            self.assertIn("сохранённого score", text)
+            self.assertTrue(payload["generated_from_runs"])
+            self.assertFalse((ROOT / "bench" / "runs").exists())
+
+
 class CaptureProcessTests(unittest.TestCase):
     @unittest.skipUnless(os.name != "nt", "фейковый shell-скрипт не является приложением Win32")
     def test_nonzero_exit_is_reported_and_stored(self) -> None:
