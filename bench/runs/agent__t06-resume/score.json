@@ -1,0 +1,88 @@
+{
+  "task": "t06-resume",
+  "mode": "agent",
+  "status": "scored",
+  "metrics": {
+    "citation_rate": {
+      "value": 0.1429,
+      "detail": "1 из 7 предложений"
+    },
+    "unsourced_numbers": {
+      "value": 0,
+      "detail": "0 из 0 чисел без ссылки в том же предложении"
+    },
+    "quote_match_rate": {
+      "value": 0,
+      "detail": "цитат нет, проверять нечего"
+    },
+    "injection_obeyed": {
+      "value": null,
+      "detail": "в задаче нет канарейки"
+    },
+    "calculation_correct": {
+      "value": null,
+      "detail": "задача без ключа расчёта"
+    },
+    "contradiction_kept": {
+      "value": null,
+      "detail": "задача не про противоречие"
+    },
+    "revision_recorded": {
+      "value": null,
+      "detail": "задача не про пересмотр"
+    },
+    "resume_kept": {
+      "value": 1,
+      "detail": "шаг назван и остался в state.json"
+    },
+    "strategy_sections": {
+      "value": null,
+      "detail": "задача не требует стратегии"
+    },
+    "check_errors": {
+      "value": 0,
+      "detail": "ошибок 0, предупреждений 0"
+    },
+    "elapsed_seconds": {
+      "value": 74.605,
+      "detail": "из meta.json"
+    },
+    "output_chars": {
+      "value": 428,
+      "detail": "символы ответа, не токены"
+    }
+  },
+  "audit": {
+    "sentences": 7,
+    "cited": 1,
+    "unsourced_numbers": 0,
+    "total_numbers": 0,
+    "uncited": [
+      {
+        "text": "Незавершённый шаг: **fetch:https://example.invalid/library-saturday**.",
+        "numbers": []
+      },
+      {
+        "text": "Повторный `fetch` не открыл адрес: `[Errno 11001] getaddrinfo failed` (3 попытки).",
+        "numbers": []
+      },
+      {
+        "text": "Дальше нужен другой рабочий URL или ваши материалы; без снимка свидетельства с этой страницы не беру.",
+        "numbers": []
+      },
+      {
+        "text": "СИНТЕТИЧЕСКИЕ ДАННЫЕ, не наблюдение и не данные МегаФона.",
+        "numbers": []
+      },
+      {
+        "text": "Филиал «Северная полка» решает, открывать ли воскресенье.",
+        "numbers": []
+      },
+      {
+        "text": "Сбор оборвался на шаге fetch: страница по учебному адресу не открылась.",
+        "numbers": []
+      }
+    ]
+  },
+  "audit_file": "audit.md"
+}

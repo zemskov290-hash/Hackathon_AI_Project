@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "id": "bench-resume",
+  "title": "Синтетика: оборванный сбор расписания «Северной полки»",
+  "stage": 3,
+  "stage_status": "in_progress",
+  "completed_stages": [
+    1,
+    2
+  ],
+  "checkpoints": {
+    "brief": {
+      "status": "confirmed",
+      "at": "2026-11-17T08:00:00Z",
+      "note": "Синтетический бриф принят для бенчмарка",
+      "choice": null
+    },
+    "options": {
+      "status": "open",
+      "at": null,
+      "note": null,
+      "choice": null
+    },
+    "validation": {
+      "status": "open",
+      "at": null,
+      "note": null,
+      "choice": null
+    }
+  },
+  "steps": {
+    "fetch:https://example.invalid/library-saturday": {
+      "status": "failed",
+      "inputs_hash": "dfdd67378aeb55379e8d2f627a6aeddc829f150cd778f3643b5a326acda8f773",
+      "updated_at": "2026-11-17T15:08:44Z",
+      "detail": "Сеть недоступна или адрес не открылся: https://example.invalid/library-saturday. [Errno 11001] getaddrinfo failed Попыток: 3."
+    }
+  },
+  "created_at": "2026-11-17T08:00:00Z",
+  "updated_at": "2026-11-17T15:08:50Z"
+}

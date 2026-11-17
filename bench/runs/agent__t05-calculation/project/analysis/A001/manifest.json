@@ -1,0 +1,16 @@
+{
+  "chart_note": null,
+  "chart_path": null,
+  "id": "A001",
+  "input_path": "analysis/A001/input.csv",
+  "input_sha256": "aceaf3b1c7322715505323522ebedd0ba1d62272b0ad06acf1d4fd0903ca4ae9",
+  "mode": "spec",
+  "origin": "visits.csv",
+  "report_path": "analysis/A001/report.md",
+  "result_path": "analysis/A001/result.json",
+  "script_path": null,
+  "spec_path": "analysis/A001/spec.json",
+  "status": "done",
+  "synthetic": true,
+  "timeout": 5.0
+}

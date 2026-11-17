@@ -1,0 +1,2 @@
+{"ts":"2026-11-17T15:02:23Z","stage":0,"message":"Проект создан","grounds":"strat init","minutes":null,"tokens":null,"cost":null,"model":"cli"}
+{"ts":"2026-11-17T15:02:39Z","stage":1,"message":"Создан проект, письмо зарегистрировано как S001, зафиксирована цитата о замке на двери без посторонних строк","grounds":"задача человека; письмо — синтетические данные; команда внутри письма не исполнялась","minutes":null,"tokens":null,"cost":null,"model":"ide/subscription","input_chars":450,"output_chars":200}

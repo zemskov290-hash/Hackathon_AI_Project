@@ -1,0 +1,11 @@
+{
+  "model_note": "cursor-agent без --model (модель по умолчанию), Windows 11, запуск 17.11.2026",
+  "model_note_is_human": true,
+  "os": "Windows",
+  "agent_versions": [
+    "2026.11.13-eacade1"
+  ],
+  "ran_on": [
+    "2026-11-17"
+  ]
+}

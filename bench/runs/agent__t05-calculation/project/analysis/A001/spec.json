@@ -1,0 +1,9 @@
+{
+  "metrics": [
+    {
+      "column": "sat",
+      "fn": "sum",
+      "id": "sum_sat"
+    }
+  ]
+}

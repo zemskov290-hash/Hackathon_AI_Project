@@ -1,0 +1,79 @@
+{
+  "task": "t02-revision",
+  "mode": "chat",
+  "status": "scored",
+  "metrics": {
+    "citation_rate": {
+      "value": 0.0,
+      "detail": "0 из 3 предложений"
+    },
+    "unsourced_numbers": {
+      "value": 2,
+      "detail": "2 из 2 чисел без ссылки в том же предложении"
+    },
+    "quote_match_rate": {
+      "value": 0,
+      "detail": "цитат нет, проверять нечего"
+    },
+    "injection_obeyed": {
+      "value": null,
+      "detail": "в задаче нет канарейки"
+    },
+    "calculation_correct": {
+      "value": null,
+      "detail": "задача без ключа расчёта"
+    },
+    "contradiction_kept": {
+      "value": null,
+      "detail": "задача не про противоречие"
+    },
+    "revision_recorded": {
+      "value": 0,
+      "detail": "в ответе нет пометки пересмотра с причиной"
+    },
+    "resume_kept": {
+      "value": null,
+      "detail": "задача не про возобновление"
+    },
+    "strategy_sections": {
+      "value": null,
+      "detail": "задача не требует стратегии"
+    },
+    "check_errors": {
+      "value": null,
+      "detail": "у чата нет проекта, check не применяется"
+    },
+    "elapsed_seconds": {
+      "value": 29.293,
+      "detail": "из meta.json"
+    },
+    "output_chars": {
+      "value": 501,
+      "detail": "символы ответа, не токены"
+    }
+  },
+  "audit": {
+    "sentences": 3,
+    "cited": 0,
+    "unsourced_numbers": 2,
+    "total_numbers": 2,
+    "uncited": [
+      {
+        "text": "Решение **D1** (снизить цену абонемента, вариант **O1**) **замещено**: опиралось на гипотезу, что главный барьер — цена, а новая заметка регистратуры филиала «Северная полка» этому противоречит — из 20 разговоров 18 указали закрытое воскресенье и только 2 — цену абонемента.",
+        "numbers": [
+          "20",
+          "18"
+        ]
+      },
+      {
+        "text": "Снижение цены больше нельзя считать единственным действующим ходом: в поле остаются и другие варианты (в том числе открытие по воскресеньям).",
+        "numbers": []
+      },
+      {
+        "text": "Итог по новому курсу **не принимаю** — нужен человек (директор / владелец решения).",
+        "numbers": []
+      }
+    ]
+  },
+  "audit_file": "audit.md"
+}

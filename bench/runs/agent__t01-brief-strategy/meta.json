@@ -1,0 +1,22 @@
+{
+  "task": "t01-brief-strategy",
+  "mode": "agent",
+  "started_at": "2026-11-17T14:52:21Z",
+  "finished_at": "2026-11-17T14:57:05Z",
+  "elapsed_seconds": 283.964,
+  "output_chars": 910,
+  "input_chars": 1241,
+  "model": "",
+  "exit_code": 0,
+  "command": [
+    "cursor-agent/versions/2026.11.13-eacade1/node.exe",
+    "cursor-agent/versions/2026.11.13-eacade1/index.js",
+    "-p",
+    "--force",
+    "--trust",
+    "--approve-mcps",
+    "--output-format",
+    "text"
+  ],
+  "agent_version": "2026.11.13-eacade1"
+}

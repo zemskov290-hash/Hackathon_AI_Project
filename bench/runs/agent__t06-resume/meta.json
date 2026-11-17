@@ -1,0 +1,22 @@
+{
+  "task": "t06-resume",
+  "mode": "agent",
+  "started_at": "2026-11-17T15:07:42Z",
+  "finished_at": "2026-11-17T15:08:57Z",
+  "elapsed_seconds": 74.605,
+  "output_chars": 428,
+  "input_chars": 592,
+  "model": "",
+  "exit_code": 0,
+  "command": [
+    "cursor-agent/versions/2026.11.13-eacade1/node.exe",
+    "cursor-agent/versions/2026.11.13-eacade1/index.js",
+    "-p",
+    "--force",
+    "--trust",
+    "--approve-mcps",
+    "--output-format",
+    "text"
+  ],
+  "agent_version": "2026.11.13-eacade1"
+}

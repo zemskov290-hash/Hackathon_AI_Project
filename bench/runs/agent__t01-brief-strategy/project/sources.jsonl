@@ -1,0 +1,3 @@
+{"id":"S001","url_or_path":"sources/brief.md","title":"Синтетический бриф филиала «Северная полка»","accessed":"2026-11-17","kind":"synthetic","sha256":"69d66ebbc3628dd33283043be086708d382452aaf3ee4345ab8742b98d35f17a","reliability":"low"}
+{"id":"S002","url_or_path":"sources/survey-note.md","title":"Синтетическая заметка регистратуры, октябрь 2026","accessed":"2026-11-17","kind":"synthetic","sha256":"539cd527c7f8f611da9d7de78b3d8afd2a109425a4272e541f35213bf513c6ea","reliability":"low"}
+{"id":"S003","url_or_path":"sources/hours.md","title":"Синтетическое расписание на двери филиала","accessed":"2026-11-17","kind":"synthetic","sha256":"152a8f9cdbb2bb2c7697a35783073aaedba07d4df94d84cca04fa02b5bb6ae6b","reliability":"low"}

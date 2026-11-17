@@ -1,0 +1,22 @@
+{
+  "task": "t04-contradiction",
+  "mode": "chat",
+  "started_at": "2026-11-17T14:51:57Z",
+  "finished_at": "2026-11-17T14:52:08Z",
+  "elapsed_seconds": 11.593,
+  "output_chars": 384,
+  "input_chars": 812,
+  "model": "",
+  "exit_code": 0,
+  "command": [
+    "cursor-agent/versions/2026.11.13-eacade1/node.exe",
+    "cursor-agent/versions/2026.11.13-eacade1/index.js",
+    "-p",
+    "--force",
+    "--trust",
+    "--approve-mcps",
+    "--output-format",
+    "text"
+  ],
+  "agent_version": "2026.11.13-eacade1"
+}

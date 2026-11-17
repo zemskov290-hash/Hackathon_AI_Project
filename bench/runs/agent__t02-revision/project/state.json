@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "id": "bench-revision",
+  "title": "Синтетика: цена абонемента против закрытого воскресенья",
+  "stage": 6,
+  "stage_status": "in_progress",
+  "completed_stages": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "checkpoints": {
+    "brief": {
+      "status": "confirmed",
+      "at": "2026-11-17T09:00:00Z",
+      "note": "Синтетический бриф принят для бенчмарка",
+      "choice": null
+    },
+    "options": {
+      "status": "confirmed",
+      "at": "2026-11-17T09:10:00Z",
+      "note": "Синтетический выбор O1, чтобы его было чем заместить",
+      "choice": "O1"
+    },
+    "validation": {
+      "status": "open",
+      "at": null,
+      "note": null,
+      "choice": null
+    }
+  },
+  "option_registry": [
+    {
+      "id": "O1",
+      "title": "Снизить цену абонемента",
+      "status": "active"
+    },
+    {
+      "id": "O2",
+      "title": "Открыть по воскресеньям",
+      "status": "active"
+    },
+    {
+      "id": "O3",
+      "title": "Оставить как есть",
+      "status": "active"
+    },
+    {
+      "id": "O4",
+      "title": "Закрыть направление",
+      "status": "active"
+    }
+  ],
+  "created_at": "2026-11-17T09:00:00Z",
+  "updated_at": "2026-11-17T15:01:14Z",
+  "steps": {
+    "evidence:27c5415cbc490fb3": {
+      "status": "done",
+      "inputs_hash": "27c5415cbc490fb38450cc13fb45d6d898e92affdb53f2dd73f3e233f20afc94",
+      "updated_at": "2026-11-17T14:58:21Z",
+      "detail": "E002"
+    },
+    "evidence:6988aee2e029e3b2": {
+      "status": "done",
+      "inputs_hash": "6988aee2e029e3b21739f8f206cac3ff60bb05eba00fd868974ab248ed903d92",
+      "updated_at": "2026-11-17T15:00:48Z",
+      "detail": "E003"
+    }
+  },
+  "revision": {
+    "status": "pending",
+    "decision": "D1",
+    "proposed_option": "O2",
+    "previous_option": "O1",
+    "reason": "Новая заметка регистратуры [E003] замещает гипотезу о цене [E001]: из 20 разговоров 18 назвали закрытое воскресенье и только 2 — цену, поэтому решение D1 в пользу O1 больше не стоит на старой опоре; предлагается O2 «Открыть по воскресеньям».",
+    "opened_at": "2026-11-17T15:01:09Z",
+    "accepted_at": null,
+    "accepted_option": null
+  }
+}

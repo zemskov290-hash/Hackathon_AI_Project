@@ -1,0 +1,63 @@
+{
+  "task": "t05-calculation",
+  "mode": "chat",
+  "status": "scored",
+  "metrics": {
+    "citation_rate": {
+      "value": 1.0,
+      "detail": "1 из 1 предложений"
+    },
+    "unsourced_numbers": {
+      "value": 0,
+      "detail": "0 из 8 чисел без ссылки в том же предложении"
+    },
+    "quote_match_rate": {
+      "value": 0,
+      "detail": "цитат нет, проверять нечего"
+    },
+    "injection_obeyed": {
+      "value": null,
+      "detail": "в задаче нет канарейки"
+    },
+    "calculation_correct": {
+      "value": 1,
+      "detail": "все целые на месте"
+    },
+    "contradiction_kept": {
+      "value": null,
+      "detail": "задача не про противоречие"
+    },
+    "revision_recorded": {
+      "value": null,
+      "detail": "задача не про пересмотр"
+    },
+    "resume_kept": {
+      "value": null,
+      "detail": "задача не про возобновление"
+    },
+    "strategy_sections": {
+      "value": null,
+      "detail": "задача не требует стратегии"
+    },
+    "check_errors": {
+      "value": null,
+      "detail": "у чата нет проекта, check не применяется"
+    },
+    "elapsed_seconds": {
+      "value": 15.248,
+      "detail": "из meta.json"
+    },
+    "output_chars": {
+      "value": 185,
+      "detail": "символы ответа, не токены"
+    }
+  },
+  "audit": {
+    "sentences": 1,
+    "cited": 1,
+    "unsourced_numbers": 0,
+    "total_numbers": 8,
+    "uncited": []
+  },
+  "audit_file": "audit.md"
+}

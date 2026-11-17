@@ -1,0 +1,16 @@
+{
+  "chart_note": null,
+  "chart_path": null,
+  "id": "A002",
+  "input_path": "analysis/A002/input.csv",
+  "input_sha256": "6fa220437b44551ce32a2ac82acc31fc24fbfff9df52ab7190c3480e53a0896c",
+  "mode": "spec",
+  "origin": "day-cells.csv",
+  "report_path": "analysis/A002/report.md",
+  "result_path": "analysis/A002/result.json",
+  "script_path": null,
+  "spec_path": "analysis/A002/spec.json",
+  "status": "done",
+  "synthetic": true,
+  "timeout": 5.0
+}
