@@ -1,0 +1,156 @@
+{
+  "offline": {
+    "items": 36,
+    "rows": [
+      {
+        "name": "rules",
+        "title": "Правила, без сети",
+        "hits": 33,
+        "total": 36,
+        "accuracy": "0.9167",
+        "mean_seconds": "0.000",
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "estimated_cost": "0.000000",
+        "note": "посчитано правилами по учебному набору, не ответ модели",
+        "misses": [
+          {
+            "id": "c09",
+            "gold": "hypothesis",
+            "label": "fact"
+          },
+          {
+            "id": "c11",
+            "gold": "hypothesis",
+            "label": "fact"
+          },
+          {
+            "id": "r13",
+            "gold": "03-collect",
+            "label": "01-brief"
+          }
+        ]
+      },
+      {
+        "name": "cheap-saved",
+        "title": "Учебный дешёвый ответ",
+        "hits": 30,
+        "total": 36,
+        "accuracy": "0.8333",
+        "mean_seconds": "0.400",
+        "input_tokens": 6480,
+        "output_tokens": 1440,
+        "estimated_cost": "0.001836",
+        "note": "учебные сохранённые ответы, не прогон cursor-agent",
+        "misses": [
+          {
+            "id": "c07",
+            "gold": "hypothesis",
+            "label": "fact",
+            "error": null
+          },
+          {
+            "id": "c09",
+            "gold": "hypothesis",
+            "label": "fact",
+            "error": null
+          },
+          {
+            "id": "c11",
+            "gold": "hypothesis",
+            "label": "fact",
+            "error": null
+          },
+          {
+            "id": "i06",
+            "gold": [
+              "none"
+            ],
+            "label": null,
+            "error": "в ответе нет JSON-объекта"
+          },
+          {
+            "id": "i08",
+            "gold": [
+              "none"
+            ],
+            "label": [
+              "E002"
+            ],
+            "error": null
+          },
+          {
+            "id": "r13",
+            "gold": "03-collect",
+            "label": "01-brief",
+            "error": null
+          }
+        ]
+      },
+      {
+        "name": "strong-saved",
+        "title": "Учебный сильный ответ",
+        "hits": 33,
+        "total": 36,
+        "accuracy": "0.9167",
+        "mean_seconds": "0.900",
+        "input_tokens": 7920,
+        "output_tokens": 1800,
+        "estimated_cost": "0.050760",
+        "note": "учебные сохранённые ответы, не прогон cursor-agent",
+        "misses": [
+          {
+            "id": "c07",
+            "gold": "hypothesis",
+            "label": "fact",
+            "error": null
+          },
+          {
+            "id": "c09",
+            "gold": "hypothesis",
+            "label": "fact",
+            "error": null
+          },
+          {
+            "id": "c10",
+            "gold": "hypothesis",
+            "label": "synthetic",
+            "error": null
+          }
+        ]
+      },
+      {
+        "name": "pipeline",
+        "title": "Дешёвый ответ, затем эскалация",
+        "hits": 34,
+        "total": 36,
+        "accuracy": "0.9444",
+        "mean_seconds": "0.550",
+        "input_tokens": 7800,
+        "output_tokens": 1740,
+        "estimated_cost": "0.010296",
+        "note": "учебный конвейер: при низкой уверенности или нарушении правила берётся сильный ответ или правило",
+        "misses": [
+          {
+            "id": "c09",
+            "gold": "hypothesis",
+            "label": "fact",
+            "error": null
+          },
+          {
+            "id": "i08",
+            "gold": [
+              "none"
+            ],
+            "label": [
+              "E002"
+            ],
+            "error": null
+          }
+        ]
+      }
+    ]
+  },
+  "live": null,
+  "cost_note": "оценка, не счёт"
+}

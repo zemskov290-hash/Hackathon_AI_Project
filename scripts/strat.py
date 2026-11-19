@@ -24,6 +24,7 @@ from pathlib import Path
 from stdio_utf8 import configure_stdio
 
 import analysis
+import classify
 import grounding
 import inspect_media
 import reply_check
@@ -3100,6 +3101,57 @@ def _add_inspect_evidence(project: Path, outcome: dict, args: argparse.Namespace
     )
 
 
+def cmd_classify(args: argparse.Namespace) -> int:
+    project, _tokens = take_project(list(getattr(args, "rest", None) or []), 0)
+    incoming = getattr(args, "text", None)
+    if incoming and args.input_file:
+        die("Укажите либо текст, либо --input-file, не оба сразу.")
+    if args.input_file:
+        text = strip_one_trailing_newline(read_utf8_arg_file(args.input_file))
+    elif incoming:
+        text = incoming
+    else:
+        die("Нужен --input-file с текстом UTF-8.")
+    if not str(text).strip():
+        die("Пустой текст для классификации.")
+    backend = args.backend or None
+    try:
+        result = classify.classify(project, args.task, text, backend=backend)
+    except classify.ClassifyError as exc:
+        payload = {"ok": False, "task": args.task, "error": str(exc)}
+        print(json.dumps(payload, ensure_ascii=False))
+        stage = int(load_state(project).get("stage") or 0)
+        append_log(
+            project,
+            stage,
+            f"Классификация {args.task}: ответ отклонён",
+            grounds=str(exc),
+            model="ide/subscription",
+            input_chars=len(text),
+            tier="cheap",
+        )
+        return 1
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    message, grounds = classify.journal_lines(result)
+    stage = int(load_state(project).get("stage") or 0)
+    tokens = None
+    if result.get("backend") != "rules" and (result.get("input_tokens") or result.get("output_tokens")):
+        tokens = int(result.get("input_tokens") or 0) + int(result.get("output_tokens") or 0)
+    append_log(
+        project,
+        stage,
+        message,
+        grounds=grounds,
+        tokens=tokens,
+        cost=result.get("provider_cost"),
+        model=result.get("model") or "rules",
+        input_chars=len(text),
+        output_chars=len(str(result.get("rationale") or "")),
+        tier="strong" if result.get("escalated") else "cheap",
+    )
+    return 0
+
+
 def cmd_doctor(_args: argparse.Namespace) -> int:
     print(f"Python: {sys.version.split()[0]} (нужен 3.10+)")
     print(f"Корень: {ROOT}")
@@ -3120,6 +3172,8 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
         f"По умолчанию: {routing.get('default', 'ide')}. "
         "Без ключа уровни cheap и strong выполняются моделью подписки IDE."
     )
+    for line in classify.doctor_lines():
+        print(line)
     optional_packages = (
         ("pypdf", "PDF: страницы в inspect и текст в read_material"),
         ("docx", "DOCX через scripts/read_material.py"),
@@ -3830,6 +3884,25 @@ def build_parser() -> argparse.ArgumentParser:
     complete.add_argument("--project", help="куда писать журнал вызова; иначе текущий проект, если он один")
     complete.add_argument("--stage", type=int, help="этап журнала; по умолчанию текущий этап проекта")
     complete.set_defaults(func=cmd_complete)
+
+    classify_cmd = sub.add_parser(
+        "classify",
+        help="узкая метка: тип утверждения, затронутые id или навык",
+    )
+    classify_cmd.add_argument("rest", nargs="*", help="проект")
+    classify_cmd.add_argument(
+        "--task",
+        required=True,
+        choices=("claim-type", "impact", "route"),
+        help="claim-type, impact или route",
+    )
+    classify_cmd.add_argument("--input-file", help="текст UTF-8, который надо разметить")
+    classify_cmd.add_argument(
+        "--backend",
+        choices=("auto", "cursor-agent", "api", "specialized", "rules"),
+        help="auto, cursor-agent, api, specialized или rules; по умолчанию из config",
+    )
+    classify_cmd.set_defaults(func=cmd_classify, text=None)
 
     analyze_cmd = sub.add_parser("analyze", help="воспроизводимый расчёт по CSV, JSON или XLSX")
     analyze_cmd.add_argument("rest", nargs="*", help="необязательный проект")

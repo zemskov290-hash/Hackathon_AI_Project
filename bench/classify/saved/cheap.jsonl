@@ -1,0 +1,36 @@
+{"raw": "{\"label\": \"fact\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "c01"}
+{"raw": "{\"label\": \"fact\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "c02"}
+{"raw": "{\"label\": \"hypothesis\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "c03"}
+{"raw": "{\"label\": \"forecast\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "c04"}
+{"raw": "{\"label\": \"synthetic\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "c05"}
+{"raw": "{\"label\": \"hypothesis\", \"confidence\": 0.4, \"rationale\": \"не уверен\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "c06"}
+{"raw": "{\"label\": \"fact\", \"confidence\": 0.96, \"rationale\": \"в тексте сказано факт\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "c07"}
+{"raw": "{\"label\": \"hypothesis\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "c08"}
+{"raw": "{\"label\": \"fact\", \"confidence\": 0.92, \"rationale\": \"есть ссылка\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "c09"}
+{"raw": "{\"label\": \"hypothesis\", \"confidence\": 0.55, \"rationale\": \"похоже на догадку\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "c10"}
+{"raw": "{\"label\": \"fact\", \"confidence\": 0.4, \"rationale\": \"есть ссылка, но сомневаюсь\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "c11"}
+{"raw": "{\"label\": \"fact\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "c12"}
+{"raw": "{\"label\": [\"E001\"], \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "i01"}
+{"raw": "{\"label\": [\"none\"], \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "i02"}
+{"raw": "{\"label\": [\"E001\", \"E004\"], \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "i03"}
+{"raw": "{\"label\": [\"E001\"], \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "i04"}
+{"raw": "{\"label\": [\"D1\"], \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "i05"}
+{"id": "i06", "raw": "это не json", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}}
+{"raw": "{\"label\": [\"E002\"], \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "i07"}
+{"raw": "{\"label\": [\"E002\"], \"confidence\": 0.8, \"rationale\": \"похоже на цену\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "i08"}
+{"raw": "{\"label\": [\"E003\"], \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "i09"}
+{"raw": "{\"label\": [\"D1\", \"E002\"], \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "i10"}
+{"raw": "{\"label\": \"01-brief\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "r01"}
+{"raw": "{\"label\": \"02-research-plan\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "r02"}
+{"raw": "{\"label\": \"03-collect\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "r03"}
+{"raw": "{\"label\": \"04-synthesis\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "r04"}
+{"raw": "{\"label\": \"05-options\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "r05"}
+{"raw": "{\"label\": \"06-strategy\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "r06"}
+{"raw": "{\"label\": \"07-validation-plan\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "r07"}
+{"raw": "{\"label\": \"decision-tracking\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "r08"}
+{"raw": "{\"label\": \"revise-on-new-data\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "r09"}
+{"raw": "{\"label\": \"interview\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "r10"}
+{"raw": "{\"label\": \"synthetic-respondent\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "r11"}
+{"raw": "{\"label\": \"ux-media-analysis\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "r12"}
+{"raw": "{\"label\": \"01-brief\", \"confidence\": 0.5, \"rationale\": \"неясный запрос\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "r13"}
+{"raw": "{\"label\": \"01-brief\", \"confidence\": 0.92, \"rationale\": \"учебный дешёвый ответ\"}", "elapsed_seconds": 0.4, "usage": {"inputTokens": 180, "outputTokens": 40}, "id": "r14"}

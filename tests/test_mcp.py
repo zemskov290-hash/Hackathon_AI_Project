@@ -56,6 +56,7 @@ REQUIRED_TOOLS = {
     "strat_confirm",
     "strat_advance",
     "strat_complete",
+    "strat_classify",
     "strat_doctor",
     "strat_analyze",
     "strat_inspect",

@@ -90,6 +90,8 @@ Cursor читает `.cursor/hooks.json` и, если включён импор�
 
 Уровень задачи лежит в `config/routing.json`: `cheap`, `strong` или `ide`. Таблицу печатает `doctor`. Навык этапа вызывает `python scripts/strat.py complete --tier <уровень>`. `MODE: manual` — отвечай моделью подписки IDE. `MODE: api` — бери текст ответа; уровень, модель и стоимость вызова уже в журнале. Без ключа в `.env` платного вызова нет. Оценку из `cost --estimate` в поле `--cost` не подставляй.
 
+Узкую метку не отдавай сильному `complete`. После `resume`, если по запросу неясно, какой навык открывать, вызови `classify --task route` (MCP `strat_classify`). Перед `add-evidence` так же размечай тип утверждения (`claim-type`). Перед `impact` и `propose-revision` размечай, какие существующие id затрагивает новое сведение (`impact`): в метке только id из реестра или `none`, затем обычный `impact` по этим id. Исполнитель — лёгкая модель cursor-agent, имя в `config/routing.json` (`agent --list-models`). Нет `agent` в PATH — OpenAI-совместимый API, если ключ уже в окружении. Нет ключа — правила без сети. Факт без `[S…]`, `[E…]` или `[A….метрика]` команда не оставляет: низкая уверенность или такое противоречие эскалирует на сильную модель, а в `log.md` пишется, что выбрано и почему исправлено. Метка вне списка — ошибка, не догадка. `check`, цитата и правила ссылок от классификатора не слабеют: он не записывает свидетельство и не закрывает этап.
+
 ## Шаги
 
 Длинный шаг пишется в `state.json` в объект `steps`: id, статус `started`, `done` или `failed`, хеш входа. `resume` называет незавершённый шаг. Готовый шаг не повторяй. `fetch` пропускает URL, у которого уже есть снимок, пока нет `--force`. Сбой сети повторяется с паузой; когда попытки кончились, шаг становится `failed`, а в журнале остаётся причина, включая HTTP 503. `add-evidence` не создаёт вторую активную запись с тем же type, source, claim и quote.
@@ -152,7 +154,7 @@ chcp 65001
 
 Из корня репозитория: `python scripts/strat.py --help`.
 
-`init`, `status`, `resume`, `use`, `show`, `fetch` (`--force`), `add-source`, `add-evidence`, `supersede`, `add-option`, `supersede-option`, `analyze` (`--id`, `--verify`), `inspect`, `kb add`, `kb index`, `kb search`, `interview guide`, `interview accept`, `reply-check`, `check` (`--strict`), `impact`, `retract`, `log` (`--minutes`, `--input-chars`, `--output-chars`, `--tier`), `cost` (`--estimate`), `confirm`, `advance`, `propose-revision`, `accept-revision`, `doctor`, `complete` (`--tier cheap|strong|ide`).
+`init`, `status`, `resume`, `use`, `show`, `fetch` (`--force`), `add-source`, `add-evidence`, `supersede`, `add-option`, `supersede-option`, `analyze` (`--id`, `--verify`), `inspect`, `kb add`, `kb index`, `kb search`, `interview guide`, `interview accept`, `reply-check`, `check` (`--strict`), `impact`, `retract`, `log` (`--minutes`, `--input-chars`, `--output-chars`, `--tier`), `cost` (`--estimate`), `confirm`, `advance`, `propose-revision`, `accept-revision`, `doctor`, `complete` (`--tier cheap|strong|ide`), `classify` (`--task claim-type|impact|route`).
 
 Те же команды, кроме `use`, есть как инструменты MCP `strat_*`, включая `strat_analyze` и `strat_inspect`. Если они есть в сессии, предпочитай их. `confirm` / `advance` / `accept-revision` в MCP требуют `human_confirmed=true`.
 

@@ -27,6 +27,16 @@
       "input_per_million": 3,
       "output_per_million": 15,
       "label": "условная цена сильного уровня маршрута"
+    },
+    "composer-2.5-fast": {
+      "input_per_million": 0.15,
+      "output_per_million": 0.6,
+      "label": "условная цена лёгкой модели подписки Cursor для оценки классификатора, не тариф и не счёт"
+    },
+    "cursor/default": {
+      "input_per_million": 3,
+      "output_per_million": 15,
+      "label": "условная цена модели cursor-agent по умолчанию, не тариф и не счёт"
     }
   }
 }
