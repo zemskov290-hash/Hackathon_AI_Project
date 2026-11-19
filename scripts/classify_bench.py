@@ -317,6 +317,129 @@ def score_live_run(run_dir: Path, items: list[dict]) -> dict:
     return report
 
 
+# Why a live answer missed. Written once for archive 20261119T214026Z.
+# The rules themselves are not edited to fit these misses.
+LIVE_MISS_WHY = {
+    "c09": "Все три контура сказали fact из-за скобки [E002]. Золото — hypothesis: «считает» — оценка автора, не цитата факта.",
+    "c10": "Обе модели прочитали «Синтетика» как synthetic. Правила требуют подстроку «синтетическ» и оставили hypothesis. Золото совпало с правилом, не с бытовым смыслом слова.",
+    "c11": "Правила и модель по умолчанию сказали fact из-за [S001]. Лёгкая модель увидела «станет только» и дала hypothesis, как в золоте.",
+    "i04": "Правила связали источник S002 со свидетельством E001. Обе модели ответили none: в тексте нет квадратной ссылки, хотя id S002 назван.",
+    "i07": "Правила совпали словами с тезисом E002. Обе модели снова отказались без квадратной ссылки и дали none.",
+    "i09": "В тексте назван E003. Правила и лёгкая модель взяли его. Модель по умолчанию потребовала скобки [E003] и дала none.",
+    "r13": "Фразы навыка сбора нет, правила с низкой уверенностью упали в 01-brief. Обе модели верно назвали 03-collect. Это единственный промах правил, который модели закрыли.",
+    "r14": "Тот же слабый дефолт правил, 01-brief, и золото с ним совпало. Обе модели ушли в 06-strategy. Запрос размытый.",
+}
+
+
+def _show_label(label) -> str:
+    if label is None:
+        return "—"
+    return json.dumps(label, ensure_ascii=False)
+
+
+def replay_rules_first(run_dir: Path, items: list[dict]) -> dict:
+    """Rules first. A model is consulted only when the rule is unsure.
+
+    This replays saved answers. It does not change the scorer of the live rows
+    and does not call cursor-agent. If the cheap answer disagrees with the rule,
+    the strong answer is read too; the models win only when they agree with each
+    other. Otherwise the rule stands.
+    """
+    threshold = float(classify.load_routing()["threshold"])
+    cheap_rows = {str(row["id"]): row for row in read_jsonl(run_dir / "cheap.jsonl")}
+    strong_rows = {str(row["id"]): row for row in read_jsonl(run_dir / "strong.jsonl")}
+    hits = 0
+    errors = 0
+    seconds: list[float] = []
+    input_tokens = 0
+    output_tokens = 0
+    cost = Decimal("0")
+    misses = []
+    for item in items:
+        allowed = classify.allowed_labels(item["task"], FIXTURE)
+        rules = classify.rules_classify(item["task"], item["text"], FIXTURE, allowed)
+        cheap = attempt_for(cheap_rows[item["id"]], item, CHEAP_MODEL) if item["id"] in cheap_rows else None
+        strong = attempt_for(strong_rows[item["id"]], item, STRONG_MODEL) if item["id"] in strong_rows else None
+        label = rules["label"]
+        elapsed = 0.0
+        if rules["confidence"] < threshold and cheap is not None:
+            elapsed += float(cheap["elapsed_seconds"])
+            input_tokens += int(cheap["input_tokens"])
+            output_tokens += int(cheap["output_tokens"])
+            cost += Decimal(str(cheap["estimated_cost"]))
+            if not cheap.get("ok"):
+                errors += 1
+            if not labels_equal(item["task"], cheap.get("label"), rules["label"]) and strong is not None:
+                elapsed += float(strong["elapsed_seconds"])
+                input_tokens += int(strong["input_tokens"])
+                output_tokens += int(strong["output_tokens"])
+                cost += Decimal(str(strong["estimated_cost"]))
+                if not strong.get("ok"):
+                    errors += 1
+                if labels_equal(item["task"], cheap.get("label"), strong.get("label")):
+                    label = cheap.get("label")
+        seconds.append(elapsed)
+        if labels_equal(item["task"], label, item["gold"]):
+            hits += 1
+        else:
+            misses.append({"id": item["id"], "gold": item["gold"], "label": label, "error": None})
+    total = len(items)
+    return {
+        "name": "replay-rules-first",
+        "title": "Правила, модель только при низкой уверенности (пересчёт по архиву)",
+        "hits": hits,
+        "total": total,
+        "errors": errors,
+        "accuracy": ratio(hits, total),
+        "mean_seconds": mean_seconds(seconds),
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "estimated_cost": money(cost),
+        "note": "пересчёт по архиву, не новый прогон",
+        "misses": misses,
+        "threshold": threshold,
+    }
+
+
+def _parsed_live(row: dict, item: dict, model: str) -> dict:
+    return attempt_for(row, item, model)
+
+
+def live_miss_lines(run_dir: Path, items: list[dict]) -> list[str]:
+    cheap_rows = {str(row["id"]): row for row in read_jsonl(run_dir / "cheap.jsonl")}
+    strong_rows = {str(row["id"]): row for row in read_jsonl(run_dir / "strong.jsonl")}
+    lines = [
+        "Промахи живого прогона, по id. Правила заново не подгонялись.",
+        "",
+    ]
+    for item in items:
+        allowed = classify.allowed_labels(item["task"], FIXTURE)
+        rules = classify.rules_classify(item["task"], item["text"], FIXTURE, allowed)
+        cheap = _parsed_live(cheap_rows[item["id"]], item, CHEAP_MODEL)
+        strong = _parsed_live(strong_rows[item["id"]], item, STRONG_MODEL)
+        missed = []
+        if not labels_equal(item["task"], rules["label"], item["gold"]):
+            missed.append("правила")
+        if not labels_equal(item["task"], cheap.get("label"), item["gold"]):
+            missed.append("лёгкая")
+        if not labels_equal(item["task"], strong.get("label"), item["gold"]):
+            missed.append("модель по умолчанию")
+        if not missed:
+            continue
+        lines.append(
+            f"- {item['id']}, {item['task']}. Промах: {', '.join(missed)}. "
+            f"Золото {_show_label(item['gold'])}. "
+            f"Правила: {_show_label(rules['label'])} ({rules['confidence']}). "
+            f"Лёгкая: {_show_label(cheap.get('label'))} ({cheap.get('confidence')}). "
+            f"По умолчанию: {_show_label(strong.get('label'))} ({strong.get('confidence')}). "
+            f"Текст: «{item['text']}»"
+        )
+        why = LIVE_MISS_WHY.get(item["id"])
+        if why:
+            lines.append(f"  {why}")
+    return lines
+
+
 def render_row(row: dict) -> str:
     return (
         f"| {row['title']} | {row['hits']}/{row['total']} | {row['accuracy']} | "
@@ -329,7 +452,7 @@ def render_markdown(offline: dict, live: dict | None) -> str:
     lines = [
         "# Классификатор: дешёвый контур, сильная модель и правила",
         "",
-        "Офлайн-цифры считает `python scripts/classify_bench.py summary` по учебному набору и сохранённым ответам. Живой cursor-agent сюда не подставляется: пока нет каталога в `bench/classify/runs`, в живой таблице стоят прочерки.",
+        "Офлайн-цифры считает `python scripts/classify_bench.py summary` по учебному набору и сохранённым ответам. Если архива `bench/classify/runs` нет, в живой таблице стоят прочерки.",
         "",
         "Стоимость во всех строках — оценка по `config/model-prices.json`, не счёт и не тариф Cursor. Токены учебных ответов заданы в корпусе. Токены живого прогона берутся из поля `usage` JSON cursor-agent, если оно есть. Кэш-токены в оценку не входят: отдельной ставки для них в таблице нет.",
         "",
@@ -391,12 +514,17 @@ def render_markdown(offline: dict, live: dict | None) -> str:
         )
         for row in live["rows"]:
             lines.append(render_row(row))
+        replay = live.get("replay")
+        if replay:
+            lines.append(render_row(replay))
+        lines.append("")
+        lines.extend(live_miss_lines(Path(live["path"]), load_items()))
         lines.append("")
     lines.extend(
         [
             "## Вывод",
             "",
-            "Оставляем. На учебном наборе правила дают метку без сети и не ставят факт без ссылки. Польза лёгкой модели против сильной на живом cursor-agent в этой таблице не заявлена, пока в живых строках прочерки. Учебный конвейер показывает только то, что низкая уверенность и нарушение правила не остаются без следа: невалидная метка — ошибка, а не догадка. Если живой прогон не обгонит правила, в `config/routing.json` достаточно `\"backend\": \"rules\"`: модель тогда не оправдывает вызов, команда остаётся.",
+            *conclusion_lines(offline, live),
             "",
             "## Как прогнать на Windows",
             "",
@@ -446,17 +574,57 @@ def render_payload(offline: dict, live: dict | None) -> dict:
 
     payload = {
         "offline": {"items": offline["items"], "rows": [brief(row) for row in offline["rows"]]},
-        "live": None if live is None else {"run": live["run"], "rows": [brief(row) for row in live["rows"]], "meta": live.get("meta") or {}},
+        "live": None
+        if live is None
+        else {
+            "run": live["run"],
+            "rows": [brief(row) for row in live["rows"]],
+            "replay": brief(live["replay"]) if live.get("replay") else None,
+            "meta": live.get("meta") or {},
+        },
         "cost_note": classify.COST_NOTE,
     }
     return payload
+
+
+def conclusion_lines(offline: dict, live: dict | None) -> list[str]:
+    if not live or not live.get("replay"):
+        return [
+            "Оставляем. На учебном наборе правила дают метку без сети и не ставят факт без ссылки. "
+            "Живого архива нет, поэтому польза модели не заявлена. "
+            "Если прогон не обгонит правила, в `config/routing.json` достаточно `\"backend\": \"rules\"`.",
+        ]
+    by_name = {row["name"]: row for row in live["rows"]}
+    rules = next(row for row in offline["rows"] if row["name"] == "rules")
+    cheap = by_name["cheap-live"]
+    strong = by_name["strong-live"]
+    pipeline = by_name["pipeline"]
+    replay = live["replay"]
+    return [
+        "Оставляем классификатор. Дефолт — правила, без вызова модели.",
+        (
+            f"Архив `{live['run']}`, {rules['total']} примеров. "
+            f"Правила {rules['hits']}/{rules['total']} ({rules['accuracy']}), время {rules['mean_seconds']} с, оценка {rules['estimated_cost']}. "
+            f"Лёгкая модель {cheap['hits']}/{cheap['total']} ({cheap['accuracy']}), {cheap['mean_seconds']} с, оценка {cheap['estimated_cost']}. "
+            f"Модель по умолчанию {strong['hits']}/{strong['total']} ({strong['accuracy']}), {strong['mean_seconds']} с, оценка {strong['estimated_cost']}. "
+            f"Каскад «сначала дешёвая, потом сильная» {pipeline['hits']}/{pipeline['total']} ({pipeline['accuracy']}), {pipeline['mean_seconds']} с, оценка {pipeline['estimated_cost']}. "
+            f"Пересчёт «правила, модель только при уверенности ниже {replay['threshold']}» {replay['hits']}/{replay['total']} ({replay['accuracy']}), {replay['mean_seconds']} с, оценка {replay['estimated_cost']}. Это не новый прогон."
+        ),
+        "Ни лёгкая модель, ни модель по умолчанию, ни один из двух каскадов правила не обогнали. Модель по умолчанию при этом заметно дороже по оценке. На спорных примерах с низкой уверенностью правил модели совпали друг с другом: починили r13 и ошиблись там, где слабое правило было верным (c10, i07, r14). Сильный вызов метку в этих местах не сдвинул.",
+        "Оговорка: набор и правила писал один автор, поэтому точность правил завышена. Примеров 36, доверительного интервала нет. Правила под эти промахи не переписывались.",
+        "В `config/routing.json` поэтому `classifier.backend` равен `rules`. Cursor-agent остаётся по желанию: `\"backend\": \"cursor-agent\"`.",
+    ]
 
 
 def summary_text(runs_root: Path | None = None) -> tuple[str, dict]:
     items = load_items()
     offline = offline_report(items)
     runs = iter_runs(runs_root or RUNS_ROOT)
-    live = score_live_run(runs[-1], items) if runs else None
+    live = None
+    if runs:
+        live = score_live_run(runs[-1], items)
+        live["path"] = str(runs[-1])
+        live["replay"] = replay_rules_first(runs[-1], items)
     payload = render_payload(offline, live)
     return render_markdown(offline, live), payload
 

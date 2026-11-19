@@ -174,7 +174,7 @@ tests/                            unittest и сломанная фикстур�
 
 `python scripts/strat.py doctor` печатает таблицу из [`config/routing.json`](config/routing.json): извлечение и сжатие источников — дешёвая модель, варианты, критик и стратегия — сильная, бриф — модель подписки IDE. Навык вызывает `complete --tier`. Без ключа в `.env` сеть не вызывается.
 
-Узкие метки — `python scripts/strat.py classify <проект> --task claim-type|impact|route --input-file текст.txt`. Имя лёгкой модели cursor-agent лежит в том же `routing.json`; список учётки — `agent --list-models`. Нет `agent` и нет ключа — остаются правила, `summary --check` от этого не меняется. Адаптер вроде Jev выключен, пока в config не стоит `specialized.enabled` и в окружении нет его ключа.
+Узкие метки — `python scripts/strat.py classify <проект> --task claim-type|impact|route --input-file текст.txt`. Дефолт после живого замера — `classifier.backend: rules` в [`config/routing.json`](config/routing.json): правила оказались точнее и дешевле cursor-agent. Имя лёгкой модели лежит там же; список учётки — `agent --list-models`. Адаптер вроде Jev выключен, пока в config не стоит `specialized.enabled` и в окружении нет его ключа.
 
 `resume` говорит, какой шаг начат и не закончен. Готовый `fetch` не качает тот же URL, пока нет `--force`. Ошибка сети повторяется; если страница так и не открылась, в `state.json` шаг со статусом `failed` и в журнале причина, например HTTP 503. Повторное свидетельство с тем же текстом CLI не записывает.
 

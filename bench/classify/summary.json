@@ -328,6 +328,55 @@
         ]
       }
     ],
+    "replay": {
+      "name": "replay-rules-first",
+      "title": "Правила, модель только при низкой уверенности (пересчёт по архиву)",
+      "hits": 31,
+      "total": 36,
+      "errors": 0,
+      "accuracy": "0.8611",
+      "mean_seconds": "4.706",
+      "input_tokens": 13957,
+      "output_tokens": 8460,
+      "estimated_cost": "0.063580",
+      "note": "пересчёт по архиву, не новый прогон",
+      "misses": [
+        {
+          "id": "c09",
+          "gold": "hypothesis",
+          "label": "fact",
+          "error": null
+        },
+        {
+          "id": "c10",
+          "gold": "hypothesis",
+          "label": "synthetic",
+          "error": null
+        },
+        {
+          "id": "c11",
+          "gold": "hypothesis",
+          "label": "fact",
+          "error": null
+        },
+        {
+          "id": "i07",
+          "gold": [
+            "E002"
+          ],
+          "label": [
+            "none"
+          ],
+          "error": null
+        },
+        {
+          "id": "r14",
+          "gold": "01-brief",
+          "label": "06-strategy",
+          "error": null
+        }
+      ]
+    },
     "meta": {
       "started_at": "2026-11-19T21:40:26Z",
       "items": 36,

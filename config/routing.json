@@ -21,8 +21,8 @@
     "classify": "cheap"
   },
   "classifier": {
-    "backend": "auto",
-    "order": ["cursor-agent", "api", "rules"],
+    "backend": "rules",
+    "order": ["rules", "cursor-agent", "api"],
     "confidence_threshold": 0.75,
     "cursor_agent": {
       "cheap_model": "composer-2.5-fast",
