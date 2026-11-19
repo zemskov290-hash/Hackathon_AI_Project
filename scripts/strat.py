@@ -26,6 +26,7 @@ from stdio_utf8 import configure_stdio
 import analysis
 import grounding
 import inspect_media
+import reply_check
 import interview
 import kb
 
@@ -3621,6 +3622,35 @@ def cmd_interview_accept(args: argparse.Namespace) -> int:
     return 0
 
 
+def _read_reply_draft(file_arg: str | None) -> str:
+    if file_arg and file_arg != "-":
+        path = Path(file_arg)
+        if not path.is_file():
+            die(f"Файл не найден: {file_arg}")
+        try:
+            kb.reject_secret_path(path)
+        except kb.KbError as exc:
+            die(str(exc))
+        try:
+            return path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            die(f"Файл не в UTF-8: {file_arg}")
+    if file_arg == "-" or not sys.stdin.isatty():
+        return read_stdin_text()
+    die("Нет черновика. Укажите --file ответ.md или подайте UTF-8 в stdin.")
+    return ""
+
+
+def cmd_reply_check(args: argparse.Namespace) -> int:
+    project, tokens = _kb_project(list(args.rest))
+    if tokens:
+        die("Лишний аргумент. Форма: reply-check [проект] --file ответ.md")
+    draft = _read_reply_draft(args.file)
+    findings = reply_check.check_reply(project, draft)
+    print(reply_check.format_reply_report(project.name, findings))
+    return 1 if findings else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="strat",
@@ -3892,6 +3922,17 @@ def build_parser() -> argparse.ArgumentParser:
     accept.add_argument("--names-file", help="имена по строкам в файле UTF-8")
     accept.add_argument("--date", help="YYYY-MM-DD")
     accept.set_defaults(func=cmd_interview_accept)
+
+    reply = sub.add_parser(
+        "reply-check",
+        help="проверить черновик итогового ответа: число и ссылка в одном предложении",
+    )
+    reply.add_argument("rest", nargs="*", help="необязательный проект")
+    reply.add_argument(
+        "--file",
+        help="черновик ответа в UTF-8. «-» или отсутствие файла при потоке читает stdin",
+    )
+    reply.set_defaults(func=cmd_reply_check)
     return parser
 
 

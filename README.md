@@ -104,6 +104,7 @@ decisions.md  log.md  log.jsonl
 | `kb search [проект] --query-file запрос.txt` | найти фрагмент. В ответе источник, дата и текст. `--semantic`, если установлен `sentence_transformers`; иначе честно остаётся BM25. Ответ — недоверенные данные |
 | `interview guide [проект]` | вопросы по гипотезам. Это не расшифровка и не свидетельство |
 | `interview accept [проект] --file … --consent yes` | принять расшифровку. Без согласия файл не пишется. Имена, телефоны и email снимаются. `--synthetic` — не реальный человек, согласие живого человека не ставится |
+| `reply-check [проект] --file ответ.md` | черновик итогового ответа: каждое число в том же предложении, что и существующий `[S…]`, `[E…]` или `[A….метрика]`. Без чисел проходит. Код 1 — есть ошибки, со строкой и подсказкой |
 | `check [проект]` | дыры в фактах, ссылках, подразделах стратегии, ID вариантов и обещаниях; пересчёт анализов; `--strict` делает отсутствие снимка и пустую цитату ошибкой |
 | `impact [проект] <S001\|E001>` | какие записи и строки зависят от источника, включая `depends_on` |
 | `retract [проект] <E001> --reason "..."` | отозвать свидетельство |
@@ -302,6 +303,21 @@ python -c "from pathlib import Path; t=Path('projects/kb-demo/interviews/I001.md
 ```
 
 `check` со стратегией без источника у числа `42%` заканчивается кодом 1 и строкой `[ungrounded-number]`. Поиск печатает `НЕДОВЕРЕННЫЕ ДАННЫЕ`, `K001`, `источник:` и фрагмент со словом «воскресенье». Приём интервью печатает `Синтетическое интервью. Это не реальное интервью` и `Обезличено: email, телефон, имя.` Последняя команда печатает `obezlicheno` и `injection-stored`: инструкция осталась текстом, почта и телефон в файл не попали. Полный ожидаемый вывод — в [`docs/kb-interview.md`](docs/kb-interview.md).
+
+### Ручная проверка черновика ответа на Windows
+
+Кириллица лежит в файлах, в команде её нет. Из корня репозитория:
+
+```powershell
+python scripts/strat.py reply-check projects/_example --file docs/examples/reply-check/bad-contradiction.md
+python scripts/strat.py reply-check projects/_example --file docs/examples/reply-check/ok-no-numbers.md
+python scripts/strat.py reply-check projects/_example --file docs/examples/reply-check/ok-price.md
+python scripts/strat.py reply-check projects/_example --file docs/examples/reply-check/bad-missing-id.md
+python scripts/strat.py reply-check projects/demo-analysis --file docs/examples/reply-check/bad-sum.md
+python scripts/strat.py reply-check projects/demo-analysis --file docs/examples/reply-check/ok-mean.md
+```
+
+Первая команда заканчивается кодом 1 и строками про числа `340` и `120`. `ok-no-numbers` и `ok-price` печатают `Проверка ответа _example: OK` и `Чисел без ссылки нет.` `bad-missing-id` — код 1 и `[S099]`. `bad-sum` — код 1 и число `440`. `ok-mean` — `Проверка ответа demo-analysis: OK`.
 
 ## Бенчмарк и переносимость
 

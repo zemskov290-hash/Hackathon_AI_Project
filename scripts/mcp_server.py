@@ -27,6 +27,7 @@ _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
+import reply_check
 import strat
 
 SERVER_NAME = "strat"
@@ -68,7 +69,10 @@ INSTRUCTIONS = (
     "Синтетическое интервью — не реальный человек. Персональные данные в репозиторий не пиши.\n"
     "Число в содержательном разделе strategy.md без источника, расчёта или интервью — ошибка strat_check. "
     "Непроверенную ссылку помечай словом «непроверен» и не держи на ней вывод один. "
-    "Долю проверенных ссылок держи не ниже 90%. Этап не закрывай, пока strat_check не чист."
+    "Долю проверенных ссылок держи не ниже 90%. Этап не закрывай, пока strat_check не чист.\n"
+    "Перед итоговым ответом человеку вызови strat_reply_check на черновике. "
+    "Каждое число — в том же предложении, что и существующий [S…], [E…] или [A….метрика]. "
+    "Ответ без чисел допустим. Не отправляй ответ, пока инструмент сообщает ошибки."
 )
 
 # Finder baked into the IDE command. Edit it, then run --write-configs.
@@ -1024,6 +1028,36 @@ def handle_interview_accept(arguments: dict) -> dict:
     return finish(code, output, {"project": project.name}, untrusted=True)
 
 
+def handle_reply_check(arguments: dict) -> dict:
+    project = confine_project(arguments["project"])
+    text = arguments.get("text") or ""
+    path = arguments.get("path") or ""
+    if text and path:
+        raise ToolFailure("Укажите text или path, не оба.", "bad_args")
+    if path:
+        relative = confine_material(project, path)
+        file_path = project / relative
+        try:
+            text = file_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise ToolFailure(f"Файл не в UTF-8: {relative}", "bad_encoding") from exc
+    elif not isinstance(arguments.get("text"), str):
+        raise ToolFailure("Нужен text черновика или path внутри проекта.", "missing_reply")
+    findings = reply_check.check_reply(project, text)
+    report = reply_check.format_reply_report(project.name, findings)
+
+    def _run(_namespace: argparse.Namespace) -> int:
+        print(report)
+        return 1 if findings else 0
+
+    code, output = invoke(_run)
+    return finish(
+        code,
+        output,
+        {"project": project.name, "errors": len(findings), "findings": findings},
+    )
+
+
 def handle_doctor(_arguments: dict) -> dict:
     code, text = invoke(strat.cmd_doctor, ns())
     return finish(code, text, {})
@@ -1577,6 +1611,22 @@ def build_tools() -> list[dict]:
             ),
             {**MUTATION, "title": "Принять интервью"},
             handle_interview_accept,
+        ),
+        tool(
+            "strat_reply_check",
+            "Проверить черновик итогового ответа человеку до отправки. "
+            "Каждое число должно стоять в том же предложении, что и ссылка [S…], [E…] или [A….метрика], "
+            "и этот id должен быть в реестре проекта. Ссылка на несуществующий id — ошибка. "
+            "Ответ без чисел проходит. text — сам черновик; path — файл внутри проекта. "
+            "Жирное **E003** и слова «analyze A001» без квадратных скобок ссылкой не являются.",
+            project_schema(
+                {
+                    "text": string_prop("Черновик ответа. Кириллицу передавайте этим полем, не аргументом оболочки.", max_length=100_000),
+                    "path": string_prop("Файл черновика внутри проекта, если text не передан.", max_length=500),
+                }
+            ),
+            {**READ_ONLY, "title": "Проверить черновик ответа"},
+            handle_reply_check,
         ),
         tool(
             "strat_doctor",
