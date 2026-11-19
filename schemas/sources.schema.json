@@ -19,6 +19,10 @@
     "inspect_id": { "type": "string", "pattern": "^M\\d{3,}$" },
     "snapshot_path": { "type": "string" },
     "snapshot_sha256": { "type": "string" },
-    "model_description": { "type": "boolean" }
+    "model_description": { "type": "boolean" },
+    "verified": { "type": "boolean" },
+    "unverified_reason": { "enum": ["network", "paywall", "404", "unavailable"] },
+    "kb_id": { "type": "string", "pattern": "^K\\d{3,}$" },
+    "interview_id": { "type": "string", "pattern": "^I\\d{3,}$" }
   }
 }

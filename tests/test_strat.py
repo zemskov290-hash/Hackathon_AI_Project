@@ -531,7 +531,7 @@ class WorkflowTests(unittest.TestCase):
             "# Решения\n\n## D1. Сначала интервью\n\n"
             "- owner: лид продукта\n"
             "- metric: есть письменный барьер и решение продолжать или остановить\n"
-            "- review_date: 2026-12-01\n"
+            "- review_date: 2026-12-01 [E001]\n"
             "- revisit_if: протокол не собран к дате пересмотра\n"
             "- evidence: [E001]\n"
             "- option: O2\n"
@@ -1117,7 +1117,7 @@ class MinimumCheckTests(unittest.TestCase):
             "Решение держится на слабой записи [E001], это надо видеть в проверке.\n\n"
             "- owner: лид продукта\n"
             "- metric: есть письменный барьер и решение продолжать или остановить\n"
-            "- review_date: 2026-12-01\n"
+            "- review_date: 2026-12-01 [E001]\n"
             "- revisit_if: протокол не собран к дате пересмотра\n",
             encoding="utf-8",
         )

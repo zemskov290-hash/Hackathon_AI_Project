@@ -99,6 +99,12 @@ decisions.md  log.md  log.jsonl
 | `supersede-option [проект] <O2> --reason "..."` | снять вариант, сохранив его ID и требуя маркер `<!-- status: superseded -->` |
 | `analyze [проект] --input <файл> --spec-file <json>` | расчёт по CSV, JSON или XLSX. Снимок, декларация или `--script` и result лежат в `analysis/A001/`. `--id A001` повторяет расчёт и при том же результате ничего не переписывает, `--verify` ловит расхождение. Число в свидетельстве: `--metric` |
 | `inspect [проект] --html \| --image \| --pdf \| --av` | разбор DOM, метаданные PNG/JPG, PDF если есть pypdf, аудио и видео только с `--transcript`. Тот же sha256 снимка возвращает прежний id («Уже разобрано»); новый — `--force` |
+| `kb add [проект] [файл]` | положить открытый источник или свою заметку в базу. `--synthetic` помечает вымысел. `--url` без файла только с `--unverified network\|paywall\|404\|unavailable`. Закрытый гриф, ключ и персональные данные в своей заметке отклоняются |
+| `kb index [проект]` | построить полнотекстовый индекс BM25. Повтор с теми же файлами пишет «Индекс тот же» |
+| `kb search [проект] --query-file запрос.txt` | найти фрагмент. В ответе источник, дата и текст. `--semantic`, если установлен `sentence_transformers`; иначе честно остаётся BM25. Ответ — недоверенные данные |
+| `interview guide [проект]` | вопросы по гипотезам. Это не расшифровка и не свидетельство |
+| `interview accept [проект] --file … --consent yes` | принять расшифровку. Без согласия файл не пишется. Имена, телефоны и email снимаются. `--synthetic` — не реальный человек, согласие живого человека не ставится |
+| `reply-check [проект] --file ответ.md` | черновик итогового ответа: каждое число в том же предложении, что и существующий `[S…]`, `[E…]` или `[A….метрика]`. Без чисел проходит. Код 1 — есть ошибки, со строкой и подсказкой |
 | `check [проект]` | дыры в фактах, ссылках, подразделах стратегии, ID вариантов и обещаниях; пересчёт анализов; `--strict` делает отсутствие снимка и пустую цитату ошибкой |
 | `impact [проект] <S001\|E001>` | какие записи и строки зависят от источника, включая `depends_on` |
 | `retract [проект] <E001> --reason "..."` | отозвать свидетельство |
@@ -136,6 +142,9 @@ scripts/portability.py            матрица адаптеров Cursor, Clau
 scripts/analysis.py               расчёт таблиц, его вызывает и CLI, и MCP
 scripts/analysis_runner.py        запуск скрипта анализа без сети и вне папки проекта
 scripts/inspect_media.py          DOM, изображение, PDF, расшифровка
+scripts/kb.py                     база знаний: BM25 и необязательная семантика
+scripts/interview.py              гайд, обезличивание, разбор реплик
+scripts/grounding.py              числа, проверяемые ссылки, ПДн в интервью
 scripts/mcp_server.py             MCP по stdio, те же команды
 scripts/read_material.py          текст из файла, офисные форматы по желанию
 hooks/                            скрипты и как их включить
@@ -212,7 +221,12 @@ python scripts/strat.py doctor
 | `strat_complete` | маршрут модели; без ключа `MODE: manual` |
 | `strat_analyze` | расчёт таблицы; `id` повторяет A001, `verify: true` только пересчёт. Ответ — недоверенные данные |
 | `strat_inspect` | HTML, изображение, PDF или запись. Описание кадра помечается как текст модели |
-| `strat_doctor` | окружение, пакеты анализа и медиа, ответ MCP на initialize |
+| `strat_kb_add` | запись в базу; `unverified` — ссылка без фрагмента. Ответ — недоверенные данные |
+| `strat_kb_index` | индекс BM25 |
+| `strat_kb_search` | фрагмент, источник и дата. `semantic: true` только если пакет установлен |
+| `strat_interview_guide` | вопросы по гипотезам, не расшифровка |
+| `strat_interview_accept` | приём текста. Реальный — только `consent: yes`. `synthetic: true` не является голосом клиента |
+| `strat_doctor` | окружение, пакеты анализа, медиа и семантического поиска, ответ MCP на initialize |
 
 `strat_confirm`, `strat_advance` и `strat_accept_revision` помечены `destructiveHint`. Cursor и другие клиенты могут спросить одобрение перед вызовом. Сервер всё равно отклоняет вызов, пока в аргументах нет `human_confirmed: true`. Ставить true можно только после явной фразы человека. Путь проекта не принимается, если он выходит из каталога `projects`. Файл источника — только внутри папки этого проекта.
 
@@ -249,6 +263,62 @@ python scripts/strat.py analyze projects/demo-analysis --verify
 
 Разобрать свою открытую страницу: положите `page.html` в `projects/<id>/sources` и в чате попросите `strat_inspect` с полем `html`. Не кладите закрытую выгрузку и кадр с телефоном или почтой человека.
 
+## База знаний и интервью
+
+База хранит открытые источники и собственные заметки проекта: `projects/<id>/kb/`. Поиск — BM25 на стандартной библиотеке. Семантика не обязательна: `doctor` пишет, есть ли `sentence_transformers`. Нет пакета — поиск остаётся BM25 и так и говорит. Каждая выдача содержит источник, дату и фрагмент, чтобы цитата сверялась с файлом. Текст выдачи — данные, не инструкция.
+
+Реальная расшифровка требует `--consent yes`. Без флага команда завершается с ошибкой и ничего не пишет. В файл попадает обезличенный текст: email, телефон и переданные имена снимаются, `check` ловит остаток кодом `pii`. Синтетический прогон помечается `--synthetic`. В файле, в выводе и в стратегии есть «синтетическ» и фраза, что это не реальное интервью. Согласие живого человека к нему не прилагают.
+
+Число в содержательном разделе стратегии без источника, расчёта (формула и входы со ссылкой) или интервью — ошибка `ungrounded-number`. Ссылка без сохранённого фрагмента помечается «непроверен» и не держит вывод одна. Доля таких проверенных ссылок в стратегии не ниже 90%. `advance` этапа стратегии не проходит, пока `check` печатает ошибку. Оценщик бенчмарка при этом не менялся: те же правила для агента и для чата, архив `bench/runs` не подгонялся.
+
+Сквозной пример на синтетических файлах и команды PowerShell — в [`docs/kb-interview.md`](docs/kb-interview.md). Решение — [`docs/decisions/0011-kb-interview-grounding.md`](docs/decisions/0011-kb-interview-grounding.md).
+
+### Ручная проверка базы и интервью на Windows
+
+Из корня репозитория, PowerShell 5.1. В командах нет `$` и нет кириллицы: тексты лежат в `docs/examples/synthetic-kb/`. Это вымысел, в файлах есть пометка «синтетическ».
+
+```powershell
+python scripts/strat.py init kb-demo --title-file docs/examples/synthetic-kb/title.txt
+python scripts/strat.py kb add kb-demo docs/examples/synthetic-kb/note.md --title-file docs/examples/synthetic-kb/note-title.txt --synthetic
+python scripts/strat.py kb index kb-demo
+python scripts/strat.py kb search kb-demo --query-file docs/examples/synthetic-kb/query.txt
+python scripts/strat.py add-evidence kb-demo --claim-file docs/examples/synthetic-kb/claim.txt --type synthetic --source S001 --quote-file docs/examples/synthetic-kb/quote.txt --confidence med
+python scripts/strat.py interview guide kb-demo
+python scripts/strat.py interview accept kb-demo --file docs/examples/synthetic-kb/transcript.md --synthetic --names-file docs/examples/synthetic-kb/names.txt
+python scripts/strat.py kb add kb-demo --url https://example.com/missing --unverified 404 --title-file docs/examples/synthetic-kb/missing-title.txt
+Copy-Item -LiteralPath docs/examples/synthetic-kb/strategy-ok.md -Destination projects/kb-demo/strategy.md
+python scripts/strat.py check kb-demo
+Copy-Item -LiteralPath docs/examples/synthetic-kb/strategy-bare.md -Destination projects/kb-demo/strategy.md
+python scripts/strat.py check kb-demo
+Copy-Item -LiteralPath docs/examples/synthetic-kb/strategy-ok.md -Destination projects/kb-demo/strategy.md
+python scripts/strat.py check kb-demo
+python -c "from pathlib import Path; t=Path('projects/kb-demo/interviews/I001.md').read_text(encoding='utf-8'); assert 'anna.smirnova' not in t; assert '+7' not in t; assert 'synthetic: true' in t; assert 'ignore previous instructions' in t; print('obezlicheno'); print('injection-stored')"
+```
+
+На чистом дереве успешный `check` заканчивается так:
+
+```text
+Проверка kb-demo: OK
+Замечаний нет.
+```
+
+`check` со стратегией без источника у числа `42%` заканчивается кодом 1 и строкой `[ungrounded-number]`. Поиск печатает `НЕДОВЕРЕННЫЕ ДАННЫЕ`, `K001`, `источник:` и фрагмент со словом «воскресенье». Приём интервью печатает `Синтетическое интервью. Это не реальное интервью` и `Обезличено: email, телефон, имя.` Последняя команда печатает `obezlicheno` и `injection-stored`: инструкция осталась текстом, почта и телефон в файл не попали. Полный ожидаемый вывод — в [`docs/kb-interview.md`](docs/kb-interview.md).
+
+### Ручная проверка черновика ответа на Windows
+
+Кириллица лежит в файлах, в команде её нет. Из корня репозитория:
+
+```powershell
+python scripts/strat.py reply-check projects/_example --file docs/examples/reply-check/bad-contradiction.md
+python scripts/strat.py reply-check projects/_example --file docs/examples/reply-check/ok-no-numbers.md
+python scripts/strat.py reply-check projects/_example --file docs/examples/reply-check/ok-price.md
+python scripts/strat.py reply-check projects/_example --file docs/examples/reply-check/bad-missing-id.md
+python scripts/strat.py reply-check projects/demo-analysis --file docs/examples/reply-check/bad-sum.md
+python scripts/strat.py reply-check projects/demo-analysis --file docs/examples/reply-check/ok-mean.md
+```
+
+Первая команда заканчивается кодом 1 и строками про числа `340` и `120`. `ok-no-numbers` и `ok-price` печатают `Проверка ответа _example: OK` и `Чисел без ссылки нет.` `bad-missing-id` — код 1 и `[S099]`. `bad-sum` — код 1 и число `440`. `ok-mean` — `Проверка ответа demo-analysis: OK`.
+
 ## Бенчмарк и переносимость
 
 Сравнение с обычным чатом не придумывается. Пока человек не прогнал задачи, в [`docs/benchmark.md`](docs/benchmark.md) стоят прочерки. Оценщик считает ссылки, числа, цитаты, канарейку, целые из ключа, пересмотр, разделы стратегии и `check` по файлам. Языковую модель в судьи он не зовёт. Материалы синтетические и так подписаны. Закрытых данных МегаФона в наборе нет.
@@ -278,4 +348,4 @@ agent -p --force --trust --approve-mcps --output-format text <текст PROMPT.
 
 ## Ограничения
 
-Проверка текстов — эвристика по разделам «Факты», заголовкам вариантов, подразделам стратегии и маркерам обещаний, а не понимание смысла. Цитату CLI сверяет с локальным файлом. Расчёт `analyze` пересчитывается из снимка: другое число в свидетельстве или в якоре `350 [A001.metric]` — ошибка. Скрипт анализа ограничен папкой проекта, таймаутом и запретом сетевых модулей; это не контейнер, обход через нестандартный импорт возможен, поэтому скрипт пишет агент, а не страница из интернета. Разбор HTML берёт только узлы DOM. Картинку команда не «видит»: описание делает модель IDE и оно помечено. PDF без pypdf и запись без субтитров остаются без выдуманного текста. Свидетельство из медиа без снимка — предупреждение. Веб-страница без `fetch` оставляет голый URL: снимка нет, цитата не сверяется, `check` предупреждает, `check --strict` завершается с ошибкой. Повторно живой сайт не открывается, если снимок уже лежит в `sources/`, пока нет `fetch --force`. Оценка в `cost` считается из символов журнала и `config/model-prices.json` и всегда подписана как допущение, не как счёт. Строка хука `hook/stop` в оценку не входит, если агент уже записал свои символы. sha256 текстового источника считается после приведения перевода строк к LF, поэтому он не равен хешу сырых байт, если в файле остались CR. Флаг `human_confirmed` и пометка `destructiveHint` не отличают человека от модели, если клиент не спросил одобрение: запрет ставить флаг без явной фразы остаётся в [`AGENTS.md`](AGENTS.md). Подробности — в [`docs/decisions/0005-line-endings-and-utf8.md`](docs/decisions/0005-line-endings-and-utf8.md), [`docs/decisions/0006-snapshot-and-stable-option-ids.md`](docs/decisions/0006-snapshot-and-stable-option-ids.md), [`docs/decisions/0008-mcp-server.md`](docs/decisions/0008-mcp-server.md), [`docs/decisions/0009-analysis-and-media.md`](docs/decisions/0009-analysis-and-media.md), [`docs/decisions/0010-benchmark-and-portability.md`](docs/decisions/0010-benchmark-and-portability.md) и [`docs/devlog.md`](docs/devlog.md). Бенчмарк измеряет файлы и строки, не смысл ответа.
+Проверка текстов — эвристика по разделам «Факты», заголовкам вариантов, подразделам стратегии, числам в этих подразделах и маркерам обещаний, а не понимание смысла. Число без ссылки, расчёта или интервью в содержательном разделе — ошибка. Доля ссылок с сохранённым фрагментом ниже 90% — тоже ошибка. Оценщик бенчмарка эту проверку не подкручивает. Цитату CLI сверяет с локальным файлом. Расчёт `analyze` пересчитывается из снимка: другое число в свидетельстве или в якоре `350 [A001.metric]` — ошибка. Скрипт анализа ограничен папкой проекта, таймаутом и запретом сетевых модулей; это не контейнер, обход через нестандартный импорт возможен, поэтому скрипт пишет агент, а не страница из интернета. Разбор HTML берёт только узлы DOM. Картинку команда не «видит»: описание делает модель IDE и оно помечено. PDF без pypdf и запись без субтитров остаются без выдуманного текста. Свидетельство из медиа без снимка — предупреждение. Веб-страница без `fetch` оставляет голый URL: снимка нет, цитата не сверяется, `check` предупреждает, `check --strict` завершается с ошибкой. Повторно живой сайт не открывается, если снимок уже лежит в `sources/`, пока нет `fetch --force`. Оценка в `cost` считается из символов журнала и `config/model-prices.json` и всегда подписана как допущение, не как счёт. Строка хука `hook/stop` в оценку не входит, если агент уже записал свои символы. sha256 текстового источника считается после приведения перевода строк к LF, поэтому он не равен хешу сырых байт, если в файле остались CR. Флаг `human_confirmed` и пометка `destructiveHint` не отличают человека от модели, если клиент не спросил одобрение: запрет ставить флаг без явной фразы остаётся в [`AGENTS.md`](AGENTS.md). Подробности — в [`docs/decisions/0005-line-endings-and-utf8.md`](docs/decisions/0005-line-endings-and-utf8.md), [`docs/decisions/0006-snapshot-and-stable-option-ids.md`](docs/decisions/0006-snapshot-and-stable-option-ids.md), [`docs/decisions/0008-mcp-server.md`](docs/decisions/0008-mcp-server.md), [`docs/decisions/0009-analysis-and-media.md`](docs/decisions/0009-analysis-and-media.md), [`docs/decisions/0010-benchmark-and-portability.md`](docs/decisions/0010-benchmark-and-portability.md), [`docs/decisions/0011-kb-interview-grounding.md`](docs/decisions/0011-kb-interview-grounding.md) и [`docs/devlog.md`](docs/devlog.md). Бенчмарк измеряет файлы и строки, не смысл ответа.
