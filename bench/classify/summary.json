@@ -155,6 +155,197 @@
       }
     ]
   },
-  "live": null,
+  "live": {
+    "run": "20261119T214026Z",
+    "rows": [
+      {
+        "name": "cheap-live",
+        "title": "cursor-agent, лёгкая модель",
+        "hits": 31,
+        "total": 36,
+        "errors": 0,
+        "accuracy": "0.8611",
+        "mean_seconds": "16.787",
+        "input_tokens": 83473,
+        "output_tokens": 19748,
+        "estimated_cost": "0.024372",
+        "note": "живой прогон, токены из usage если CLI их отдал; стоимость — оценка, не счёт",
+        "misses": [
+          {
+            "id": "c09",
+            "gold": "hypothesis",
+            "label": "fact",
+            "error": null
+          },
+          {
+            "id": "c10",
+            "gold": "hypothesis",
+            "label": "synthetic",
+            "error": null
+          },
+          {
+            "id": "i04",
+            "gold": [
+              "E001"
+            ],
+            "label": [
+              "none"
+            ],
+            "error": null
+          },
+          {
+            "id": "i07",
+            "gold": [
+              "E002"
+            ],
+            "label": [
+              "none"
+            ],
+            "error": null
+          },
+          {
+            "id": "r14",
+            "gold": "01-brief",
+            "label": "06-strategy",
+            "error": null
+          }
+        ]
+      },
+      {
+        "name": "strong-live",
+        "title": "cursor-agent, сильная или модель по умолчанию",
+        "hits": 29,
+        "total": 36,
+        "errors": 0,
+        "accuracy": "0.8056",
+        "mean_seconds": "16.066",
+        "input_tokens": 66489,
+        "output_tokens": 20360,
+        "estimated_cost": "0.504867",
+        "note": "живой прогон, токены из usage если CLI их отдал; стоимость — оценка, не счёт",
+        "misses": [
+          {
+            "id": "c09",
+            "gold": "hypothesis",
+            "label": "fact",
+            "error": null
+          },
+          {
+            "id": "c10",
+            "gold": "hypothesis",
+            "label": "synthetic",
+            "error": null
+          },
+          {
+            "id": "c11",
+            "gold": "hypothesis",
+            "label": "fact",
+            "error": null
+          },
+          {
+            "id": "i04",
+            "gold": [
+              "E001"
+            ],
+            "label": [
+              "none"
+            ],
+            "error": null
+          },
+          {
+            "id": "i07",
+            "gold": [
+              "E002"
+            ],
+            "label": [
+              "none"
+            ],
+            "error": null
+          },
+          {
+            "id": "i09",
+            "gold": [
+              "E003"
+            ],
+            "label": [
+              "none"
+            ],
+            "error": null
+          },
+          {
+            "id": "r14",
+            "gold": "01-brief",
+            "label": "06-strategy",
+            "error": null
+          }
+        ]
+      },
+      {
+        "name": "pipeline",
+        "title": "Дешёвый ответ, затем эскалация",
+        "hits": 32,
+        "total": 36,
+        "errors": 0,
+        "accuracy": "0.8889",
+        "mean_seconds": "17.750",
+        "input_tokens": 91429,
+        "output_tokens": 21655,
+        "estimated_cost": "0.076845",
+        "note": "живой прогон, токены из usage если CLI их отдал; стоимость — оценка, не счёт",
+        "misses": [
+          {
+            "id": "c09",
+            "gold": "hypothesis",
+            "label": "fact",
+            "error": null
+          },
+          {
+            "id": "i04",
+            "gold": [
+              "E001"
+            ],
+            "label": [
+              "none"
+            ],
+            "error": null
+          },
+          {
+            "id": "i07",
+            "gold": [
+              "E002"
+            ],
+            "label": [
+              "none"
+            ],
+            "error": null
+          },
+          {
+            "id": "r14",
+            "gold": "01-brief",
+            "label": "06-strategy",
+            "error": null
+          }
+        ]
+      }
+    ],
+    "meta": {
+      "started_at": "2026-11-19T21:40:26Z",
+      "items": 36,
+      "limit": 0,
+      "cheap_model": "composer-2.5-fast",
+      "strong_model": "default",
+      "timeout_seconds": 180,
+      "flags": [
+        "-p",
+        "--trust",
+        "--output-format",
+        "json",
+        "--workspace"
+      ],
+      "workspace": "C:\\strat-classify\\workspace",
+      "cost_note": "оценка, не счёт",
+      "errors": 0
+    }
+  },
   "cost_note": "оценка, не счёт"
 }
