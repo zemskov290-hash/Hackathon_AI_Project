@@ -210,6 +210,9 @@ def _child_env(extra: dict[str, str]) -> dict[str, str]:
     for key in SCRUBBED_ENV:
         env.pop(key, None)
     env.update(extra)
+    # Windows console encoding is not UTF-8. The agent text is decoded as UTF-8.
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
     return env
 
 

@@ -424,8 +424,10 @@ class CursorAgentProcessTests(unittest.TestCase):
         strong = (self.out / "strong.jsonl").read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(cheap), 2)
         self.assertEqual(len(strong), 2)
-        self.assertFalse(json.loads(cheap[0])["ok"])
-        self.assertTrue(json.loads(cheap[1])["ok"])
+        first = json.loads(cheap[0])
+        second = json.loads(cheap[1])
+        self.assertFalse(first["ok"], first)
+        self.assertTrue(second["ok"], second)
         calls = [json.loads(line) for line in self.log.read_text(encoding="utf-8").splitlines()]
         self.assertEqual(len(calls), 4)
         kept = [json.loads(line) for line in strong if json.loads(line)["id"] != "c02"]

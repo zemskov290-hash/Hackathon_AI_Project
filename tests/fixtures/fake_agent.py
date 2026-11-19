@@ -40,18 +40,17 @@ def main() -> int:
         {"label": "hypothesis", "confidence": 0.9, "rationale": "учебный ответ"},
         ensure_ascii=False,
     )
-    sys.stdout.write(
-        json.dumps(
-            {
-                "type": "result",
-                "subtype": "success",
-                "is_error": False,
-                "result": body,
-                "usage": {"inputTokens": 10, "outputTokens": 4},
-            },
-            ensure_ascii=False,
-        )
+    payload = json.dumps(
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": body,
+            "usage": {"inputTokens": 10, "outputTokens": 4},
+        },
+        ensure_ascii=False,
     )
+    sys.stdout.buffer.write(payload.encode("utf-8"))
     return 0
 
 
