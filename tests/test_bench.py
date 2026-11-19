@@ -468,6 +468,30 @@ class ClaimBoundaryTests(unittest.TestCase):
             self.assertEqual(audit["unsourced_numbers"], 1)
             self.assertEqual(audit["uncited"][0]["numbers"], ["440"])
 
+    def test_bold_id_is_not_a_citation_and_a_calendar_day_counts(self) -> None:
+        names = ["survey-note.md"]
+        bold = (
+            "В 18 из 20 разговоров назвали закрытое воскресенье, цену — только в цепочке (**E003**)."
+        )
+        self.assertFalse(bench.sentence_cited(bold, names))
+        bold_audit = bench.claim_audit(bold, names)
+        self.assertEqual(bold_audit["unsourced_numbers"], 2)
+        self.assertEqual(bold_audit["uncited"][0]["numbers"], ["18", "20"])
+        bracket = (
+            "В 18 из 20 разговоров назвали закрытое воскресенье, цену — только в цепочке [E003]."
+        )
+        self.assertTrue(bench.sentence_cited(bracket, names))
+        self.assertEqual(bench.claim_audit(bracket, names)["unsourced_numbers"], 0)
+        self.assertTrue(bench.sentence_cited("Та же цифра 18 названа в survey-note.md и нигде больше.", names))
+        project_file = (
+            "В situation.md сохранены оба числа: 340 из заметки зала и 120 со стойки, без квадратной ссылки."
+        )
+        self.assertFalse(bench.sentence_cited(project_file, names))
+        self.assertEqual(bench.claim_audit(project_file, names)["uncited"][0]["numbers"], ["340", "120"])
+        dated = "Две синтетические заметки об одной субботе 12 апреля 2026 и без ссылки в этом предложении."
+        self.assertEqual(bench.number_tokens(dated), ["12"])
+        self.assertEqual(bench.claim_audit(dated, names)["unsourced_numbers"], 1)
+
 
 class LauncherTests(unittest.TestCase):
     def _tree(self, root: Path, *, sibling: bool = False, versions: list[str] | None = None) -> Path:
