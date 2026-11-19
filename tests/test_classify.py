@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -358,6 +359,167 @@ class OfflineBenchTests(unittest.TestCase):
             _markdown, payload = classify_bench.summary_text(runs)
             self.assertEqual(payload["live"]["run"], stored[0].name)
             self.assertEqual(payload["live"]["rows"][0]["hits"], 30)
+
+
+class CursorAgentProcessTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.out = Path(self.tmp.name) / "out"
+        self.log = Path(self.tmp.name) / "agent.log"
+        self.fake = ROOT / "tests" / "fixtures" / "fake_agent.py"
+        self.real_launch = classify.cursor_launch
+        classify.cursor_launch = lambda: ([sys.executable, str(self.fake)], {})
+        self.env_before = {key: os.environ.get(key) for key in ("FAKE_AGENT_LOG", "FAKE_AGENT_FAIL_TEXT", "FAKE_AGENT_SLEEP", "FAKE_AGENT_HOLD", "STRAT_AGENT_CMD")}
+        os.environ["FAKE_AGENT_LOG"] = str(self.log)
+        os.environ["STRAT_AGENT_CMD"] = sys.executable
+        os.environ.pop("FAKE_AGENT_FAIL_TEXT", None)
+        os.environ.pop("FAKE_AGENT_SLEEP", None)
+        os.environ.pop("FAKE_AGENT_HOLD", None)
+
+    def tearDown(self) -> None:
+        classify.cursor_launch = self.real_launch
+        for key, value in self.env_before.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        self.tmp.cleanup()
+
+    def test_dry_run_json_has_two_ids(self) -> None:
+        from io import StringIO
+
+        buffer = StringIO()
+        previous = sys.stdout
+        sys.stdout = buffer
+        try:
+            code = classify_bench.main(["run", "--dry-run", "--limit", "2", "--out", str(self.out), "--timeout", "45"])
+        finally:
+            sys.stdout = previous
+        self.assertEqual(code, 0)
+        payload = json.loads(buffer.getvalue())
+        self.assertEqual(payload["ids"], ["c01", "c02"])
+        self.assertNotIn("--force", payload["cheap_flags"])
+        self.assertNotIn("ask", payload["cheap_flags"])
+        self.assertIn("--workspace", payload["cheap_flags"])
+        self.assertIn("--output-format", payload["cheap_flags"])
+        self.assertEqual(payload["workspace"], str(self.out / "workspace"))
+
+    def test_one_error_is_kept_and_a_second_run_skips_it(self) -> None:
+        from io import StringIO
+
+        os.environ["FAKE_AGENT_FAIL_TEXT"] = "0.42 [E001]"
+        buffer = StringIO()
+        previous = sys.stdout
+        sys.stdout = buffer
+        try:
+            code = classify_bench.main(["run", "--limit", "2", "--out", str(self.out), "--timeout", "20"])
+        finally:
+            sys.stdout = previous
+        self.assertEqual(code, 0, buffer.getvalue())
+        text = buffer.getvalue()
+        self.assertIn("1/2", text)
+        self.assertIn("2/2", text)
+        self.assertIn("Ошибок вызова", text)
+        cheap = (self.out / "cheap.jsonl").read_text(encoding="utf-8").splitlines()
+        strong = (self.out / "strong.jsonl").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(cheap), 2)
+        self.assertEqual(len(strong), 2)
+        self.assertFalse(json.loads(cheap[0])["ok"])
+        self.assertTrue(json.loads(cheap[1])["ok"])
+        calls = [json.loads(line) for line in self.log.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(len(calls), 4)
+        kept = [json.loads(line) for line in strong if json.loads(line)["id"] != "c02"]
+        (self.out / "strong.jsonl").write_text(
+            "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in kept),
+            encoding="utf-8",
+        )
+        before = len(calls)
+        buffer = StringIO()
+        sys.stdout = buffer
+        try:
+            code = classify_bench.main(["run", "--limit", "2", "--out", str(self.out), "--timeout", "20"])
+        finally:
+            sys.stdout = previous
+        self.assertEqual(code, 0, buffer.getvalue())
+        self.assertIn("пропуск", buffer.getvalue())
+        again = [json.loads(line) for line in self.log.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(len(again), before + 1)
+        self.assertIn("Цена подписки", again[-1]["argv"][-1])
+
+    def test_timeout_kills_the_child_and_permission_error_stays_inside(self) -> None:
+        os.environ["FAKE_AGENT_SLEEP"] = "30"
+        os.environ["FAKE_AGENT_HOLD"] = "1"
+        workspace = Path(self.tmp.name) / "ws"
+        started = time.time()
+        result = classify.call_cursor(
+            "claim-type",
+            "Гипотеза: цена не главная.",
+            ["fact", "hypothesis", "forecast", "synthetic"],
+            "composer-2.5-fast",
+            1,
+            workspace=workspace,
+        )
+        self.assertLess(time.time() - started, 15)
+        self.assertFalse(result["ok"])
+        self.assertIn("таймаут", result["error"])
+        pid_path = workspace / "child.pid"
+        self.assertTrue(pid_path.is_file())
+        pid = int(pid_path.read_text(encoding="utf-8"))
+        deadline = time.time() + 3
+        while time.time() < deadline and _alive(pid):
+            time.sleep(0.05)
+        self.assertFalse(_alive(pid))
+
+        def locked(*_args, **_kwargs):
+            raise PermissionError(13, "Access is denied", str(workspace))
+
+        real = classify._run_agent
+        classify._run_agent = locked
+        try:
+            failed = classify.call_cursor(
+                "claim-type",
+                "Гипотеза: цена не главная.",
+                ["fact", "hypothesis", "forecast", "synthetic"],
+                "",
+                5,
+                workspace=workspace,
+            )
+        finally:
+            classify._run_agent = real
+        self.assertFalse(failed["ok"])
+        self.assertIn("Access is denied", failed["error"])
+        self.assertNotIn("Traceback", failed["error"])
+
+    def test_cli_agent_failure_is_json(self) -> None:
+        projects = Path(self.tmp.name) / "projects"
+        projects.mkdir()
+        env = {"STRAT_PROJECTS_DIR": str(projects), "STRAT_AGENT_CMD": sys.executable}
+        assert_code(run("init", "labels", "--title", "Labels", env=env))
+        result = run(
+            "classify",
+            "labels",
+            "--task",
+            "claim-type",
+            "--input-file",
+            str(SAMPLES / "fact-with-cite.txt"),
+            "--backend",
+            "cursor-agent",
+            env=env,
+        )
+        assert_code(result, 1)
+        payload = json.loads(result.stdout)
+        self.assertFalse(payload["ok"])
+        self.assertNotIn("Traceback", result.stderr)
+        log = (projects / "labels" / "log.md").read_text(encoding="utf-8")
+        self.assertIn("ответ отклонён", log)
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
 
 
 if __name__ == "__main__":

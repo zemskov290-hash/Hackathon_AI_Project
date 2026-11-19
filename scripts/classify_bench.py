@@ -133,6 +133,7 @@ def score_rules(items: list[dict]) -> dict:
         "title": "Правила, без сети",
         "hits": hits,
         "total": total,
+        "errors": 0,
         "accuracy": ratio(hits, total),
         "mean_seconds": "0.000",
         "input_tokens": 0,
@@ -143,8 +144,17 @@ def score_rules(items: list[dict]) -> dict:
     }
 
 
-def score_saved(items: list[dict], saved: dict[str, dict], model: str, name: str, title: str) -> dict:
+def score_saved(
+    items: list[dict],
+    saved: dict[str, dict],
+    model: str,
+    name: str,
+    title: str,
+    *,
+    allow_missing: bool = False,
+) -> dict:
     hits = 0
+    errors = 0
     misses = []
     seconds: list[float] = []
     input_tokens = 0
@@ -153,12 +163,19 @@ def score_saved(items: list[dict], saved: dict[str, dict], model: str, name: str
     for item in items:
         row = saved.get(item["id"])
         if row is None:
-            raise BenchError(f"В {name} нет id {item['id']}.")
+            if not allow_missing:
+                raise BenchError(f"В {name} нет id {item['id']}.")
+            errors += 1
+            misses.append({"id": item["id"], "gold": item["gold"], "label": None, "error": "нет ответа"})
+            seconds.append(0.0)
+            continue
         attempt = attempt_for(row, item, model)
         seconds.append(float(attempt["elapsed_seconds"]))
         input_tokens += int(attempt["input_tokens"])
         output_tokens += int(attempt["output_tokens"])
         cost += Decimal(str(attempt["estimated_cost"]))
+        if not attempt.get("ok"):
+            errors += 1
         if score_attempt(attempt, item):
             hits += 1
         else:
@@ -169,6 +186,7 @@ def score_saved(items: list[dict], saved: dict[str, dict], model: str, name: str
         "title": title,
         "hits": hits,
         "total": total,
+        "errors": errors,
         "accuracy": ratio(hits, total),
         "mean_seconds": mean_seconds(seconds),
         "input_tokens": input_tokens,
@@ -179,8 +197,15 @@ def score_saved(items: list[dict], saved: dict[str, dict], model: str, name: str
     }
 
 
-def score_pipeline(items: list[dict], cheap_rows: dict[str, dict], strong_rows: dict[str, dict]) -> dict:
+def score_pipeline(
+    items: list[dict],
+    cheap_rows: dict[str, dict],
+    strong_rows: dict[str, dict],
+    *,
+    allow_missing: bool = False,
+) -> dict:
     hits = 0
+    errors = 0
     misses = []
     seconds: list[float] = []
     input_tokens = 0
@@ -189,7 +214,12 @@ def score_pipeline(items: list[dict], cheap_rows: dict[str, dict], strong_rows: 
     escalated = 0
     for item in items:
         if item["id"] not in cheap_rows or item["id"] not in strong_rows:
-            raise BenchError(f"Нет пары учебных ответов для {item['id']}.")
+            if not allow_missing:
+                raise BenchError(f"Нет пары учебных ответов для {item['id']}.")
+            errors += 1
+            misses.append({"id": item["id"], "gold": item["gold"], "label": None, "error": "нет ответа"})
+            seconds.append(0.0)
+            continue
 
         def transport(name: str, tier: str, _prompt: str, *, item=item) -> dict:
             row = cheap_rows[item["id"]] if tier == "cheap" else strong_rows[item["id"]]
@@ -206,6 +236,8 @@ def score_pipeline(items: list[dict], cheap_rows: dict[str, dict], strong_rows: 
         cost += Decimal(str(result.get("estimated_cost") or "0"))
         if result.get("escalated"):
             escalated += 1
+        if not result.get("ok"):
+            errors += 1
         if result.get("ok") and labels_equal(item["task"], result.get("label"), item["gold"]):
             hits += 1
         else:
@@ -216,6 +248,7 @@ def score_pipeline(items: list[dict], cheap_rows: dict[str, dict], strong_rows: 
         "title": "Дешёвый ответ, затем эскалация",
         "hits": hits,
         "total": total,
+        "errors": errors,
         "accuracy": ratio(hits, total),
         "mean_seconds": mean_seconds(seconds),
         "input_tokens": input_tokens,
@@ -261,9 +294,16 @@ def score_live_run(run_dir: Path, items: list[dict]) -> dict:
         "kind": "live",
         "run": run_dir.name,
         "rows": [
-            score_saved(items, cheap, CHEAP_MODEL, "cheap-live", "cursor-agent, лёгкая модель"),
-            score_saved(items, strong, STRONG_MODEL, "strong-live", "cursor-agent, сильная или модель по умолчанию"),
-            score_pipeline(items, cheap, strong),
+            score_saved(items, cheap, CHEAP_MODEL, "cheap-live", "cursor-agent, лёгкая модель", allow_missing=True),
+            score_saved(
+                items,
+                strong,
+                STRONG_MODEL,
+                "strong-live",
+                "cursor-agent, сильная или модель по умолчанию",
+                allow_missing=True,
+            ),
+            score_pipeline(items, cheap, strong, allow_missing=True),
         ],
     }
     for row in report["rows"]:
@@ -281,7 +321,7 @@ def render_row(row: dict) -> str:
     return (
         f"| {row['title']} | {row['hits']}/{row['total']} | {row['accuracy']} | "
         f"{row['mean_seconds']} | {row['input_tokens']} | {row['output_tokens']} | "
-        f"{row['estimated_cost']} |"
+        f"{row['estimated_cost']} | {row.get('errors', 0)} |"
     )
 
 
@@ -299,15 +339,15 @@ def render_markdown(offline: dict, live: dict | None) -> str:
         "",
         "Это проверка конвейера, а не замер модели. Дешёвый и сильный столбцы читают `bench/classify/saved`. Правила считаются заново.",
         "",
-        "| Контур | Верно | Точность | Среднее время, с | Токены входа | Токены выхода | Оценка стоимости, не счёт |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
+        "| Контур | Верно | Точность | Среднее время, с | Токены входа | Токены выхода | Оценка стоимости, не счёт | Ошибки вызова |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for row in offline["rows"]:
         lines.append(render_row(row))
     lines.extend(["", "Промахи офлайна:", ""])
     for row in offline["rows"]:
         shown = ", ".join(str(item["id"]) for item in row["misses"]) or "нет"
-        lines.append(f"- {row['title']}: {shown}. {row['note']}.")
+        lines.append(f"- {row['title']}: {shown}. Ошибок вызова {row.get('errors', 0)}; {row['note']}.")
     pipeline = next(row for row in offline["rows"] if row["name"] == "pipeline")
     lines.extend(
         [
@@ -323,11 +363,11 @@ def render_markdown(offline: dict, live: dict | None) -> str:
             [
                 "Архива `bench/classify/runs` с парой cheap.jsonl и strong.jsonl нет. Цифры не выдуманы.",
                 "",
-                "| Контур | Верно | Точность | Среднее время, с | Токены входа | Токены выхода | Оценка стоимости, не счёт |",
-                "| --- | --- | --- | --- | --- | --- | --- |",
-                "| cursor-agent, лёгкая модель | — | — | — | — | — | — |",
-                "| cursor-agent, сильная или модель по умолчанию | — | — | — | — | — | — |",
-                "| Дешёвый ответ, затем эскалация | — | — | — | — | — | — |",
+                "| Контур | Верно | Точность | Среднее время, с | Токены входа | Токены выхода | Оценка стоимости, не счёт | Ошибки вызова |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- |",
+                "| cursor-agent, лёгкая модель | — | — | — | — | — | — | — |",
+                "| cursor-agent, сильная или модель по умолчанию | — | — | — | — | — | — | — |",
+                "| Дешёвый ответ, затем эскалация | — | — | — | — | — | — | — |",
                 "",
             ]
         )
@@ -345,8 +385,8 @@ def render_markdown(offline: dict, live: dict | None) -> str:
         lines.extend(
             [
                 "",
-                "| Контур | Верно | Точность | Среднее время, с | Токены входа | Токены выхода | Оценка стоимости, не счёт |",
-                "| --- | --- | --- | --- | --- | --- | --- |",
+                "| Контур | Верно | Точность | Среднее время, с | Токены входа | Токены выхода | Оценка стоимости, не счёт | Ошибки вызова |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- |",
             ]
         )
         for row in live["rows"]:
@@ -364,15 +404,23 @@ def render_markdown(offline: dict, live: dict | None) -> str:
             "",
             "```powershell",
             "python scripts/classify_bench.py models",
+            "python scripts/classify_bench.py run --dry-run --limit 2 --out C:\\strat-classify",
+            "python scripts/classify_bench.py run --limit 2 --out C:\\strat-classify",
             "python scripts/classify_bench.py run --out C:\\strat-classify",
             "python scripts/classify_bench.py archive --work C:\\strat-classify",
             "python scripts/classify_bench.py summary",
             "python scripts/classify_bench.py summary --check",
             "```",
             "",
-            "`models` печатает `agent --list-models`. Имя лёгкой модели по умолчанию — `composer-2.5-fast` в `config/routing.json`. Если этой подписки в списке нет, запишите id в `cheap_model`. Пустой `strong_model` значит модель cursor-agent по умолчанию, без флага `--model`.",
+            "`models` печатает `agent --list-models`. Имя лёгкой модели по умолчанию — `composer-2.5-fast` в `config/routing.json`. Если этой подписки в списке нет, запишите id в `cheap_model`. Пустой `strong_model` значит модель cursor-agent по умолчанию, без флага `--model`. На машине, где список уже снят, это строка `auto`.",
             "",
-            "`run` вызывает `agent -p --trust --force --mode ask --output-format json`. Режим ask и временный каталог не дают классификатору править репозиторий. `--approve-mcps` не передаётся. Ключ API для этого прогона не нужен: вход по подписке Cursor.",
+            "`run` вызывает `agent -p --trust --output-format json --workspace <пустой каталог>`. "
+            "Флагов `--force` и `--mode ask` нет: ask ищет по кодовой базе, force разрешает команды, из-за этого один вызов шёл около двух минут и дочерний процесс держал временную папку. "
+            "`--approve-mcps` не передаётся. Каталог `--workspace` лежит внутри `--out` и не удаляется: на Windows процесс agent может держать файл после выхода. "
+            "Зависшее дерево гасится `taskkill /T /F`, на других системах — сигналом группе процессов. "
+            "Ответ дописывается в jsonl сразу. Повтор того же `--out` не вызывает уже записанные примеры. "
+            "Ошибка одного вызова остаётся строкой этого примера, замер идёт дальше: в сводке она неверная и видна в колонке «Ошибки вызова». "
+            "`--dry-run` печатает флаги, модели, id и пропуски, не вызывая agent. `--limit 2` берёт первые два примера.",
             "",
             "`summary --check` сверяет этот файл и `bench/classify/summary.json` с пересчётом. Сеть и cursor-agent он не вызывает.",
             "",
@@ -394,7 +442,7 @@ def render_markdown(offline: dict, live: dict | None) -> str:
 
 def render_payload(offline: dict, live: dict | None) -> dict:
     def brief(row: dict) -> dict:
-        return {key: row[key] for key in ("name", "title", "hits", "total", "accuracy", "mean_seconds", "input_tokens", "output_tokens", "estimated_cost", "note", "misses") if key in row}
+        return {key: row[key] for key in ("name", "title", "hits", "total", "errors", "accuracy", "mean_seconds", "input_tokens", "output_tokens", "estimated_cost", "note", "misses") if key in row}
 
     payload = {
         "offline": {"items": offline["items"], "rows": [brief(row) for row in offline["rows"]]},
@@ -443,6 +491,41 @@ def cmd_models(_args: argparse.Namespace) -> int:
     return int(proc.returncode)
 
 
+def _load_rows(path: Path) -> dict[str, dict]:
+    if not path.is_file():
+        return {}
+    found: dict[str, dict] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if row.get("id"):
+            found[str(row["id"])] = row
+    return found
+
+
+def _append_row(path: Path, row: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def _progress(index: int, total: int, item_id: str, tier: str, model: str, attempt: dict) -> None:
+    shown = attempt.get("label")
+    if shown is None:
+        shown = "ошибка: " + str(attempt.get("error") or "пустой ответ")
+    print(
+        f"{index}/{total} {item_id} {tier} model={model or 'default'} "
+        f"{attempt.get('elapsed_seconds') or 0}s {shown}",
+        flush=True,
+    )
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     items = load_items()
     if args.limit:
@@ -450,44 +533,118 @@ def cmd_run(args: argparse.Namespace) -> int:
     config = classify.load_routing()
     cheap_model = config["cheap_model"]
     strong_model = config["strong_model"]
+    timeout = int(args.timeout or config["timeout"])
+    out = Path(args.out) if args.out else None
+    workspace = classify.classifier_workspace(None if out is None else out / "workspace")
     if args.dry_run:
-        try:
-            cheap_argv = classify.cursor_argv(cheap_model)
-            strong_argv = classify.cursor_argv(strong_model)
-        except classify.ClassifyError as exc:
-            print(str(exc))
-            print("Сухой прогон без бинарника. Ожидаемые флаги: -p --trust --force --mode ask --output-format json")
-            return 1
-        print(json.dumps({"cheap_flags": cheap_argv, "strong_flags": strong_argv, "strong_model": strong_model or "default", "items": len(items)}, ensure_ascii=False))
+        done_cheap = _load_rows(out / "cheap.jsonl") if out else {}
+        done_strong = _load_rows(out / "strong.jsonl") if out else {}
+        skip = [item["id"] for item in items if item["id"] in done_cheap and item["id"] in done_strong]
+        payload = {
+            "items": len(items),
+            "ids": [item["id"] for item in items],
+            "skip": skip,
+            "timeout_seconds": timeout,
+            "workspace": str(workspace),
+            "cheap_model": cheap_model,
+            "strong_model": strong_model or "default",
+            "agent": classify.agent_spec(),
+            "cheap_flags": classify.diagnostic_argv(cheap_model, str(workspace)),
+            "strong_flags": classify.diagnostic_argv(strong_model, str(workspace)),
+            "omitted": ["--force", "--mode", "ask", "--approve-mcps"],
+            "why": (
+                "ask ищет по кодовой базе, force разрешает команды. "
+                "Их нет, чтобы один вызов не читал репозиторий. "
+                "workspace пустой и не удаляется."
+            ),
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0
     if classify.agent_spec() is None:
         print("cursor-agent не найден. Живой замер не начат, учебные цифры не подменены.")
         print("Офлайн: python scripts/classify_bench.py summary --check")
+        print("Флаги без вызова: python scripts/classify_bench.py run --dry-run --limit 2 --out " + str(out or "C:\\strat-classify"))
         return 1
-    out = Path(args.out)
+    assert out is not None
     out.mkdir(parents=True, exist_ok=True)
-    cheap_rows = []
-    strong_rows = []
-    for item in items:
-        allowed = classify.allowed_labels(item["task"], FIXTURE)
-        cheap = classify.call_cursor(item["task"], item["text"], allowed, cheap_model, int(config["timeout"]))
-        strong = classify.call_cursor(item["task"], item["text"], allowed, strong_model, int(config["timeout"]))
-        cheap_rows.append(_record(item["id"], cheap))
-        strong_rows.append(_record(item["id"], strong))
-        print(f"{item['id']}: cheap={cheap.get('label') or cheap.get('error')} strong={strong.get('label') or strong.get('error')}")
-    _write_jsonl(out / "cheap.jsonl", cheap_rows)
-    _write_jsonl(out / "strong.jsonl", strong_rows)
+    cheap_path = out / "cheap.jsonl"
+    strong_path = out / "strong.jsonl"
+    done_cheap = _load_rows(cheap_path)
+    done_strong = _load_rows(strong_path)
+    from datetime import datetime, timezone
+
     meta = {
+        "started_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "items": len(items),
+        "limit": int(args.limit or 0),
         "cheap_model": cheap_model,
         "strong_model": strong_model or "default",
-        "flags": classify.CURSOR_FLAGS,
+        "timeout_seconds": timeout,
+        "flags": [*classify.CURSOR_FLAGS, "--workspace"],
+        "workspace": str(workspace),
         "cost_note": classify.COST_NOTE,
+        "errors": 0,
     }
+    if (out / "meta.json").is_file():
+        try:
+            previous = json.loads((out / "meta.json").read_text(encoding="utf-8"))
+            if previous.get("started_at"):
+                meta["started_at"] = previous["started_at"]
+        except json.JSONDecodeError:
+            pass
     (out / "meta.json").write_bytes((json.dumps(meta, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+    errors = 0
+    total = len(items)
+    for index, item in enumerate(items, 1):
+        allowed = classify.allowed_labels(item["task"], FIXTURE)
+        if item["id"] in done_cheap and item["id"] in done_strong:
+            print(f"{index}/{total} {item['id']} пропуск, уже есть", flush=True)
+            continue
+        if item["id"] not in done_cheap:
+            cheap = _one_call(item, allowed, cheap_model, timeout, workspace, "cheap")
+            _append_row(cheap_path, _record(item["id"], cheap))
+            _progress(index, total, item["id"], "cheap", cheap_model, cheap)
+            if not cheap.get("ok"):
+                errors += 1
+        else:
+            print(f"{index}/{total} {item['id']} cheap пропуск, уже есть", flush=True)
+        if item["id"] not in done_strong:
+            strong = _one_call(item, allowed, strong_model, timeout, workspace, "strong")
+            _append_row(strong_path, _record(item["id"], strong))
+            _progress(index, total, item["id"], "strong", strong_model or "default", strong)
+            if not strong.get("ok"):
+                errors += 1
+        else:
+            print(f"{index}/{total} {item['id']} strong пропуск, уже есть", flush=True)
+    meta["errors"] = errors
+    (out / "meta.json").write_bytes((json.dumps(meta, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+    print(f"Готово. Примеров: {total}. Ошибок вызова в этом запуске: {errors}.")
     print(f"Ответы: {out}")
     print("Дальше: python scripts/classify_bench.py archive --work " + str(out))
     return 0
+
+
+def _one_call(item: dict, allowed: list[str], model: str, timeout: int, workspace: Path, tier: str) -> dict:
+    try:
+        return classify.call_cursor(item["task"], item["text"], allowed, model, timeout, workspace=workspace)
+    except Exception as exc:  # noqa: BLE001 — one example must not stop the run
+        return {
+            "ok": False,
+            "transport_ok": False,
+            "label": None,
+            "confidence": None,
+            "rationale": "",
+            "error": f"{tier}: {exc}",
+            "backend": "cursor-agent",
+            "model": model or "cursor/default",
+            "elapsed_seconds": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0,
+            "provider_cost": None,
+            "estimated_cost": "0.000000",
+        }
 
 
 def _record(item_id: str, attempt: dict) -> dict:
@@ -571,7 +728,8 @@ def build_parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="живой прогон cursor-agent, лёгкая модель и сильная")
     run.add_argument("--out", default="", help="каталог ответов, лучше вне репозитория")
     run.add_argument("--limit", type=int, default=0, help="сколько первых примеров, 0 значит все")
-    run.add_argument("--dry-run", action="store_true", help="показать флаги, не вызывать модель")
+    run.add_argument("--timeout", type=int, default=0, help="секунд на один вызов, 0 значит значение из config")
+    run.add_argument("--dry-run", action="store_true", help="показать флаги, id и пропуски, не вызывать модель")
     run.set_defaults(func=cmd_run)
     archive = sub.add_parser("archive", help="скопировать прогон в bench/classify/runs")
     archive.add_argument("--work", required=True)

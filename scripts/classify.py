@@ -17,10 +17,12 @@ a broken rule.
 
 from __future__ import annotations
 
+import ctypes
 import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 import time
@@ -46,7 +48,11 @@ SOURCE_ID_RE = re.compile(r"\bS\d+\b")
 TOKEN_RE = re.compile(r"[0-9A-Za-zА-Яа-яЁё]{5,}")
 DECISION_HEADING_RE = re.compile(r"^##\s+(D\d+)\.", re.M)
 COST_NOTE = "оценка, не счёт"
-CURSOR_FLAGS = ["-p", "--trust", "--force", "--mode", "ask", "--output-format", "json"]
+# Print mode without --force rejects shell, MCP and web fetches that need approval.
+# --mode ask is not used: the CLI documents it as a codebase search, which made a
+# single label take about two minutes and kept a child process on the work folder.
+CURSOR_FLAGS = ["-p", "--trust", "--output-format", "json"]
+SCRUBBED_ENV = ("CURSOR_PROJECT_DIR", "CLAUDE_PROJECT_DIR", "STRAT_REPO_ROOT")
 ROUTE_PHRASES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("synthetic-respondent", ("синтетическ", "воображаемая персона")),
     ("ux-media-analysis", ("скриншот", "витрин", "разбери html", "интерфейс")),
@@ -166,12 +172,176 @@ def cursor_launch() -> tuple[list[str], dict[str, str]]:
     return prefix, extra
 
 
-def cursor_argv(model: str) -> list[str]:
+def cursor_argv(model: str, workspace: str) -> list[str]:
+    """Flags for one label. No --force, no --mode ask, workspace is an empty folder."""
     prefix, _extra = cursor_launch()
-    argv = [*prefix, *CURSOR_FLAGS]
+    argv = [*prefix, *CURSOR_FLAGS, "--workspace", workspace]
     if model and model != "cursor/default":
         argv.extend(["--model", model])
     return argv
+
+
+def diagnostic_argv(model: str, workspace: str) -> list[str]:
+    """Same flags as a live call. Falls back to the name `agent` when it is not installed."""
+    try:
+        return cursor_argv(model, workspace)
+    except ClassifyError:
+        argv = ["agent", *CURSOR_FLAGS, "--workspace", workspace]
+        if model and model != "cursor/default":
+            argv.extend(["--model", model])
+        return argv
+
+
+def classifier_workspace(explicit: Path | None = None) -> Path:
+    """A stable empty folder. It is not deleted: a child of agent may still hold it."""
+    path = explicit if explicit is not None else Path(tempfile.gettempdir()) / "strat-classify-workspace"
+    path.mkdir(parents=True, exist_ok=True)
+    marker = path / "README.txt"
+    if not marker.is_file():
+        marker.write_text(
+            "Пустой каталог классификатора. Это не репозиторий. Инструменты не нужны.\n",
+            encoding="utf-8",
+        )
+    return path
+
+
+def _child_env(extra: dict[str, str]) -> dict[str, str]:
+    env = os.environ.copy()
+    for key in SCRUBBED_ENV:
+        env.pop(key, None)
+    env.update(extra)
+    return env
+
+
+def kill_process_tree(pid: int) -> None:
+    """Stop agent and the children that keep the work folder open after it exits."""
+    if pid <= 0:
+        return
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(pid), "/T", "/F"],
+            capture_output=True,
+            check=False,
+        )
+        return
+    try:
+        os.killpg(pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+
+
+def _windows_job(proc: subprocess.Popen) -> object | None:
+    """Kill every descendant when the handle is closed, including after the parent exits."""
+    if os.name != "nt":
+        return None
+    try:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    except OSError:
+        return None
+
+    class BasicLimit(ctypes.Structure):
+        _fields_ = [
+            ("PerProcessUserTimeLimit", ctypes.c_int64),
+            ("PerJobUserTimeLimit", ctypes.c_int64),
+            ("LimitFlags", ctypes.c_uint32),
+            ("MinimumWorkingSetSize", ctypes.c_size_t),
+            ("MaximumWorkingSetSize", ctypes.c_size_t),
+            ("ActiveProcessLimit", ctypes.c_uint32),
+            ("Affinity", ctypes.c_size_t),
+            ("PriorityClass", ctypes.c_uint32),
+            ("SchedulingClass", ctypes.c_uint32),
+        ]
+
+    class IoCounters(ctypes.Structure):
+        _fields_ = [
+            ("ReadOperationCount", ctypes.c_uint64),
+            ("WriteOperationCount", ctypes.c_uint64),
+            ("OtherOperationCount", ctypes.c_uint64),
+            ("ReadTransferCount", ctypes.c_uint64),
+            ("WriteTransferCount", ctypes.c_uint64),
+            ("OtherTransferCount", ctypes.c_uint64),
+        ]
+
+    class ExtendedLimit(ctypes.Structure):
+        _fields_ = [
+            ("BasicLimitInformation", BasicLimit),
+            ("IoInfo", IoCounters),
+            ("ProcessMemoryLimit", ctypes.c_size_t),
+            ("JobMemoryLimit", ctypes.c_size_t),
+            ("PeakProcessMemoryUsed", ctypes.c_size_t),
+            ("PeakJobMemoryUsed", ctypes.c_size_t),
+        ]
+
+    kernel32.CreateJobObjectW.restype = ctypes.c_void_p
+    kernel32.SetInformationJobObject.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32]
+    kernel32.SetInformationJobObject.restype = ctypes.c_int
+    kernel32.AssignProcessToJobObject.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    kernel32.AssignProcessToJobObject.restype = ctypes.c_int
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    job = kernel32.CreateJobObjectW(None, None)
+    if not job:
+        return None
+    info = ExtendedLimit()
+    info.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    if not kernel32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info)):
+        kernel32.CloseHandle(job)
+        return None
+    handle = getattr(proc, "_handle", None)
+    if not handle or not kernel32.AssignProcessToJobObject(job, ctypes.c_void_p(int(handle))):
+        kernel32.CloseHandle(job)
+        return None
+    return job
+
+
+def _close_job(job: object | None) -> None:
+    if not job or os.name != "nt":
+        return
+    try:
+        ctypes.WinDLL("kernel32", use_last_error=True).CloseHandle(job)
+    except OSError:
+        pass
+
+
+def _run_agent(argv: list[str], workspace: Path, env: dict[str, str], timeout: int) -> tuple[int, str, str, float]:
+    """Run agent. A locked workspace or a leftover child becomes an error string, not a traceback."""
+    popen_kwargs: dict = {
+        "cwd": str(workspace),
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "env": env,
+    }
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        popen_kwargs["start_new_session"] = True
+    started = time.perf_counter()
+    proc = subprocess.Popen(argv, **popen_kwargs)
+    job = _windows_job(proc)
+    timed_out = False
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        kill_process_tree(proc.pid)
+        _close_job(job)
+        job = None
+        try:
+            stdout, stderr = proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            stdout, stderr = proc.communicate()
+    finally:
+        kill_process_tree(proc.pid)
+        _close_job(job)
+    elapsed = round(time.perf_counter() - started, 3)
+    out = (stdout or b"").decode("utf-8", errors="replace")
+    err = (stderr or b"").decode("utf-8", errors="replace")
+    if timed_out:
+        return 124, out, f"таймаут cursor-agent, {timeout} с", elapsed
+    return int(proc.returncode or 0), out, err, elapsed
 
 
 def load_catalog(project: Path) -> dict:
@@ -462,6 +632,7 @@ def prompt_for(task: str, text: str, allowed: list[str]) -> str:
     shown = ", ".join(allowed)
     shape = '["E001"] или ["none"]' if task == "impact" else '"fact"'
     return (
+        "Не вызывай инструменты, не читай файлы и не выполняй команды. "
         "Верни один JSON-объект и ничего больше. Поля ровно label, confidence, rationale.\n"
         f"Задача: {task}. label строго из списка: {shown}.\n"
         f"Пример формы label: {shape}. confidence — число от 0 до 1. rationale — одно короткое предложение.\n"
@@ -591,7 +762,41 @@ def _attempt_from_text(
     }
 
 
-def call_cursor(task: str, text: str, allowed: list[str], model: str, timeout: int) -> dict:
+def call_cursor(
+    task: str,
+    text: str,
+    allowed: list[str],
+    model: str,
+    timeout: int,
+    workspace: Path | None = None,
+) -> dict:
+    """One cursor-agent call. Failures stay inside the returned attempt and do not raise."""
+    shown_model = model or "cursor/default"
+    try:
+        return _call_cursor(task, text, allowed, model, timeout, workspace, shown_model)
+    except Exception as exc:  # noqa: BLE001 — a locked folder must not become a traceback
+        return _attempt_from_text(
+            "",
+            task=task,
+            allowed=allowed,
+            backend="cursor-agent",
+            model=shown_model,
+            elapsed=0,
+            usage=None,
+            provider_cost=None,
+            transport_error=scrub(f"сбой вызова cursor-agent: {exc}"),
+        )
+
+
+def _call_cursor(
+    task: str,
+    text: str,
+    allowed: list[str],
+    model: str,
+    timeout: int,
+    workspace: Path | None,
+    shown_model: str,
+) -> dict:
     prompt = prompt_for(task, text, allowed)
     try:
         prefix, extra = cursor_launch()
@@ -601,61 +806,38 @@ def call_cursor(task: str, text: str, allowed: list[str], model: str, timeout: i
             task=task,
             allowed=allowed,
             backend="cursor-agent",
-            model=model or "cursor/default",
+            model=shown_model,
             elapsed=0,
             usage=None,
             provider_cost=None,
             transport_error=str(exc),
         )
-    argv = [*prefix, *CURSOR_FLAGS]
-    shown_model = model or "cursor/default"
+    folder = classifier_workspace(workspace)
+    argv = [*prefix, *CURSOR_FLAGS, "--workspace", str(folder)]
     if model:
         argv.extend(["--model", model])
     argv.append(prompt)
-    env = os.environ.copy()
-    env.update(extra)
-    started = time.perf_counter()
-    with tempfile.TemporaryDirectory(prefix="strat-classify-") as folder:
-        try:
-            proc = subprocess.run(
-                argv,
-                cwd=folder,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                env=env,
-                timeout=timeout,
-                check=False,
-            )
-        except subprocess.TimeoutExpired:
-            return _attempt_from_text(
-                "",
-                task=task,
-                allowed=allowed,
-                backend="cursor-agent",
-                model=shown_model,
-                elapsed=float(timeout),
-                usage=None,
-                provider_cost=None,
-                transport_error=f"таймаут cursor-agent, {timeout} с",
-            )
-        except FileNotFoundError as exc:
-            return _attempt_from_text(
-                "",
-                task=task,
-                allowed=allowed,
-                backend="cursor-agent",
-                model=shown_model,
-                elapsed=0,
-                usage=None,
-                provider_cost=None,
-                transport_error=scrub(f"не запустился cursor-agent: {exc}"),
-            )
-    elapsed = round(time.perf_counter() - started, 3)
-    stdout = proc.stdout or ""
-    if proc.returncode != 0:
-        detail = scrub((proc.stderr or stdout or "ненулевой код").strip().splitlines()[0][:400])
+    try:
+        code, stdout, err, elapsed = _run_agent(argv, folder, _child_env(extra), timeout)
+    except FileNotFoundError as exc:
+        return _attempt_from_text(
+            "",
+            task=task,
+            allowed=allowed,
+            backend="cursor-agent",
+            model=shown_model,
+            elapsed=0,
+            usage=None,
+            provider_cost=None,
+            transport_error=scrub(f"не запустился cursor-agent: {exc}"),
+        )
+    if code != 0:
+        detail = scrub((err or stdout or "ненулевой код").strip().splitlines()[0][:400])
+        prefix_text = "таймаут cursor-agent" if code == 124 else f"cursor-agent код {code}"
+        if detail.startswith("таймаут"):
+            message = detail
+        else:
+            message = f"{prefix_text}: {detail}"
         return _attempt_from_text(
             "",
             task=task,
@@ -665,7 +847,7 @@ def call_cursor(task: str, text: str, allowed: list[str], model: str, timeout: i
             elapsed=elapsed,
             usage=None,
             provider_cost=None,
-            transport_error=f"cursor-agent код {proc.returncode}: {detail}",
+            transport_error=message,
         )
     outer: dict = {}
     inner = stdout
