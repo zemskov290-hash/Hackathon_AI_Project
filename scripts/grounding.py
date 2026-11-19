@@ -39,6 +39,25 @@ SUBSTANTIVE = {
 }
 CITE_RE = re.compile(r"\[(E\d+|S\d+|K\d+|I\d+)\]|\[(A\d+)\.([A-Za-z0-9_]+)\]")
 NUM_RE = re.compile(r"(?<![\w.])(\d+(?:[.,]\d+)?%?)(?![\w])")
+# Same number tokens as scripts/bench.py. The scorer is not imported: bench imports strat.
+SCORER_YEAR_RE = re.compile(r"^(19[9]\d|20[0-2]\d|203[0-5])$")
+SCORER_PATH_RE = re.compile(r"(?:[A-Za-z]:\\(?:[^\s\\]+\\)*[^\s\\]+)|(?:[\w.+-]+/)+[\w.+-]+")
+SCORER_CODE_RE = re.compile(r"`[^`]*`")
+SCORER_ERROR_RE = re.compile(
+    r"(?i)(?:\[?\s*(?:errno|winerror|oserror)\s*[:#-]?\s*\d+\]?)"
+    r"|(?:\b(?:http|https)\s*[:#-]?\s*\d{3}\b)"
+    r"|(?:\b(?:ошибк\w*|error|статус|status)\s*[:#-]?\s*\d+\b)"
+    r"|(?:\b\d{3}\s+(?:ошибк\w*|error)\b)"
+)
+SUBSTANTIVE_NUMBER_FILES = (
+    "brief.md",
+    "questions.md",
+    "situation.md",
+    "options.md",
+    "validation.md",
+    "decisions.md",
+)
+ALLOWED_PROJECT_DIRS = {"sources", "kb", "interviews", "analysis", "inspect"}
 CALC_RE = re.compile(
     r"(\d+(?:[.,]\d+)?)\s*[+\-*/×÷]\s*(\d+(?:[.,]\d+)?)\s*=\s*(\d+(?:[.,]\d+)?%?)"
 )
@@ -126,6 +145,28 @@ def _claims(body: str) -> list[str]:
             if part:
                 claims.append(part)
     return claims
+
+
+def scorer_numbers(sentence: str) -> list[str]:
+    """Numbers the benchmark counts: two digits or more, not a year 1990–2035.
+
+    A day in «12 апреля 2026» is a number. The year is not. This is the same
+    token rule as bench.number_tokens. The scorer module itself is unchanged.
+    """
+    masked = SCORER_CODE_RE.sub(" ", sentence)
+    masked = SCORER_PATH_RE.sub(" ", masked)
+    masked = SCORER_ERROR_RE.sub(" ", masked)
+    found = []
+    for match in NUM_RE.finditer(masked):
+        token = match.group(1)
+        bare = token.rstrip("%").replace(",", ".")
+        if SCORER_YEAR_RE.match(bare):
+            continue
+        digits = re.sub(r"\D", "", token)
+        if len(digits) < 2 and "." not in bare and "," not in token and not token.endswith("%"):
+            continue
+        found.append(token)
+    return found
 
 
 def _numbers(claim: str) -> list[str]:
@@ -417,3 +458,73 @@ def review_privacy(project: Path, add) -> None:
                     f"{relative}: файл без пометки synthetic содержит фразу, что интервью не реальное. "
                     "Синтетику помечают <!-- synthetic: true -->.",
                 )
+
+
+def review_project_layout(project: Path, add) -> None:
+    """Raw inputs belong in sources/ or in kb/docs written by kb add."""
+    if not project.is_dir():
+        return
+    for child in sorted(project.iterdir(), key=lambda item: item.name):
+        if not child.is_dir() or child.name.startswith(".") or child.name in ALLOWED_PROJECT_DIRS:
+            continue
+        files = [path for path in child.rglob("*") if path.is_file()]
+        if not files:
+            continue
+        shown = ", ".join(path.relative_to(project).as_posix() for path in files[:4])
+        add(
+            "materials-folder",
+            f"папка {child.name}/ не для сырья ({shown}). "
+            "Входные материалы кладите только в sources/ через add-source или в kb/docs через kb add. "
+            "Копия письма или таблицы в другой папке проекта — след, которого быть не должно.",
+        )
+
+
+def review_substantive_numbers(
+    project: Path,
+    texts: dict,
+    sources: list[dict],
+    evidence: list[dict],
+    add,
+) -> None:
+    """Numbers in synthesis files need [S]/[E]/[A.metric] from this registry.
+
+    strategy.md keeps its own section check. log.md is not a claim file.
+    A template file is skipped. The number tokens match the benchmark scorer.
+    """
+    import reply_check
+
+    source_ids = {str(row.get("id")) for row in sources if row.get("id")}
+    evidence_ids = {str(row.get("id")) for row in evidence if row.get("id")}
+    for name in SUBSTANTIVE_NUMBER_FILES:
+        text = texts.get(name)
+        if not text or "<!-- template: empty -->" in text:
+            continue
+        for line, sentence in reply_check._sentences(text):
+            numbers = scorer_numbers(sentence)
+            citations = reply_check._citations(sentence)
+            valid = False
+            for label, analysis_id, metric in citations:
+                problem = reply_check._citation_ok(
+                    project, label, analysis_id, metric, source_ids, evidence_ids
+                )
+                if problem is None:
+                    valid = True
+                    continue
+                if label.startswith("E"):
+                    continue
+                add(
+                    "ref",
+                    f"{name}:{line}: ссылка [{label}] не найдена в реестре проекта ({problem}).",
+                )
+            if valid or not numbers:
+                continue
+            shown = ", ".join(numbers)
+            snippet = re.sub(r"\s+", " ", sentence).strip()
+            if len(snippet) > 140:
+                snippet = snippet[:137] + "..."
+            add(
+                "ungrounded-number",
+                f"{name}:{line}: число {shown} без ссылки [S…], [E…] или [A….метрика] "
+                f"в том же предложении ({snippet}). "
+                "День в дате — тоже число. Поставьте id из реестра в это предложение или уберите число.",
+            )

@@ -1878,7 +1878,11 @@ def check_project(project: Path, state: dict | None = None, *, strict: bool = Fa
                 add("decision", "у решения не заполнен owner")
             if not re.search(r"(?m)^-\s+metric:\s*\S+", decisions):
                 add("decision", "у решения не заполнен metric")
-            if not re.search(r"(?m)^-\s+review_date:\s*\d{4}-\d{2}-\d{2}\s*$", decisions):
+            if not re.search(
+                r"(?m)^-\s+review_date:\s*\d{4}-\d{2}-\d{2}"
+                r"(?:\s+\[(?:[ES]\d+|A\d+\.[A-Za-z0-9_]+)\])?\s*$",
+                decisions,
+            ):
                 add("decision", "review_date должен быть в формате YYYY-MM-DD")
             if not re.search(r"(?m)^-\s+revisit_if:\s*\S+", decisions):
                 add("decision", "не задано условие пересмотра revisit_if")
@@ -1900,6 +1904,8 @@ def check_project(project: Path, state: dict | None = None, *, strict: bool = Fa
     for item in inspect_media.verify_project(project):
         add(str(item["code"]), str(item["message"]), warning=bool(item.get("warning")))
     grounding.review_strategy(project, texts.get("strategy.md"), sources, evidence, add)
+    grounding.review_substantive_numbers(project, texts, sources, evidence, add)
+    grounding.review_project_layout(project, add)
     grounding.review_privacy(project, add)
     dirty = uncommitted_tool_files()
     if dirty:
