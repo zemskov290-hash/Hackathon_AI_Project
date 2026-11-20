@@ -17,6 +17,45 @@
     "revise": "strong",
     "analysis": "cheap",
     "kb": "cheap",
-    "ux-media": "ide"
+    "ux-media": "ide",
+    "classify": "cheap"
+  },
+  "classifier": {
+    "backend": "rules",
+    "order": ["rules", "cursor-agent", "api"],
+    "confidence_threshold": 0.75,
+    "cursor_agent": {
+      "cheap_model": "composer-2.5-fast",
+      "strong_model": "",
+      "timeout_seconds": 180
+    },
+    "specialized": {
+      "enabled": false,
+      "name": "jev"
+    },
+    "tasks": {
+      "claim-type": {
+        "labels": ["fact", "hypothesis", "forecast", "synthetic"]
+      },
+      "impact": {
+        "extra_labels": ["none"]
+      },
+      "route": {
+        "labels": [
+          "01-brief",
+          "02-research-plan",
+          "03-collect",
+          "04-synthesis",
+          "05-options",
+          "06-strategy",
+          "07-validation-plan",
+          "decision-tracking",
+          "revise-on-new-data",
+          "interview",
+          "synthetic-respondent",
+          "ux-media-analysis"
+        ]
+      }
+    }
   }
 }

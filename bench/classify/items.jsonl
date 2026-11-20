@@ -1,0 +1,36 @@
+{"id": "c01", "task": "claim-type", "gold": "fact", "text": "В учебной заметке доля продлений за 2025-Q4 равна 0.42 [E001]."}
+{"id": "c02", "task": "claim-type", "gold": "fact", "text": "Цена подписки названа в источнике [S002]."}
+{"id": "c03", "task": "claim-type", "gold": "hypothesis", "text": "Гипотеза: цена не главная причина ухода."}
+{"id": "c04", "task": "claim-type", "gold": "forecast", "text": "Прогноз: доля продлений вырастет к концу цикла."}
+{"id": "c05", "task": "claim-type", "gold": "synthetic", "text": "Синтетическая персона говорит, что не видит пользу до списания. Это не реальное интервью."}
+{"id": "c06", "task": "claim-type", "gold": "hypothesis", "text": "Доля продлений равна 0.42."}
+{"id": "c07", "task": "claim-type", "gold": "hypothesis", "text": "Это уже факт: доля продлений равна 0.42."}
+{"id": "c08", "task": "claim-type", "gold": "hypothesis", "text": "Возможно, канал письма не дочитывают."}
+{"id": "c09", "task": "claim-type", "gold": "hypothesis", "text": "Автор заметки считает цену вторичной, опора [E002]."}
+{"id": "c10", "task": "claim-type", "gold": "hypothesis", "text": "Синтетика здесь означает учебный пример, не живого клиента.", "note": "В тексте нет «синтетическ», метка synthetic была бы нарушением правила."}
+{"id": "c11", "task": "claim-type", "gold": "hypothesis", "text": "Фактом это станет только со ссылкой [S001]."}
+{"id": "c12", "task": "claim-type", "gold": "fact", "text": "Среднее уже посчитано [A001.mean_price]."}
+{"id": "i01", "task": "impact", "gold": ["E001"], "text": "Новость прямо про E001."}
+{"id": "i02", "task": "impact", "gold": ["none"], "text": "Это не затрагивает текущие выводы."}
+{"id": "i03", "task": "impact", "gold": ["E001", "E004"], "text": "Меняет E001 и E004."}
+{"id": "i04", "task": "impact", "gold": ["E001"], "text": "Источник S002 обновился."}
+{"id": "i05", "task": "impact", "gold": ["D1"], "text": "Решение D1 под вопросом."}
+{"id": "i06", "task": "impact", "gold": ["none"], "text": "Упоминается E099, такой записи нет."}
+{"id": "i07", "task": "impact", "gold": ["E002"], "text": "Подписка стоит 399 рублей в месяц."}
+{"id": "i08", "task": "impact", "gold": ["none"], "text": "Другой продукт стоит дорого, к заметке это не относится."}
+{"id": "i09", "task": "impact", "gold": ["E003"], "text": "Гипотеза E003 больше не держится."}
+{"id": "i10", "task": "impact", "gold": ["D1", "E002"], "text": "Сразу E002 и решение D1."}
+{"id": "r01", "task": "route", "gold": "01-brief", "text": "Переформулируй запрос и собери бриф."}
+{"id": "r02", "task": "route", "gold": "02-research-plan", "text": "Составь план исследования: если окажется, что цена не важна, выберем иначе."}
+{"id": "r03", "task": "route", "gold": "03-collect", "text": "Скачай страницу тарифа и зарегистрируй источник."}
+{"id": "r04", "task": "route", "gold": "04-synthesis", "text": "Собери, что известно и где противоречие."}
+{"id": "r05", "task": "route", "gold": "05-options", "text": "Нужны три варианта, включая оставить как есть."}
+{"id": "r06", "task": "route", "gold": "06-strategy", "text": "Напиши стратегию и границы MVP."}
+{"id": "r07", "task": "route", "gold": "07-validation-plan", "text": "Нужен план проверки и список нежелательных эффектов."}
+{"id": "r08", "task": "route", "gold": "decision-tracking", "text": "Зафиксируй решение с владельцем и датой пересмотра."}
+{"id": "r09", "task": "route", "gold": "revise-on-new-data", "text": "Пришли новые данные против принятого выбора."}
+{"id": "r10", "task": "route", "gold": "interview", "text": "Собери гайд интервью по гипотезам."}
+{"id": "r11", "task": "route", "gold": "synthetic-respondent", "text": "Ответь как синтетическая персона, это не клиент."}
+{"id": "r12", "task": "route", "gold": "ux-media-analysis", "text": "Разбери скриншот витрины тарифа."}
+{"id": "r13", "task": "route", "gold": "03-collect", "text": "Посчитай среднее по CSV."}
+{"id": "r14", "task": "route", "gold": "01-brief", "text": "Что дальше по проекту?"}

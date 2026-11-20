@@ -17,7 +17,7 @@ description: Собрать картину — известно, откуда, �
 
 Запусти `python scripts/strat.py check`. Исправь все строки с ненулевым кодом. Потом `log` и `advance <проект> 4`.
 
-Сборка картины — класс `synthesis`, уровень `strong`:
+Тип нового тезиса размечай `classify --task claim-type` (уровень cheap), не сильным вызовом. В раздел «Факты» попадает только `fact`, и только если так сказал итоговый `label`. Картина целиком — по-прежнему класс `synthesis`, уровень `strong`:
 
 ```text
 python scripts/strat.py complete --tier strong --stage 4 --project <проект> --prompt-file синтез.txt

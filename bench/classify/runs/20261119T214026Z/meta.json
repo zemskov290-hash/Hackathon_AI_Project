@@ -1,0 +1,18 @@
+{
+  "started_at": "2026-11-19T21:40:26Z",
+  "items": 36,
+  "limit": 0,
+  "cheap_model": "composer-2.5-fast",
+  "strong_model": "default",
+  "timeout_seconds": 180,
+  "flags": [
+    "-p",
+    "--trust",
+    "--output-format",
+    "json",
+    "--workspace"
+  ],
+  "workspace": "C:\\strat-classify\\workspace",
+  "cost_note": "оценка, не счёт",
+  "errors": 0
+}

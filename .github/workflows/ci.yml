@@ -39,3 +39,5 @@ jobs:
         run: python scripts/portability.py --check
       - name: Benchmark summary matches the committed empty table
         run: python scripts/bench.py summary --check
+      - name: Classifier summary stays reproducible without an API key
+        run: python scripts/classify_bench.py summary --check
