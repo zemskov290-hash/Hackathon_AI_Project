@@ -678,6 +678,19 @@ def load_assumptions(project: Path) -> tuple[dict[str, dict], str | None]:
     return by_id, None
 
 
+def _assumption_label(row: dict) -> str:
+    """value plus unit, without printing the unit twice («10 % %», «5 п.п. п.п.»)."""
+    value = str(row.get("value") or "").strip()
+    unit = str(row.get("unit") or "").strip()
+    if not unit:
+        return value
+    compact_unit = re.sub(r"\s+", "", unit).rstrip(".")
+    compact_value = re.sub(r"\s+", "", value).rstrip(".")
+    if compact_unit and compact_value.endswith(compact_unit):
+        return value
+    return f"{value} {unit}".strip()
+
+
 def assumption_quantity(row: dict) -> Quantity | None:
     """Number from value plus unit. «4» and «млн» is 4 million, not 4."""
     value = str(row.get("value") or "").strip()
@@ -947,7 +960,61 @@ def review(project: Path, texts: dict, sources: list[dict], evidence: list[dict]
             add,
         )
         _review_assumption_visibility(name, text, assumptions, add)
+    review_isolation(project, add)
     review_inconsistent(documents, add)
+
+
+_OTHER_PROJECT_PATH = re.compile(r"projects/([A-Za-z0-9_.-]+)/")
+_ISOLATION_FILES = (
+    "brief.md",
+    "questions.md",
+    "situation.md",
+    "options.md",
+    "strategy.md",
+    "validation.md",
+    "decisions.md",
+    "deliverable.md",
+    "evidence.jsonl",
+)
+
+
+def review_isolation(project: Path, add) -> None:
+    """A project may cite only its own sources. Another folder under projects/ is foreign."""
+    own = project.name
+    siblings: set[str] = set()
+    root = project.parent
+    if root.is_dir():
+        for path in root.iterdir():
+            if path.is_dir() and (path / "state.json").is_file():
+                siblings.add(path.name)
+    for name in _ISOLATION_FILES:
+        path = project / name
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        seen: set[str] = set()
+        for match in _OTHER_PROJECT_PATH.finditer(text):
+            other = match.group(1)
+            if other in {own, ".", ".."} or other.startswith("."):
+                continue
+            if other in seen:
+                continue
+            seen.add(other)
+            add(
+                "foreign-project",
+                f"{name}: путь projects/{other}/ указывает на другой проект. "
+                "Материалы соседней папки не читают и не копируют.",
+            )
+        for other in sorted(siblings):
+            if other == own or other in seen:
+                continue
+            if re.search(rf"(?<![\w.-]){re.escape(other)}(?![\w.-])", text):
+                seen.add(other)
+                add(
+                    "foreign-project",
+                    f"{name}: упомянут другой проект «{other}». "
+                    "Свидетельства берутся только из sources этого проекта.",
+                )
 
 
 def _documents(project: Path, texts: dict) -> dict[str, str]:
@@ -1062,7 +1129,7 @@ def _review_assumption_visibility(name: str, text: str, assumptions: dict[str, d
                     continue
                 if _value_in(expected, present):
                     continue
-                shown = f"{row.get('value')} {row.get('unit') or ''}".strip()
+                shown = _assumption_label(row)
                 add(
                     "assumption-value",
                     f"{name}:{lineno}: [{assumption_id}] без своего значения в этой фразе или ячейке. "

@@ -29,6 +29,18 @@ python scripts/strat.py resume
 
 Если проекта нет и MCP нет — `python scripts/strat.py init <id> --title "..."`. Скажи человеку, на каком этапе работа и какой шаг следующий. Не пересказывай задачу с нуля и не переписывай закрытые этапы без новых данных.
 
+## Какой проект
+
+Перед любой записью назови проект в ответе человеку и сверь, что пишешь именно в него.
+
+Если в сообщении есть точное имя папки (`family-connect-3` при соседних `family-connect` и `family-connect-2`), сначала `python scripts/strat.py active <id>`. `resume <id>` запоминает тот же проект. Указатель лежит вне git: `projects/.strat-active`. Команда без имени продолжает этот проект и печатает «Активный проект».
+
+Имя названо неточно — только точное совпадение. `active family` при трёх папках `family-connect*` завершается с ошибкой и списком. Ближайшее имя и самая новая папка не выбираются.
+
+В этом чате проект ещё не называли, а папок несколько: не пиши ни в одну. Запусти `active` без имени. Если команда перечисляет кандидатов, задай вопрос и перечисли их. Указатель, которого в этой переписке не ставили, чужой проект не назначает.
+
+Не читай и не копируй `situation.md`, `options.md`, `evidence.jsonl`, `strategy.md`, `deliverable.md` и остальные тексты из другой папки `projects/`. Свидетельство ссылается только на источник из `sources.jsonl` этого проекта. `check` отвечает `foreign-project`, если в текстах проекта есть `projects/<другой>/` или имя чужой папки, и `source-missing`, если источник свидетельства в реестре этого проекта отсутствует. Запись в проект, который не активен, CLI отклоняет: смена только явной командой `active <id>`.
+
 ## Экономия
 
 Один основной агент ведёт задачу. Три роли подключай только по назначению: сбор свидетельств, возражения на этапе 5, синтетическая персона по явной просьбе. Модель по умолчанию — подписка IDE. Платный API не вызывай, пока человек не заполнил `.env`. Модели в `.claude/agents/` не меняй.
@@ -154,7 +166,7 @@ chcp 65001
 
 Из корня репозитория: `python scripts/strat.py --help`.
 
-`init`, `status`, `resume`, `use`, `show`, `fetch` (`--force`), `add-source`, `add-evidence`, `supersede`, `add-option`, `supersede-option`, `analyze` (`--id`, `--verify`), `inspect`, `kb add`, `kb index`, `kb search`, `interview guide`, `interview accept`, `reply-check`, `check` (`--strict`), `impact`, `retract`, `log` (`--minutes`, `--input-chars`, `--output-chars`, `--tier`), `cost` (`--estimate`), `confirm`, `advance`, `propose-revision`, `accept-revision`, `doctor`, `complete` (`--tier cheap|strong|ide`), `classify` (`--task claim-type|impact|route`).
+`init`, `status`, `resume`, `use`, `active`, `show`, `fetch` (`--force`), `add-source`, `add-evidence`, `supersede`, `add-option`, `supersede-option`, `analyze` (`--id`, `--verify`), `inspect`, `kb add`, `kb index`, `kb search`, `interview guide`, `interview accept`, `reply-check`, `check` (`--strict`), `impact`, `retract`, `log` (`--minutes`, `--input-chars`, `--output-chars`, `--tier`), `cost` (`--estimate`), `confirm`, `advance`, `propose-revision`, `accept-revision`, `doctor`, `complete` (`--tier cheap|strong|ide`), `classify` (`--task claim-type|impact|route`).
 
 Те же команды, кроме `use`, есть как инструменты MCP `strat_*`, включая `strat_analyze` и `strat_inspect`. Если они есть в сессии, предпочитай их. `confirm` / `advance` / `accept-revision` в MCP требуют `human_confirmed=true`.
 

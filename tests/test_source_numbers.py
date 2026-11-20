@@ -535,6 +535,36 @@ class SourceNumberCheckTests(unittest.TestCase):
         self.write_deliverable("Прогноз 9 000 [S001].\n")
         self.assertIn("number-not-in-source", codes(self.project))
 
+    def test_assumption_value_message_prints_the_unit_once(self) -> None:
+        self._write_assumptions(
+            [
+                {
+                    "id": "U001",
+                    "kind": "прогноз",
+                    "name": "доля",
+                    "value": "10 %",
+                    "unit": "%",
+                    "note": "",
+                    "status": "active",
+                },
+                {
+                    "id": "U002",
+                    "kind": "оценка",
+                    "name": "сдвиг",
+                    "value": "5 п.п.",
+                    "unit": "п.п.",
+                    "note": "",
+                    "status": "active",
+                },
+            ]
+        )
+        self.write_deliverable("Прогноз [U001]. Оценка [U002].\n")
+        text = messages(self.project, "assumption-value")
+        self.assertNotIn("% %", text)
+        self.assertNotIn("п.п. п.п.", text)
+        self.assertIn("10 %", text)
+        self.assertIn("5 п.п.", text)
+
     def test_pdf_extract_sidecar_fills_numbers_the_pdf_layer_missed(self) -> None:
         pdf = self.project / "sources" / "brief-family-devices.pdf"
         pdf.write_bytes(_minimal_pdf("Price 500 only"))

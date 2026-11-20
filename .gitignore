@@ -13,6 +13,7 @@ projects/*
 !projects/demo-family-tariffs/
 !projects/demo-analysis/
 projects/.current
+projects/.strat-active
 *.log
 .claude/settings.local.json
 .stop-hook.lock
