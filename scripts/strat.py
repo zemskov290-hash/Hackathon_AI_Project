@@ -2696,19 +2696,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     entries = load_log(project)
     _by_stage, total = aggregate(entries)
     print(f"Затраты: {format_usage(entries, total)}")
-    revision = state.get("revision") or {}
-    if revision.get("status") == "pending":
-        current_choice = (state.get("checkpoints") or {}).get("options", {}).get("choice") or "—"
-        print(
-            f"Пересмотр: ожидает решения — {revision.get('decision')}, "
-            f"предложен {revision.get('proposed_option')} (в контрольной точке сейчас {current_choice})"
-        )
-    elif revision.get("status") == "accepted":
-        print(
-            f"Пересмотр: принят {revision.get('decision')}, выбор {revision.get('accepted_option')}"
-        )
-    else:
-        print("Пересмотр: нет")
+    print(revision_summary(state))
     options_body = read_text(project / "options.md") or ""
     if "<!-- preliminary -->" in options_body:
         print(f"Варианты: предварительные, свидетельств {len(active)}. Контрольная точка не закрыта.")
@@ -2782,9 +2770,10 @@ def cmd_resume(args: argparse.Namespace) -> int:
     revision = state.get("revision") or {}
     if revision.get("status") == "pending":
         nxt = (
-            f"Пересмотр {revision.get('decision')} ждёт человека: предложен {revision.get('proposed_option')}. "
-            "Не считай старый выбор контрольной точки окончательным. "
-            "После явного согласия: python scripts/strat.py accept-revision <проект> --choice <O#>."
+            revision_summary(state)
+            + " Не считай старый выбор контрольной точки окончательным. "
+            "После явной фразы человека: python scripts/strat.py accept-revision <проект>. "
+            "Отказ: python scripts/strat.py reject-revision <проект>."
         )
     elif state.get("stage_status") == "done" and stage == 8:
         nxt = "Сопровождение: дата пересмотра в decisions.md. Новые данные не подмешивайте молча — impact и навык revise-on-new-data."
@@ -2814,8 +2803,12 @@ def cmd_resume(args: argparse.Namespace) -> int:
         )
     elif revision.get("status") == "accepted":
         print(f"пересмотр: accepted {revision.get('decision')} -> {revision.get('accepted_option')}")
+    elif revision.get("status") == "rejected":
+        print(f"пересмотр: rejected {revision.get('decision')}")
     else:
         print("пересмотр: нет")
+    if revision.get("status"):
+        print(revision_summary(state))
     questions = read_text(project / "questions.md") or ""
     bullets = [] if is_template(questions) else section_bullets(questions, "Открытые вопросы")
     print("открытые вопросы:")
@@ -2928,48 +2921,179 @@ def cmd_confirm(args: argparse.Namespace) -> int:
     return 0
 
 
+REVISION_KIND_LABEL = {
+    "switch": "смена варианта",
+    "terms": "сохранение варианта, меняются условия",
+    "legacy": "старая запись без вида",
+}
+
+
+def revision_changes_from(args: argparse.Namespace) -> list[str]:
+    found: list[str] = []
+    raw = getattr(args, "changes", None)
+    if isinstance(raw, list):
+        found.extend(str(item).strip() for item in raw if str(item).strip())
+    path = getattr(args, "changes_file", None)
+    if path:
+        text = strip_one_trailing_newline(read_utf8_arg_file(path))
+        found.extend(line.strip() for line in text.splitlines() if line.strip())
+    return found
+
+
+def normalize_revision_kind(revision: dict) -> str:
+    """Old records have no kind. A different O… is a switch; the same O… is terms only with a list."""
+    kind = str(revision.get("kind") or "").strip()
+    if kind in {"switch", "terms"}:
+        return kind
+    proposed = str(revision.get("proposed_option") or "")
+    previous = revision.get("previous_option")
+    changes = [str(item).strip() for item in (revision.get("changes") or []) if str(item).strip()]
+    if previous and proposed and proposed == previous:
+        return "terms" if changes else "legacy"
+    return "switch"
+
+
+def revision_summary(state: dict) -> str:
+    revision = state.get("revision") or {}
+    if not isinstance(revision, dict) or not revision.get("status"):
+        return "Пересмотр: нет"
+    status = str(revision.get("status"))
+    kind = normalize_revision_kind(revision)
+    decision = revision.get("decision") or "—"
+    proposed = revision.get("proposed_option") or "—"
+    previous = revision.get("previous_option") or "—"
+    current = (state.get("checkpoints") or {}).get("options", {}).get("choice") or previous
+    changes = [str(item).strip() for item in (revision.get("changes") or []) if str(item).strip()]
+    change_text = "; ".join(changes) if changes else "не перечислены"
+    kind_text = REVISION_KIND_LABEL.get(kind, kind)
+    if status == "pending":
+        head = f"Пересмотр: ожидает решения — {decision}, вид: {kind_text}."
+    elif status == "accepted":
+        head = f"Пересмотр: принят {decision}, вид: {kind_text}."
+    elif status == "rejected":
+        head = f"Пересмотр: отклонён — {decision}, вид: {kind_text}."
+    else:
+        head = f"Пересмотр: {status} — {decision}, вид: {kind_text}."
+    if kind == "switch":
+        detail = f"Смена варианта: {previous} → {proposed}."
+        if changes:
+            detail += f" Также меняется: {change_text}."
+    elif kind == "terms":
+        detail = f"Вариант {proposed} сохраняется. Меняется: {change_text}."
+    else:
+        detail = (
+            f"Предложен {proposed} (в контрольной точке сейчас {current}). "
+            "Перечень изменений не задан."
+        )
+    if status == "accepted":
+        detail += f" Принятый выбор: {revision.get('accepted_option') or proposed}."
+    if status == "rejected":
+        detail += f" Выбор остаётся {current}."
+    return head + " " + detail
+
+
+def append_decision_revision(project: Path, title: str, bullets: list[str]) -> None:
+    path = project / "decisions.md"
+    existing = read_text(path) or "# Решения\n"
+    if existing and not existing.endswith("\n"):
+        existing += "\n"
+    body = title + "\n\n" + "\n".join(f"- {item}" for item in bullets) + "\n"
+    write_utf8(path, existing + "\n" + body)
+
+
 def cmd_propose_revision(args: argparse.Namespace) -> int:
     project, _tokens = take_project(args.rest, 0, write=True)
-    decision = args.decision
-    choice = args.choice
+    if getattr(args, "json", None):
+        payload = load_command_json(str(args.json), project)
+        if not isinstance(payload, dict):
+            die("JSON пересмотра — один объект: decision, choice, reason и, если вариант тот же, changes.")
+        decision = str(payload.get("decision") or "")
+        choice = str(payload.get("choice") or "")
+        reason = str(payload.get("reason") or "")
+        raw_changes = payload.get("changes") or []
+        if not isinstance(raw_changes, list):
+            die("changes — список строк: что именно меняется.")
+        changes = [str(item).strip() for item in raw_changes if str(item).strip()]
+        if not reason.strip():
+            die("В JSON нет reason.")
+    else:
+        decision = args.decision
+        choice = args.choice
+        reason = resolve_text(
+            args.reason, args.reason_file, label="причина пересмотра", env_name="STRAT_REASON", required=True
+        )
+        changes = revision_changes_from(args)
     if not re.fullmatch(r"D\d+", decision or "") or not re.fullmatch(r"O\d+", choice or ""):
-        die("Форма: propose-revision [проект] --decision D2 --choice O3 --reason \"...\"")
-    reason = resolve_text(
-        args.reason, args.reason_file, label="причина пересмотра", env_name="STRAT_REASON", required=True
-    )
+        die(
+            "Форма: propose-revision [проект] --decision D2 --choice O3 --reason-file причина.txt\n"
+            "Тот же вариант: добавьте --changes-file со строками, что меняется "
+            "(порог, срок, обязательство, revisit_if)."
+        )
     state = load_state(project)
     previous = (state.get("checkpoints") or {}).get("options", {}).get("choice")
+    if previous and choice == previous and not changes:
+        die(
+            f"Пересмотр на тот же вариант {choice} без изменений не записывается. "
+            "Либо укажите другой --choice (смена варианта), "
+            "либо сохраните этот вариант и перечислите, что меняется, в --changes-file "
+            "или в changes JSON: порог, срок, обязательство, revisit_if."
+        )
+    kind = "terms" if previous and choice == previous else "switch"
     state["revision"] = {
         "status": "pending",
+        "kind": kind,
         "decision": decision,
         "proposed_option": choice,
         "previous_option": previous,
+        "changes": changes,
         "reason": reason,
         "opened_at": now_iso(),
         "accepted_at": None,
         "accepted_option": None,
+        "rejected_at": None,
     }
-    append_log(
-        project,
-        int(state.get("stage") or 0),
-        f"Предложен пересмотр {decision}: выбор {choice} вместо {previous or '—'}",
-        grounds=reason,
-    )
+    if kind == "switch":
+        message = f"Предложен пересмотр {decision}: смена варианта {previous or '—'} → {choice}"
+    else:
+        message = f"Предложен пересмотр {decision}: вариант {choice} сохраняется, меняются условия"
+    append_log(project, int(state.get("stage") or 0), message, grounds=reason)
+    bullets = [
+        f"вид: {REVISION_KIND_LABEL[kind]}",
+        f"было: {previous or '—'}",
+        f"предложено: {choice}",
+        "меняется: " + ("; ".join(changes) if changes else "сам вариант"),
+        f"причина: {reason}",
+        "статус: ожидает человека",
+    ]
+    append_decision_revision(project, f"### Пересмотр {decision}: {REVISION_KIND_LABEL[kind]} (ожидает человека)", bullets)
     save_state(project, state)
-    print(f"Пересмотр ожидает человека: {decision}, предложен {choice}, сейчас в контрольной точке {previous or '—'}.")
-    print("После явного согласия: python scripts/strat.py accept-revision <проект> --choice " + choice)
+    print(revision_summary(state))
+    print("После явной фразы человека: python scripts/strat.py accept-revision <проект>")
+    print("Отказ: python scripts/strat.py reject-revision <проект>")
     return 0
+
+
+def _pending_revision(state: dict) -> dict:
+    revision = state.get("revision") or {}
+    if revision.get("status") != "pending":
+        die("Нет ожидающего пересмотра. Сначала propose-revision.")
+    return revision
 
 
 def cmd_accept_revision(args: argparse.Namespace) -> int:
     project, _tokens = take_project(args.rest, 0, write=True)
     state = load_state(project)
-    revision = state.get("revision") or {}
-    if revision.get("status") != "pending":
-        die("Нет ожидающего пересмотра. Сначала propose-revision.")
-    choice = args.choice or revision.get("proposed_option")
+    revision = _pending_revision(state)
+    kind = normalize_revision_kind(revision)
+    proposed = str(revision.get("proposed_option") or "")
+    choice = args.choice or proposed
     if not re.fullmatch(r"O\d+", choice or ""):
         die("Укажите --choice O3. Это выбор человека, не подстановка агента.")
+    if choice != proposed:
+        die(
+            f"Принятие фиксирует предложенное ({proposed}), а передано {choice}. "
+            "Другой вариант предлагают новым propose-revision. Отказ от этого пересмотра — reject-revision."
+        )
     note = resolve_text(args.note, args.note_file, label="заметка", env_name="STRAT_NOTE")
     checkpoint = state["checkpoints"]["options"]
     history = list(checkpoint.get("history") or [])
@@ -2985,8 +3109,13 @@ def cmd_accept_revision(args: argparse.Namespace) -> int:
     checkpoint["status"] = "confirmed"
     checkpoint["choice"] = choice
     checkpoint["at"] = now_iso()
-    checkpoint["note"] = note or revision.get("reason")
+    changes = [str(item).strip() for item in (revision.get("changes") or []) if str(item).strip()]
+    if kind == "terms":
+        checkpoint["note"] = note or ("Условия пересмотрены: " + "; ".join(changes))
+    else:
+        checkpoint["note"] = note or revision.get("reason")
     revision["status"] = "accepted"
+    revision["kind"] = kind if kind in {"switch", "terms"} else "switch"
     revision["accepted_option"] = choice
     revision["accepted_at"] = now_iso()
     state["revision"] = revision
@@ -2996,8 +3125,59 @@ def cmd_accept_revision(args: argparse.Namespace) -> int:
         f"Принят пересмотр {revision.get('decision')}: выбор {choice}",
         grounds=note or revision.get("reason"),
     )
+    bullets = [
+        f"вид: {REVISION_KIND_LABEL.get(kind, kind)}",
+        f"выбор: {choice}",
+        "меняется: " + ("; ".join(changes) if changes else "сам вариант"),
+        "статус: принят",
+    ]
+    append_decision_revision(
+        project,
+        f"### Пересмотр {revision.get('decision')} принят",
+        bullets,
+    )
     save_state(project, state)
-    print(f"Контрольная точка options обновлена: {choice}. Предыдущий выбор сохранён в history.")
+    print(revision_summary(state))
+    if kind == "terms":
+        print(f"Вариант {choice} сохранён. Условия записаны в decisions.md и в заметку контрольной точки.")
+    else:
+        print(f"Контрольная точка options обновлена: {choice}. Предыдущий выбор сохранён в history.")
+    return 0
+
+
+def cmd_reject_revision(args: argparse.Namespace) -> int:
+    project, _tokens = take_project(args.rest, 0, write=True)
+    state = load_state(project)
+    revision = _pending_revision(state)
+    kind = normalize_revision_kind(revision)
+    note = resolve_text(args.note, args.note_file, label="заметка", env_name="STRAT_NOTE")
+    current = (state.get("checkpoints") or {}).get("options", {}).get("choice")
+    revision["status"] = "rejected"
+    revision["kind"] = kind if kind in {"switch", "terms"} else revision.get("kind")
+    revision["rejected_at"] = now_iso()
+    revision["rejected_note"] = note
+    state["revision"] = revision
+    append_log(
+        project,
+        int(state.get("stage") or 0),
+        f"Отклонён пересмотр {revision.get('decision')}",
+        grounds=note or revision.get("reason"),
+    )
+    bullets = [
+        f"вид: {REVISION_KIND_LABEL.get(kind, kind)}",
+        f"выбор остаётся: {current or '—'}",
+        "статус: отклонён",
+    ]
+    if note:
+        bullets.append(f"заметка: {note}")
+    append_decision_revision(
+        project,
+        f"### Пересмотр {revision.get('decision')} отклонён",
+        bullets,
+    )
+    save_state(project, state)
+    print(revision_summary(state))
+    print("Контрольная точка options не изменена.")
     return 0
 
 
@@ -4466,18 +4646,32 @@ def build_parser() -> argparse.ArgumentParser:
 
     propose = sub.add_parser("propose-revision", help="поставить решение на пересмотр, не меняя выбор")
     propose.add_argument("rest", nargs="*", help="необязательный проект")
-    propose.add_argument("--decision", required=True, help="D2")
-    propose.add_argument("--choice", required=True, help="предложенный вариант, например O3")
+    propose.add_argument("--decision", help="D2; обязательно без --json")
+    propose.add_argument("--choice", help="предложенный вариант, например O3")
     propose.add_argument("--reason")
     propose.add_argument("--reason-file")
+    propose.add_argument(
+        "--changes-file",
+        help="UTF-8, по строке на изменение условий, если вариант остаётся тем же",
+    )
+    propose.add_argument(
+        "--json",
+        help="объект decision, choice, reason, changes; «-» читает stdin",
+    )
     propose.set_defaults(func=cmd_propose_revision)
 
     accept = sub.add_parser("accept-revision", help="принять пересмотр и обновить выбор с историей")
     accept.add_argument("rest", nargs="*", help="необязательный проект")
-    accept.add_argument("--choice", help="если не задан, берётся предложенный вариант")
+    accept.add_argument("--choice", help="должен совпасть с предложенным; если не задан — берётся он")
     accept.add_argument("--note")
     accept.add_argument("--note-file")
     accept.set_defaults(func=cmd_accept_revision)
+
+    reject = sub.add_parser("reject-revision", help="отклонить пересмотр, не меняя выбор")
+    reject.add_argument("rest", nargs="*", help="необязательный проект")
+    reject.add_argument("--note")
+    reject.add_argument("--note-file")
+    reject.set_defaults(func=cmd_reject_revision)
 
     impact = sub.add_parser("impact", help="что зависит от источника или свидетельства")
     impact.add_argument("rest", nargs="+", help="[проект] <S001|E001>")

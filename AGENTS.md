@@ -170,7 +170,7 @@ chcp 65001
 
 Из корня репозитория: `python scripts/strat.py --help`.
 
-`init`, `status`, `resume`, `use`, `active`, `show`, `fetch` (`--force`), `add-source`, `add-evidence`, `supersede`, `add-option`, `supersede-option`, `indicators add`, `indicators table`, `analyze` (`--id`, `--verify`), `inspect`, `kb add`, `kb index`, `kb search`, `interview guide`, `interview accept`, `reply-check`, `check` (`--strict`), `impact`, `retract`, `log` (`--minutes`, `--input-chars`, `--output-chars`, `--tier`), `cost` (`--estimate`), `confirm`, `advance`, `propose-revision`, `accept-revision`, `doctor`, `complete` (`--tier cheap|strong|ide`), `classify` (`--task claim-type|impact|route`).
+`init`, `status`, `resume`, `use`, `active`, `show`, `fetch` (`--force`), `add-source`, `add-evidence`, `supersede`, `add-option`, `supersede-option`, `indicators add`, `indicators table`, `analyze` (`--id`, `--verify`), `inspect`, `kb add`, `kb index`, `kb search`, `interview guide`, `interview accept`, `reply-check`, `check` (`--strict`), `impact`, `retract`, `log` (`--minutes`, `--input-chars`, `--output-chars`, `--tier`), `cost` (`--estimate`), `confirm`, `advance`, `propose-revision`, `accept-revision`, `reject-revision`, `doctor`, `complete` (`--tier cheap|strong|ide`), `classify` (`--task claim-type|impact|route`).
 
 Те же команды, кроме `use`, есть как инструменты MCP `strat_*`, включая `strat_analyze` и `strat_inspect`. Если они есть в сессии, предпочитай их. `confirm` / `advance` / `accept-revision` в MCP требуют `human_confirmed=true`.
 

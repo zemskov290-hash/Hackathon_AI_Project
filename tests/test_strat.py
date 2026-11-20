@@ -783,6 +783,94 @@ class WorkflowTests(unittest.TestCase):
         assert_code(resumed)
         self.assertIn("accepted D2", resumed.stdout)
 
+    def test_revision_kinds_reject_same_option_without_changes(self) -> None:
+        assert_code(self.cli("init", "revk", "--title", "Виды пересмотра"))
+        project = Path(self.tmp.name) / "revk"
+        state = json.loads((project / "state.json").read_text(encoding="utf-8"))
+        state["checkpoints"]["options"]["status"] = "confirmed"
+        state["checkpoints"]["options"]["choice"] = "O2"
+        (project / "state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        same = self.cli(
+            "propose-revision",
+            "revk",
+            "--decision",
+            "D1",
+            "--choice",
+            "O2",
+            "--reason",
+            "ничего не меняется",
+        )
+        assert_code(same, 1)
+        self.assertIn("без изменений", same.stdout)
+        self.assertIn("changes", same.stdout)
+        changes = project / "changes.txt"
+        changes.write_text("порог: новая планка\nrevisit_if: метрика ниже новой планки\n", encoding="utf-8")
+        terms = self.cli(
+            "propose-revision",
+            "revk",
+            "--decision",
+            "D1",
+            "--choice",
+            "O2",
+            "--changes-file",
+            str(changes),
+            "--reason",
+            "условия больше не те",
+        )
+        assert_code(terms)
+        self.assertIn("сохранение варианта", terms.stdout)
+        self.assertIn("порог: новая планка", terms.stdout)
+        status = self.cli("status", "revk")
+        assert_code(status)
+        self.assertIn("вид: сохранение варианта, меняются условия", status.stdout)
+        self.assertIn("revisit_if: метрика ниже новой планки", status.stdout)
+        decisions = (project / "decisions.md").read_text(encoding="utf-8")
+        self.assertIn("вид: сохранение варианта, меняются условия", decisions)
+        self.assertIn("порог: новая планка", decisions)
+        accepted = self.cli("accept-revision", "revk")
+        assert_code(accepted)
+        state = json.loads((project / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(state["checkpoints"]["options"]["choice"], "O2")
+        self.assertEqual(state["revision"]["kind"], "terms")
+        self.assertEqual(state["revision"]["status"], "accepted")
+        switched = self.cli(
+            "propose-revision",
+            "revk",
+            "--decision",
+            "D2",
+            "--choice",
+            "O3",
+            "--reason",
+            "нужен другой вариант",
+        )
+        assert_code(switched)
+        self.assertIn("смена варианта", switched.stdout)
+        self.assertIn("O2 → O3", switched.stdout)
+        refused = self.cli("reject-revision", "revk", "--note", "оставляем прежний")
+        assert_code(refused)
+        self.assertIn("отклонён", refused.stdout)
+        state = json.loads((project / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(state["checkpoints"]["options"]["choice"], "O2")
+        self.assertEqual(state["revision"]["status"], "rejected")
+        self.assertEqual(state["revision"]["kind"], "switch")
+        decisions = (project / "decisions.md").read_text(encoding="utf-8")
+        self.assertIn("Пересмотр D2 отклонён", decisions)
+        state["revision"] = {
+            "status": "pending",
+            "decision": "D9",
+            "proposed_option": "O4",
+            "previous_option": "O2",
+            "reason": "старая запись без kind, варианты разные",
+            "opened_at": "2026-01-01T00:00:00Z",
+            "accepted_at": None,
+            "accepted_option": None,
+        }
+        (project / "state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        legacy = self.cli("status", "revk")
+        assert_code(legacy)
+        self.assertIn("смена варианта", legacy.stdout)
+        self.assertIn("O2 → O4", legacy.stdout)
+
     def test_quote_must_be_continuous_and_env_is_checked(self) -> None:
         refused = self.cli("init", "envbad", env={"STRAT_TITLE": "???? ??????"})
         assert_code(refused, 1)

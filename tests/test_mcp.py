@@ -51,6 +51,7 @@ REQUIRED_TOOLS = {
     "strat_supersede",
     "strat_propose_revision",
     "strat_accept_revision",
+    "strat_reject_revision",
     "strat_log",
     "strat_cost",
     "strat_confirm",
@@ -61,7 +62,7 @@ REQUIRED_TOOLS = {
     "strat_analyze",
     "strat_inspect",
 }
-HUMAN_TOOLS = {"strat_confirm", "strat_advance", "strat_accept_revision"}
+HUMAN_TOOLS = {"strat_confirm", "strat_advance", "strat_accept_revision", "strat_reject_revision"}
 
 
 def clean_env(projects: Path | None = None) -> dict[str, str]:
