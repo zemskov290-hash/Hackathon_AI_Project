@@ -67,6 +67,27 @@ class QuantityNormalizationTests(unittest.TestCase):
         self.assertEqual(source_check.quantities("сто тысяч"), source_check.quantities("100000"))
         self.assertEqual(source_check.quantities("пять"), set())
         self.assertIn("60", source_check.expand_number_words("не ниже шестидесяти"))
+        compounds = {
+            "двухсот восьмидесяти пяти": "285",
+            "двухсот восьмидесяти пяти млн": "285000000",
+            "сорока двух": "42",
+            "шестистах": "600",
+            "пятистах": "500",
+            "двумстам": "200",
+            "пятьюстами": "500",
+            "тремястами": "300",
+            "восьмистах": "800",
+            "девятистах": "900",
+            "четырёхстах": "400",
+            "семистах": "700",
+            "двухстах": "200",
+            "ста пятнадцати": "115",
+            "сорока пяти": "45",
+        }
+        for phrase, digits in compounds.items():
+            rendered = source_check.expand_number_words(f"цель не ниже {phrase} руб.")
+            self.assertIn(digits, rendered, phrase)
+            self.assertNotIn("280", rendered, phrase)
 
 
 BRIEF_TABLE = (
@@ -113,6 +134,20 @@ class BriefTableTokenTests(unittest.TestCase):
         self.assertNotIn(9000, values)
         self.assertNotIn(6200, values)
         self.assertFalse(any(item.value == 69 for item in present))
+
+    def test_signed_thousand_is_one_number(self) -> None:
+        row = (
+            "| Подключённые группы, конец года | 8 000 [S001] | 9 000 [S001] "
+            "| +1 000 за счёт пост-приглашения |"
+        )
+        found = source_check.iter_quantities(row)
+        values = [item.value for item, _token in found]
+        tokens = [token for _item, token in found]
+        self.assertEqual(values, [8000, 9000, 1000])
+        self.assertNotIn("000", tokens)
+        self.assertEqual(source_check.quantities("+1 000"), source_check.quantities("1000"))
+        self.assertEqual(source_check.quantities("−1 000"), source_check.quantities("-1000"))
+        self.assertEqual(source_check.quantities("+1 000 000"), {source_check.Quantity(1000000)})
 
 
 class SourceNumberCheckTests(unittest.TestCase):

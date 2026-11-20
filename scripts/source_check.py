@@ -46,7 +46,7 @@ PERCENT_WORD = r"процентами|процентам|процентов|пр
 # One numeric atom. Thousand groups are NOT swallowed here: «1 000 800» is three
 # atoms, and a later pass joins only an unambiguous thousand («5 000», «12 000»).
 ATOM_RE = re.compile(
-    rf"(?<![\w.])(?P<sign>[+-](?=\d))?"
+    rf"(?<![\w.])(?P<sign>[+\-−](?=\d))?"
     rf"(?P<whole>\d+)"
     rf"(?P<frac>[.,]\d+)?"
     rf"(?:\s*(?P<mag>{MAGNITUDE}))?"
@@ -144,6 +144,80 @@ CARDINAL = {
     "семисот": 700,
     "восьмисот": 800,
     "девятисот": 900,
+    "одного": 1,
+    "одной": 1,
+    "одному": 1,
+    "одним": 1,
+    "одною": 1,
+    "одном": 1,
+    "трёх": 3,
+    "трех": 3,
+    "трём": 3,
+    "трем": 3,
+    "тремя": 3,
+    "четырёх": 4,
+    "четырех": 4,
+    "четырём": 4,
+    "четырем": 4,
+    "четырьмя": 4,
+    "пяти": 5,
+    "пятью": 5,
+    "шести": 6,
+    "шестью": 6,
+    "семи": 7,
+    "семью": 7,
+    "восьми": 8,
+    "восемью": 8,
+    "восьмью": 8,
+    "девяти": 9,
+    "девятью": 9,
+    "одиннадцати": 11,
+    "одиннадцатью": 11,
+    "двенадцати": 12,
+    "двенадцатью": 12,
+    "тринадцати": 13,
+    "тринадцатью": 13,
+    "четырнадцати": 14,
+    "четырнадцатью": 14,
+    "пятнадцати": 15,
+    "пятнадцатью": 15,
+    "шестнадцати": 16,
+    "шестнадцатью": 16,
+    "семнадцати": 17,
+    "семнадцатью": 17,
+    "восемнадцати": 18,
+    "восемнадцатью": 18,
+    "девятнадцати": 19,
+    "девятнадцатью": 19,
+    "двумстам": 200,
+    "двумястами": 200,
+    "двухстах": 200,
+    "трёмстам": 300,
+    "тремстам": 300,
+    "тремястами": 300,
+    "трёхстах": 300,
+    "трехстах": 300,
+    "четырёмстам": 400,
+    "четыремстам": 400,
+    "четырьмястами": 400,
+    "четырёхстах": 400,
+    "четырехстах": 400,
+    "пятистам": 500,
+    "пятьюстами": 500,
+    "пятистах": 500,
+    "шестистам": 600,
+    "шестьюстами": 600,
+    "шестистах": 600,
+    "семистам": 700,
+    "семьюстами": 700,
+    "семистах": 700,
+    "восьмистам": 800,
+    "восемьюстами": 800,
+    "восьмьюстами": 800,
+    "восьмистах": 800,
+    "девятистам": 900,
+    "девятьюстами": 900,
+    "девятистах": 900,
 }
 PERCENT_WORDS = {"процент", "процента", "процентов", "процентам", "процентами", "проценте"}
 WORD_LIST = sorted(
@@ -271,13 +345,26 @@ def _year_token(whole: str, frac: str | None, mag: str | None, pct: str | None) 
 
 
 def _plain_group(match: re.Match[str]) -> str | None:
-    """A bare integer that can sit in a row of table numbers. A year is not one."""
+    """A bare integer that can continue a row of table numbers. A sign starts a new number."""
     if match.group("frac") or match.group("mag") or match.group("pct") or match.group("sign"):
         return None
     whole = match.group("whole")
     if _year_token(whole, None, None, None):
         return None
     return whole
+
+
+def _cluster_head(match: re.Match[str]) -> tuple[str, str] | None:
+    """(sign, digits) for an integer that may begin «+1 000». A year does not."""
+    if match.group("frac") or match.group("mag") or match.group("pct"):
+        return None
+    whole = match.group("whole")
+    if _year_token(whole, None, None, None):
+        return None
+    sign = (match.group("sign") or "").replace("−", "-")
+    if sign not in {"", "+", "-"}:
+        return None
+    return sign, whole
 
 
 def _atom_span(match: re.Match[str], *, keep_small: bool) -> tuple[Quantity, str, int, int] | None:
@@ -297,7 +384,7 @@ def _atom_span(match: re.Match[str], *, keep_small: bool) -> tuple[Quantity, str
         value = Decimal(number) * _magnitude(mag or "")
     except InvalidOperation:
         return None
-    if match.group("sign") == "-":
+    if (match.group("sign") or "").replace("−", "-") == "-":
         value = -value
     return (Quantity(value, bool(pct)), match.group(0).strip(), match.start(), match.end())
 
@@ -365,13 +452,15 @@ def iter_quantity_spans(text: str, *, keep_small: bool = False) -> list[tuple[Qu
     found: list[tuple[Quantity, str, int, int]] = []
     index = 0
     while index < len(atoms):
-        if _plain_group(atoms[index]) is None:
+        head = _cluster_head(atoms[index])
+        if head is None:
             item = _atom_span(atoms[index], keep_small=keep_small)
             if item is not None:
                 found.append(_promote_percent_range(text, atoms, index, item))
             index += 1
             continue
-        cluster = [(_plain_group(atoms[index]) or "", atoms[index].start(), atoms[index].end())]
+        sign, digits = head
+        cluster = [(digits, atoms[index].start(), atoms[index].end())]
         cursor = index + 1
         while cursor < len(atoms) and _plain_group(atoms[cursor]) is not None:
             gap = text[atoms[cursor - 1].end() : atoms[cursor].start()]
@@ -380,11 +469,27 @@ def iter_quantity_spans(text: str, *, keep_small: bool = False) -> list[tuple[Qu
             cluster.append((_plain_group(atoms[cursor]) or "", atoms[cursor].start(), atoms[cursor].end()))
             cursor += 1
         pieces = _segment_cluster(cluster, text, keep_small=keep_small)
+        if sign == "-":
+            pieces = _negate_first(pieces, cluster[0][1])
         if len(pieces) == 1 and cursor < len(atoms):
             pieces = [_promote_percent_range(text, atoms, cursor - 1, pieces[0])]
         found.extend(pieces)
         index = cursor
     return found
+
+
+def _negate_first(
+    pieces: list[tuple[Quantity, str, int, int]],
+    origin: int,
+) -> list[tuple[Quantity, str, int, int]]:
+    """The minus belongs to the thousand number it opens, not to the next cell."""
+    if not pieces:
+        return pieces
+    quantity, token, start, end = pieces[0]
+    if start != origin:
+        return pieces
+    pieces[0] = (Quantity(-quantity.value, quantity.percent), token, start, end)
+    return pieces
 
 
 def iter_quantities(text: str, *, keep_small: bool = False) -> list[tuple[Quantity, str]]:
