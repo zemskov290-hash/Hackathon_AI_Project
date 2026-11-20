@@ -678,6 +678,28 @@ def load_assumptions(project: Path) -> tuple[dict[str, dict], str | None]:
     return by_id, None
 
 
+def assumption_quantity(row: dict) -> Quantity | None:
+    """Number from value plus unit. «4» and «млн» is 4 million, not 4."""
+    value = str(row.get("value") or "").strip()
+    unit = str(row.get("unit") or "").strip()
+    direct = parse_quantity(value)
+    if direct is not None and re.search(r"тыс|млн|млрд|%|процент", value, re.I):
+        return direct
+    combined = parse_quantity(f"{value} {unit}".strip()) if unit else None
+    return combined or direct
+
+
+def _close_enough(got: Decimal, expected: Decimal) -> bool:
+    """Exact match, or half a percent — rounding, not a different total."""
+    diff = abs(got - expected)
+    if diff <= Decimal("0.000001"):
+        return True
+    scale = max(abs(got), abs(expected))
+    if scale == 0:
+        return True
+    return diff / scale <= Decimal("0.005")
+
+
 def assumption_status(project: Path, assumption_id: str) -> tuple[bool, str]:
     rows, error = load_assumptions(project)
     if error:
@@ -780,9 +802,37 @@ def _eval_decimal(expr: str) -> Decimal:
     return value
 
 
-def _prepare_formula(body: str) -> tuple[str, list[tuple[Quantity, str]]]:
+def _substitute_assumptions(body: str, assumptions: dict[str, dict]) -> str:
+    """Replace [U001] with the registry magnitude, including млн, тыс. and %."""
+    missing: list[str] = []
+
+    def repl(match: re.Match[str]) -> str:
+        assumption_id = match.group(1)
+        row = assumptions.get(assumption_id)
+        if row is None:
+            missing.append(assumption_id)
+            return match.group(0)
+        quantity = assumption_quantity(row)
+        if quantity is None:
+            missing.append(assumption_id)
+            return match.group(0)
+        literal = format(quantity.value, "f")
+        if quantity.percent:
+            literal += "%"
+        return literal
+
+    replaced = re.sub(r"\[(U\d+)\]", repl, body)
+    if missing:
+        raise ValueError("нет допущения " + ", ".join(missing))
+    return replaced
+
+
+def _prepare_formula(body: str, assumptions: dict[str, dict] | None = None) -> tuple[str, list[tuple[Quantity, str]]]:
     """Replace number tokens with Decimal literals. Keep their quantities."""
-    expanded = expand_number_words(body.replace("×", "*").replace("÷", "/").replace("−", "-"))
+    raw = body.replace("×", "*").replace("÷", "/").replace("−", "-")
+    if assumptions is not None and re.search(r"\[U\d+\]", raw):
+        raw = _substitute_assumptions(raw, assumptions)
+    expanded = expand_number_words(raw)
     pieces: list[str] = []
     quantities_found: list[tuple[Quantity, str]] = []
     cursor = 0
@@ -798,13 +848,18 @@ def _prepare_formula(body: str) -> tuple[str, list[tuple[Quantity, str]]]:
     return expression, quantities_found
 
 
-def _split_formula(body: str) -> tuple[list[tuple[Quantity, str]], Quantity]:
-    expression, _numbers = _prepare_formula(body)
+def _split_formula(
+    body: str,
+    assumptions: dict[str, dict] | None = None,
+) -> tuple[list[tuple[Quantity, str]], Quantity]:
+    uses_assumption = assumptions is not None and re.search(r"\[U\d+\]", body) is not None
+    expression, _numbers = _prepare_formula(body, assumptions if uses_assumption else None)
     if expression.count("=") != 1:
         raise ValueError("в формуле нужен один знак «=»")
     left_body, right_body = body.split("=", 1)
-    left_expr, left_numbers = _prepare_formula(left_body)
-    right_expr, right_numbers = _prepare_formula(right_body)
+    prepared = assumptions if uses_assumption else None
+    left_expr, left_numbers = _prepare_formula(left_body, prepared)
+    right_expr, right_numbers = _prepare_formula(right_body, prepared)
     if not left_numbers:
         raise ValueError("слева от «=» нет чисел")
     if not right_numbers:
@@ -813,10 +868,13 @@ def _split_formula(body: str) -> tuple[list[tuple[Quantity, str]], Quantity]:
     expected = _eval_decimal(right_expr)
     percent_result = any(quantity.percent for quantity, _token in right_numbers)
     # «5000 / 8000 = 62,5 %» is 0.625 × 100, not 0.625 itself.
-    tolerance = Decimal("0.000001")
-    matches = abs(got - expected) <= tolerance
+    matches = abs(got - expected) <= Decimal("0.000001")
     if percent_result:
-        matches = matches or abs(got * 100 - expected) <= tolerance
+        matches = matches or abs(got * 100 - expected) <= Decimal("0.000001")
+    if uses_assumption:
+        matches = _close_enough(got, expected)
+        if percent_result:
+            matches = matches or _close_enough(got * 100, expected)
     if not matches:
         scale = " × 100" if percent_result else ""
         raise ValueError(f"результат {expected} не равен вычислению {got}{scale}")
@@ -888,6 +946,7 @@ def review(project: Path, texts: dict, sources: list[dict], evidence: list[dict]
             source_quantities,
             add,
         )
+        _review_assumption_visibility(name, text, assumptions, add)
     review_inconsistent(documents, add)
 
 
@@ -970,6 +1029,48 @@ def _review_qty_syntax(name: str, text: str, add) -> None:
                 )
 
 
+def _phrase_scopes(sentence: str) -> list[str]:
+    """A table row is checked cell by cell. Prose is one phrase."""
+    stripped = sentence.strip()
+    if not stripped.startswith("|"):
+        return [sentence]
+    cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+    return [cell for cell in cells if cell and not re.fullmatch(r":?-{3,}:?", cell)]
+
+
+def _review_assumption_visibility(name: str, text: str, assumptions: dict[str, dict], add) -> None:
+    """[U010] without «4 млн» hides the number. A different number is a stale registry."""
+    for lineno, sentence in iter_units(text):
+        for scope in _phrase_scopes(sentence):
+            ids = []
+            for match in re.finditer(r"\[(U\d+)\]", scope):
+                if match.group(1) not in ids:
+                    ids.append(match.group(1))
+            if not ids:
+                continue
+            present = quantities(expand_number_words(scope))
+            for assumption_id in ids:
+                row = assumptions.get(assumption_id)
+                if row is None:
+                    add(
+                        "assumption-value",
+                        f"{name}:{lineno}: ссылка [{assumption_id}] не найдена в assumptions.jsonl.",
+                    )
+                    continue
+                expected = assumption_quantity(row)
+                if expected is None:
+                    continue
+                if _value_in(expected, present):
+                    continue
+                shown = f"{row.get('value')} {row.get('unit') or ''}".strip()
+                add(
+                    "assumption-value",
+                    f"{name}:{lineno}: [{assumption_id}] без своего значения в этой фразе или ячейке. "
+                    f"В реестре {shown}. Напишите число рядом со ссылкой, например «{shown} [{assumption_id}]». "
+                    "Другое число в той же фразе реестр не подтверждает.",
+                )
+
+
 def _review_numbers(
     project: Path,
     name: str,
@@ -1009,11 +1110,12 @@ def _review_numbers(
         formula_results: set[Quantity] = set()
         formula_operands: set[Quantity] = set()
         for body in formulas:
+            uses_assumption = re.search(r"\[U\d+\]", body) is not None
             try:
-                operands, result = _split_formula(body)
+                operands, result = _split_formula(body, assumptions if uses_assumption else None)
             except (ValueError, SyntaxError, InvalidOperation) as exc:
                 add(
-                    "number-not-in-source",
+                    "assumption-arithmetic" if uses_assumption else "number-not-in-source",
                     f"{name}:{lineno}: формула `{body.strip()}` не сходится ({exc}). "
                     f"({_snippet(sentence)})",
                 )
@@ -1120,8 +1222,8 @@ def _explained(
         row = assumptions.get(assumption_id)
         if row is None:
             continue
-        parsed = parse_quantity(str(row.get("value") or ""))
-        if parsed == quantity and _marker_present(sentence, str(row.get("kind"))):
+        parsed = assumption_quantity(row)
+        if parsed is not None and _value_in(quantity, {parsed}) and _marker_present(sentence, str(row.get("kind"))):
             return True
     for analysis_id, metric in analysis:
         if quantity in _analysis_values(project, analysis_id, metric):
@@ -1171,8 +1273,8 @@ def _report_missing(
                     f"{name}:{lineno}: ссылка [{assumption_id}] не найдена в assumptions.jsonl.",
                 )
                 continue
-            parsed = parse_quantity(str(row.get("value") or ""))
-            if parsed == quantity:
+            parsed = assumption_quantity(row)
+            if parsed is not None and _value_in(quantity, {parsed}):
                 matched_value = True
             if not _marker_present(sentence, str(row.get("kind"))):
                 add(

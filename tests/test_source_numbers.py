@@ -64,6 +64,19 @@ class QuantityNormalizationTests(unittest.TestCase):
         self.assertIn("10", source_check.expand_number_words("не меньше десять"))
         untouched = "пять процентных пунктов и просто источник"
         self.assertEqual(source_check.expand_number_words(untouched), untouched)
+        self.assertEqual(
+            source_check.assumption_quantity({"value": "4", "unit": "млн"}).value,
+            4000000,
+        )
+        self.assertEqual(
+            source_check.assumption_quantity({"value": "400", "unit": "тыс."}).value,
+            400000,
+        )
+        percent = source_check.assumption_quantity({"value": "50", "unit": "%"})
+        self.assertTrue(percent.percent)
+        points = source_check.assumption_quantity({"value": "2", "unit": "п.п."})
+        self.assertEqual(points.value, 2)
+        self.assertFalse(points.percent)
         self.assertEqual(source_check.quantities("сто тысяч"), source_check.quantities("100000"))
         self.assertEqual(source_check.quantities("пять"), set())
         self.assertIn("60", source_check.expand_number_words("не ниже шестидесяти"))
@@ -466,6 +479,61 @@ class SourceNumberCheckTests(unittest.TestCase):
         self.assertIn("4млн", flat)
         self.assertIn("операнд", blob)
         self.assertIn("2026", messages(self.project, "year-not-in-source"))
+
+    def _write_assumptions(self, rows: list[dict]) -> None:
+        payload = "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n"
+        (self.project / "assumptions.jsonl").write_text(payload, encoding="utf-8")
+
+    def test_assumption_arithmetic_rejects_two_plus_two_minus_one_as_four(self) -> None:
+        rows = [
+            {"id": "U001", "kind": "прогноз", "name": "удержание", "value": "4000", "unit": "", "note": "", "status": "active"},
+            {"id": "U002", "kind": "прогноз", "name": "обращения", "value": "10000", "unit": "", "note": "", "status": "active"},
+            {"id": "U003", "kind": "прогноз", "name": "ставка", "value": "200", "unit": "", "note": "", "status": "active"},
+            {"id": "U004", "kind": "прогноз", "name": "расходы", "value": "1", "unit": "млн", "note": "", "status": "active"},
+            {"id": "U005", "kind": "прогноз", "name": "итог", "value": "4", "unit": "млн", "note": "", "status": "active"},
+        ]
+        self._write_assumptions(rows)
+        formula = "`[U001]*500 + [U002]*[U003] - [U004] = [U005]`"
+        wrong = (
+            "Прогноз: удержание 4000 [U001], обращения 10000 [U002], ставка 200 [U003], "
+            "расходы 1 млн [U004], итог 4 млн [U005], расчёт "
+            + formula
+            + " [S001].\n"
+        )
+        self.write_deliverable(wrong)
+        self.assertIn("assumption-arithmetic", codes(self.project))
+        self.assertIn("3000000", messages(self.project, "assumption-arithmetic").replace(" ", ""))
+        rows[-1]["value"] = "3"
+        self._write_assumptions(rows)
+        self.write_deliverable(wrong.replace("итог 4 млн", "итог 3 млн"))
+        found = codes(self.project)
+        self.assertNotIn("assumption-arithmetic", found)
+        self.assertNotIn("assumption-value", found)
+
+    def test_assumption_citation_must_show_its_registry_value(self) -> None:
+        self._write_assumptions(
+            [
+                {
+                    "id": "U001",
+                    "kind": "прогноз",
+                    "name": "итог",
+                    "value": "4",
+                    "unit": "млн",
+                    "note": "",
+                    "status": "active",
+                }
+            ]
+        )
+        self.write_deliverable("Прогноз [U001].\n")
+        hidden = messages(self.project, "assumption-value")
+        self.assertIn("U001", hidden)
+        self.write_deliverable("Прогноз 9 млн [U001].\n")
+        mismatch = messages(self.project, "assumption-value")
+        self.assertIn("U001", mismatch)
+        self.write_deliverable("Прогноз 4 млн руб. [U001].\n")
+        self.assertNotIn("assumption-value", codes(self.project))
+        self.write_deliverable("Прогноз 9 000 [S001].\n")
+        self.assertIn("number-not-in-source", codes(self.project))
 
     def test_pdf_extract_sidecar_fills_numbers_the_pdf_layer_missed(self) -> None:
         pdf = self.project / "sources" / "brief-family-devices.pdf"
