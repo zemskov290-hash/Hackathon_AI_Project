@@ -37,7 +37,7 @@ SUBSTANTIVE = {
     PRODUCT_HEADING: PRODUCT_SUBSECTIONS,
     COMM_HEADING: COMM_SUBSECTIONS,
 }
-CITE_RE = re.compile(r"\[(E\d+|S\d+|K\d+|I\d+)\]|\[(A\d+)\.([A-Za-z0-9_]+)\]")
+CITE_RE = re.compile(r"\[(E\d+|S\d+|K\d+|I\d+|U\d+)\]|\[(A\d+)\.([A-Za-z0-9_]+)\]")
 NUM_RE = re.compile(r"(?<![\w.])(\d+(?:[.,]\d+)?%?)(?![\w])")
 # Same number tokens as scripts/bench.py. The scorer is not imported: bench imports strat.
 SCORER_YEAR_RE = re.compile(r"^(19[9]\d|20[0-2]\d|203[0-5])$")
@@ -273,6 +273,10 @@ def _citation_status(
         if not result.is_file():
             return False, "нет расчёта"
         return True, ""
+    if token.startswith("U"):
+        import source_check
+
+        return source_check.assumption_status(project, token)
     return False, "неизвестная ссылка"
 
 
@@ -380,7 +384,9 @@ def review_strategy(
             continue
         claims = _claims(body)
         for claim in claims:
-            numbers = _numbers(claim)
+            import source_check
+
+            numbers = _numbers(source_check.expand_number_words(claim))
             if not numbers:
                 continue
             if _cited(claim) or _calc_grounded(claim, claims):
@@ -499,8 +505,10 @@ def review_substantive_numbers(
         text = texts.get(name)
         if not text or "<!-- template: empty -->" in text:
             continue
+        import source_check
+
         for line, sentence in reply_check._sentences(text):
-            numbers = scorer_numbers(sentence)
+            numbers = scorer_numbers(source_check.expand_number_words(sentence))
             citations = reply_check._citations(sentence)
             valid = False
             for label, analysis_id, metric in citations:

@@ -30,6 +30,7 @@ import inspect_media
 import reply_check
 import interview
 import kb
+import source_check
 
 configure_stdio()
 
@@ -1212,6 +1213,93 @@ def cmd_add_evidence(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_add_assumption(args: argparse.Namespace) -> int:
+    """Record a number that is not in a source. Citation form is [U001], not [A001.metric]."""
+    project = resolve_project(args.project)
+    kind = str(args.kind or "").strip()
+    if kind not in source_check.ASSUMPTION_KINDS:
+        die(
+            "kind: допущение, прогноз или оценка. "
+            "Это не якорь анализа: анализ остаётся [A001.метрика], допущение — [U001]."
+        )
+    value = resolve_text(
+        args.value,
+        args.value_file,
+        label="значение допущения",
+        env_name="STRAT_ASSUMPTION_VALUE",
+        required=True,
+    )
+    name = resolve_text(
+        args.name,
+        args.name_file,
+        label="название допущения",
+        env_name="STRAT_ASSUMPTION_NAME",
+        required=True,
+    )
+    unit = resolve_text(
+        args.unit,
+        args.unit_file,
+        label="единица",
+        env_name="STRAT_ASSUMPTION_UNIT",
+    ) or ""
+    note = resolve_text(
+        args.note,
+        args.note_file,
+        label="заметка допущения",
+        env_name="STRAT_ASSUMPTION_NOTE",
+    ) or ""
+    if source_check.parse_quantity(value or "") is None:
+        die("В значении нет числа. Пример: 200, 400 тыс., 1,2 млн, 60%.")
+    assumptions, error = source_check.load_assumptions(project)
+    if error:
+        die(error)
+    assumption_id = next_serial(list(assumptions.values()), "U")
+    record = {
+        "id": assumption_id,
+        "kind": kind,
+        "name": (name or "").strip(),
+        "value": (value or "").strip(),
+        "unit": unit.strip(),
+        "note": note.strip(),
+        "status": "active",
+    }
+    rows = list(assumptions.values())
+    rows.append(record)
+    save_jsonl(project / "assumptions.jsonl", rows)
+    print(f"id: {assumption_id}")
+    print(
+        f"Допущение записано: {assumption_id} ({kind}, {record['value']}). "
+        f"В тексте ссылка [{assumption_id}], в том же предложении — слово «{kind}». "
+        "Якорь анализа [A001.метрика] этой командой не создаётся."
+    )
+    return 0
+
+
+def cmd_confirm_date(args: argparse.Namespace) -> int:
+    """Remember a year the person confirmed. Tool timestamps do not count."""
+    project, tokens = take_project(args.rest, 1)
+    raw = tokens[0].strip()
+    if not re.fullmatch(r"\d{4}(?:-\d{2}-\d{2})?", raw):
+        die("Дата: год YYYY или день YYYY-MM-DD. Пример: confirm-date <проект> 2026-12-16")
+    year = int(raw[:4])
+    if year < 1900 or year > 2099:
+        die("Год подтверждённой даты должен быть от 1900 до 2099.")
+    state = load_state(project)
+    dates = state.get("confirmed_dates")
+    if not isinstance(dates, list):
+        dates = []
+    if raw not in [str(item) for item in dates]:
+        dates.append(raw)
+    state["confirmed_dates"] = dates
+    save_state(project, state)
+    print(f"Подтверждённая дата: {raw}")
+    print(
+        "Этот год можно ставить в документы проекта. "
+        "created_at, updated_at и checkpoints.at год не подтверждают: это отметки инструмента."
+    )
+    return 0
+
+
 def cmd_retract(args: argparse.Namespace) -> int:
     project, tokens = take_project(args.rest, 1)
     evidence_id = tokens[0]
@@ -1906,6 +1994,7 @@ def check_project(project: Path, state: dict | None = None, *, strict: bool = Fa
         add(str(item["code"]), str(item["message"]), warning=bool(item.get("warning")))
     grounding.review_strategy(project, texts.get("strategy.md"), sources, evidence, add)
     grounding.review_substantive_numbers(project, texts, sources, evidence, add)
+    source_check.review(project, texts, sources, evidence, add)
     grounding.review_project_layout(project, add)
     grounding.review_privacy(project, add)
     dirty = uncommitted_tool_files()
@@ -3805,6 +3894,34 @@ def build_parser() -> argparse.ArgumentParser:
     add_evidence.add_argument("--metric", default=None, help="имя метрики из result JSON")
     add_evidence.add_argument("--inspect", default=None, help="M001, если тезис из разбора")
     add_evidence.set_defaults(func=cmd_add_evidence)
+
+    add_assumption = sub.add_parser(
+        "add-assumption",
+        help="записать допущение, прогноз или оценку, которых нет в источнике",
+    )
+    add_assumption.add_argument("project", nargs="?")
+    add_assumption.add_argument(
+        "--kind",
+        required=True,
+        choices=source_check.ASSUMPTION_KINDS,
+        help="допущение, прогноз или оценка",
+    )
+    add_assumption.add_argument("--value", help="число: 200, 400 тыс., 1,2 млн, 60%")
+    add_assumption.add_argument("--value-file", help="значение из файла UTF-8")
+    add_assumption.add_argument("--name", help="короткое название")
+    add_assumption.add_argument("--name-file", help="название из файла UTF-8")
+    add_assumption.add_argument("--unit", help="единица, например руб.")
+    add_assumption.add_argument("--unit-file", help="единица из файла UTF-8")
+    add_assumption.add_argument("--note", help="зачем это допущение")
+    add_assumption.add_argument("--note-file", help="заметка из файла UTF-8")
+    add_assumption.set_defaults(func=cmd_add_assumption)
+
+    confirm_date = sub.add_parser(
+        "confirm-date",
+        help="записать год, который человек подтвердил (не отметку created_at)",
+    )
+    confirm_date.add_argument("rest", nargs="+", help="[проект] <YYYY или YYYY-MM-DD>")
+    confirm_date.set_defaults(func=cmd_confirm_date)
 
     add_option = sub.add_parser("add-option", help="выдать варианту стабильный ID один раз")
     add_option.add_argument("rest", nargs="*", help="необязательный проект")

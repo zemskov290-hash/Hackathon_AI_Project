@@ -1,0 +1,976 @@
+#!/usr/bin/env python3
+"""Numbers must come from the cited source, an assumption, or a checked formula.
+
+Analysis anchors stay [A001.metric]. Assumptions are [U001] in assumptions.jsonl:
+the A-prefix is already the analysis id. Years in created_at do not license a year
+in a claim. Word numerals from ten upward are expanded before the check.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+
+ASSUMPTION_KINDS = ("допущение", "прогноз", "оценка")
+ASSUMPTION_ID_RE = re.compile(r"^U\d{3,}$")
+KIND_STEM = {
+    "допущение": "допущен",
+    "прогноз": "прогноз",
+    "оценка": "оценк",
+}
+CLAIM_FILES = (
+    "questions.md",
+    "situation.md",
+    "options.md",
+    "strategy.md",
+    "validation.md",
+    "decisions.md",
+    "deliverable.md",
+)
+QTY_FILES = ("strategy.md", "deliverable.md")
+TEMPLATE_MARK = "<!-- template: empty -->"
+YEAR_RE = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)")
+CITE_RE = re.compile(r"\[(S\d+|E\d+|U\d+|K\d+|I\d+)\]|\[(A\d+)\.([A-Za-z0-9_]+)\]")
+QTY_MARK_RE = re.compile(r"\[qty:([^\s=\]]+)=([^\]]+)\]")
+ISO_DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+FENCE_RE = re.compile(r"```.*?```", re.S)
+COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
+MAGNITUDE = (
+    r"тыс\.?|тысячи|тысяча|тысяч|"
+    r"млн\.?|миллионов|миллиона|миллион|"
+    r"млрд\.?|миллиардов|миллиарда|миллиард"
+)
+PERCENT_WORD = r"процентов|процента|процент"
+NUMBER_RE = re.compile(
+    rf"(?<![\w.])(?P<sign>[+-](?=\d))?"
+    rf"(?P<whole>\d{{1,3}}(?:[ \u00a0\u202f]\d{{3}})+|\d+)"
+    rf"(?P<frac>[.,]\d+)?"
+    rf"(?:\s*(?P<mag>{MAGNITUDE}))?"
+    rf"(?P<pct>\s*%|\s+(?:{PERCENT_WORD})(?!\w))?",
+    re.IGNORECASE,
+)
+ABBREV_RE = re.compile(
+    r"\b(руб|тыс|млн|млрд|шт|коп|др|пр|см|стр)\.",
+    re.IGNORECASE,
+)
+SCALE = {
+    "тысяча": 1000,
+    "тысячи": 1000,
+    "тысяч": 1000,
+    "тыс": 1000,
+    "миллион": 1_000_000,
+    "миллиона": 1_000_000,
+    "миллионов": 1_000_000,
+    "млн": 1_000_000,
+    "миллиард": 1_000_000_000,
+    "миллиарда": 1_000_000_000,
+    "миллиардов": 1_000_000_000,
+    "млрд": 1_000_000_000,
+}
+CARDINAL = {
+    "ноль": 0,
+    "один": 1,
+    "одна": 1,
+    "одно": 1,
+    "два": 2,
+    "две": 2,
+    "три": 3,
+    "четыре": 4,
+    "пять": 5,
+    "шесть": 6,
+    "семь": 7,
+    "восемь": 8,
+    "девять": 9,
+    "десять": 10,
+    "одиннадцать": 11,
+    "двенадцать": 12,
+    "тринадцать": 13,
+    "четырнадцать": 14,
+    "пятнадцать": 15,
+    "шестнадцать": 16,
+    "семнадцать": 17,
+    "восемнадцать": 18,
+    "девятнадцать": 19,
+    "двадцать": 20,
+    "тридцать": 30,
+    "сорок": 40,
+    "пятьдесят": 50,
+    "шестьдесят": 60,
+    "семьдесят": 70,
+    "восемьдесят": 80,
+    "девяносто": 90,
+    "сто": 100,
+    "двести": 200,
+    "триста": 300,
+    "четыреста": 400,
+    "пятьсот": 500,
+    "шестьсот": 600,
+    "семьсот": 700,
+    "восемьсот": 800,
+    "девятьсот": 900,
+}
+PERCENT_WORDS = {"процент", "процента", "процентов"}
+WORD_LIST = sorted(
+    list(CARDINAL) + list(SCALE) + list(PERCENT_WORDS),
+    key=len,
+    reverse=True,
+)
+WORD_RE = re.compile(r"(?i)\b(?:" + "|".join(re.escape(word) for word in WORD_LIST) + r")\b")
+MAG_FACTOR = (
+    ("миллиард", 1_000_000_000),
+    ("млрд", 1_000_000_000),
+    ("миллион", 1_000_000),
+    ("млн", 1_000_000),
+    ("тысяч", 1000),
+    ("тыс", 1000),
+)
+
+
+class Quantity:
+    """A comparable magnitude. 2,0 and 2.0 match; 60% does not match 60."""
+
+    def __init__(self, value: Decimal, percent: bool = False) -> None:
+        self.value = value
+        self.percent = percent
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, Quantity) and self.percent == other.percent and self.value == other.value
+
+    def __hash__(self) -> int:
+        return hash((self.value, self.percent))
+
+    def __repr__(self) -> str:
+        suffix = "%" if self.percent else ""
+        return f"{self.value}{suffix}"
+
+
+def expand_number_words(text: str) -> str:
+    """Replace Russian numerals from ten up, and phrases with тыс/млн/процентов.
+
+    A bare «пять» stays a word. «пять процентов», «сто тысяч» and
+    «двести семьдесят девять млн» become digits. Spans in backticks are left
+    as written: a formula is parsed on its own.
+    """
+    parts = re.split(r"(`[^`]*`)", text)
+    return "".join(part if part.startswith("`") else _expand_words(part) for part in parts)
+
+
+def _expand_words(text: str) -> str:
+    chunks: list[str] = []
+    pos = 0
+    while pos < len(text):
+        match = WORD_RE.search(text, pos)
+        if match is None:
+            chunks.append(text[pos:])
+            break
+        words = [match.group(0)]
+        end = match.end()
+        while True:
+            gap = re.match(r"[ \t]+", text[end:])
+            if gap is None:
+                break
+            nxt = WORD_RE.match(text, end + gap.end())
+            if nxt is None:
+                break
+            words.append(nxt.group(0))
+            end = nxt.end()
+        rendered = _render_phrase(words)
+        chunks.append(text[pos : match.start()])
+        if rendered is None:
+            chunks.append(text[match.start() : match.end()])
+            pos = match.end()
+        else:
+            chunks.append(rendered)
+            pos = end
+    return "".join(chunks)
+
+
+def _render_phrase(words: list[str]) -> str | None:
+    folded = [word.casefold().rstrip(".") for word in words]
+    if any(word in PERCENT_WORDS for word in folded[:-1]):
+        return None
+    percent = folded[-1] in PERCENT_WORDS
+    body = folded[:-1] if percent else folded
+    group = 0
+    total = 0
+    cardinal = False
+    for word in body:
+        if word in SCALE:
+            if not cardinal and group == 0:
+                return None
+            total += (group or 1) * SCALE[word]
+            group = 0
+            cardinal = True
+            continue
+        if word not in CARDINAL:
+            return None
+        group += CARDINAL[word]
+        cardinal = True
+    if not cardinal:
+        return None
+    total += group
+    if total < 10 and not percent and not any(word in SCALE for word in body):
+        return None
+    rendered = format(Decimal(total), "f")
+    if "." in rendered:
+        rendered = rendered.rstrip("0").rstrip(".")
+    if percent:
+        rendered += "%"
+    return rendered
+
+
+def _magnitude(token: str) -> int:
+    folded = token.casefold().rstrip(".")
+    for stem, factor in MAG_FACTOR:
+        if folded.startswith(stem):
+            return factor
+    return 1
+
+
+def _year_token(whole: str, frac: str | None, mag: str | None, pct: str | None) -> bool:
+    digits = re.sub(r"\D", "", whole)
+    if frac or mag or pct or len(digits) != 4:
+        return False
+    return bool(YEAR_RE.fullmatch(digits))
+
+
+def iter_quantities(text: str, *, keep_small: bool = False) -> list[tuple[Quantity, str]]:
+    """Quantities in text that has already been word-expanded. Years are skipped."""
+    found: list[tuple[Quantity, str]] = []
+    matches = list(NUMBER_RE.finditer(text))
+    for index, match in enumerate(matches):
+        whole = match.group("whole")
+        frac = match.group("frac")
+        mag = match.group("mag")
+        pct = match.group("pct")
+        if not pct and index + 1 < len(matches):
+            gap = text[match.end() : matches[index + 1].start()]
+            if re.fullmatch(r"\s*[-–—]\s*", gap) and matches[index + 1].group("pct"):
+                pct = matches[index + 1].group("pct")
+        if _year_token(whole, frac, mag, pct):
+            continue
+        digits = re.sub(r"\D", "", whole)
+        small = len(digits) < 2 and not frac and not mag and not pct
+        if small and not keep_small:
+            continue
+        number = digits
+        if frac:
+            number += "." + re.sub(r"\D", "", frac)
+        try:
+            value = Decimal(number) * _magnitude(mag or "")
+        except InvalidOperation:
+            continue
+        if match.group("sign") == "-":
+            value = -value
+        token = match.group(0).strip()
+        found.append((Quantity(value, bool(pct)), token))
+    return found
+
+
+def quantities(text: str) -> set[Quantity]:
+    expanded = expand_number_words(ISO_DATE_RE.sub(" ", text))
+    return {item for item, _token in iter_quantities(expanded)}
+
+
+def parse_quantity(text: str) -> Quantity | None:
+    found = iter_quantities(expand_number_words(text), keep_small=True)
+    if not found:
+        return None
+    return found[0][0]
+
+
+def _strip_comments(text: str) -> str:
+    return COMMENT_RE.sub(lambda match: re.sub(r"[^\n]", " ", match.group(0)), text)
+
+
+def _visible_lines(text: str) -> list[tuple[int, str]]:
+    """Lines outside comments and fenced code, with original line numbers."""
+    visible = _strip_comments(text)
+    lines = visible.splitlines()
+    fence = False
+    kept: list[tuple[int, str]] = []
+    for lineno, line in enumerate(lines, 1):
+        if line.strip().startswith("```"):
+            fence = not fence
+            continue
+        if fence or line.strip().startswith("#"):
+            continue
+        kept.append((lineno, line))
+    return kept
+
+
+def iter_units(text: str) -> list[tuple[int, str]]:
+    """Table rows stay whole. «руб.» does not end a sentence."""
+    units: list[tuple[int, str]] = []
+    paragraph: list[tuple[int, str]] = []
+
+    def emit(chunks: list[tuple[int, str]]) -> None:
+        if not chunks:
+            return
+        protected = " ".join(ABBREV_RE.sub(lambda m: m.group(0)[:-1] + "\u0001", piece) for _n, piece in chunks)
+        protected = re.sub(r"\s+", " ", protected).strip()
+        starts = [0]
+        cuts = []
+        for match in re.finditer(r"(?<=[.!?])\s+", protected):
+            cuts.append(match.start())
+            starts.append(match.end())
+        cuts.append(len(protected))
+        origin = chunks[0][0]
+        for start, end in zip(starts, cuts):
+            fragment = protected[start:end].replace("\u0001", ".").strip()
+            if fragment:
+                units.append((origin, fragment))
+
+    def flush() -> None:
+        nonlocal paragraph
+        emit(paragraph)
+        paragraph = []
+
+    for lineno, line in _visible_lines(text):
+        stripped = line.strip()
+        if not stripped:
+            flush()
+            continue
+        if stripped.startswith("|"):
+            flush()
+            units.append((lineno, stripped))
+            continue
+        if re.match(r"^(?:[-*]\s+|\d+\.\s+)", stripped):
+            flush()
+            emit([(lineno, re.sub(r"^(?:[-*]\s+|\d+\.\s+)", "", stripped))])
+            continue
+        paragraph.append((lineno, stripped))
+    flush()
+    return units
+
+
+def _years_in(text: str) -> set[int]:
+    visible = FENCE_RE.sub(" ", _strip_comments(text))
+    visible = re.sub(r"`[^`]*`", " ", visible)
+    return {int(match.group(0)) for match in YEAR_RE.finditer(visible)}
+
+
+def _read_pdf(path: Path) -> str | None:
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        return None
+    try:
+        reader = PdfReader(str(path))
+        return "\n".join((page.extract_text() or "") for page in reader.pages)
+    except Exception:
+        return None
+
+
+def read_material_text(path: Path) -> tuple[str | None, str | None]:
+    """Return text and a reason when it cannot be read. None text means unknown."""
+    suffix = path.suffix.lower()
+    if suffix == ".pdf":
+        extracted = _read_pdf(path)
+        if extracted is None:
+            return None, "текст PDF не извлечён (нужен пакет pypdf и непустой текстовый слой)"
+        return extracted, None
+    try:
+        raw = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return None, f"файл не прочитан ({exc})"
+    if suffix in {".html", ".htm"}:
+        raw = re.sub(r"(?is)<(script|style)\b.*?>.*?</\1>", " ", raw)
+        raw = re.sub(r"(?s)<[^>]+>", " ", raw)
+    return raw, None
+
+
+def _source_path(project: Path, source: dict) -> Path | None:
+    ref = str(source.get("url_or_path") or "")
+    if not ref or re.match(r"https?://", ref):
+        return None
+    path = Path(ref)
+    if not path.is_absolute():
+        path = project / path
+    if path.is_file():
+        return path
+    return None
+
+
+def _load_jsonl(path: Path) -> tuple[list[dict], str | None]:
+    if not path.is_file():
+        return [], None
+    rows: list[dict] = []
+    for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError as exc:
+            return [], f"{path.name}:{lineno}: не JSON ({exc.msg})"
+        if isinstance(item, dict):
+            rows.append(item)
+    return rows, None
+
+
+def load_assumptions(project: Path) -> tuple[dict[str, dict], str | None]:
+    rows, error = _load_jsonl(project / "assumptions.jsonl")
+    if error:
+        return {}, error
+    by_id: dict[str, dict] = {}
+    for row in rows:
+        assumption_id = str(row.get("id") or "")
+        if not ASSUMPTION_ID_RE.fullmatch(assumption_id):
+            return {}, f"плохой id допущения: {assumption_id or 'пусто'} (нужен U001)"
+        if assumption_id in by_id:
+            return {}, f"повторяется допущение {assumption_id}"
+        if row.get("kind") not in ASSUMPTION_KINDS:
+            return {}, f"{assumption_id}: kind должен быть допущение, прогноз или оценка"
+        if parse_quantity(str(row.get("value") or "")) is None:
+            return {}, f"{assumption_id}: в value нет числа"
+        by_id[assumption_id] = row
+    return by_id, None
+
+
+def assumption_status(project: Path, assumption_id: str) -> tuple[bool, str]:
+    rows, error = load_assumptions(project)
+    if error:
+        return False, error
+    if assumption_id not in rows:
+        return False, "нет допущения"
+    return True, ""
+
+
+def _analysis_values(project: Path, analysis_id: str, metric: str) -> set[Quantity]:
+    path = project / "analysis" / analysis_id / "result.json"
+    if not path.is_file():
+        return set()
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return set()
+    metrics = payload.get("metrics") if isinstance(payload, dict) else None
+    if not isinstance(metrics, dict) or metric not in metrics:
+        return set()
+    parsed = parse_quantity(str(metrics[metric]))
+    if parsed is None:
+        return set()
+    return {parsed}
+
+
+def _formulas(sentence: str) -> list[str]:
+    found = []
+    for match in re.finditer(r"`([^`]*)`", sentence):
+        body = match.group(1)
+        if "=" in body and re.search(r"[+\-*/×÷]", body):
+            found.append(body)
+    return found
+
+
+def _without_code(sentence: str) -> str:
+    return re.sub(r"`[^`]*`", " ", sentence)
+
+
+def _eval_decimal(expr: str) -> Decimal:
+    """Arithmetic only. Names and calls cannot appear: the caller already rejected letters."""
+    tokens = re.findall(r"\d+(?:\.\d+)?|[()+*/-]", expr)
+    pos = 0
+
+    def peek() -> str:
+        return tokens[pos] if pos < len(tokens) else ""
+
+    def eat() -> str:
+        nonlocal pos
+        token = tokens[pos]
+        pos += 1
+        return token
+
+    def parse_expression() -> Decimal:
+        value = parse_term()
+        while peek() in ("+", "-"):
+            op = eat()
+            right = parse_term()
+            value = value + right if op == "+" else value - right
+        return value
+
+    def parse_term() -> Decimal:
+        value = parse_factor()
+        while peek() in ("*", "/"):
+            op = eat()
+            right = parse_factor()
+            if op == "*":
+                value *= right
+                continue
+            if right == 0:
+                raise ValueError("деление на ноль")
+            value /= right
+        return value
+
+    def parse_factor() -> Decimal:
+        if peek() == "+":
+            eat()
+            return parse_factor()
+        if peek() == "-":
+            eat()
+            return -parse_factor()
+        if peek() == "(":
+            eat()
+            value = parse_expression()
+            if peek() != ")":
+                raise ValueError("нет закрывающей скобки")
+            eat()
+            return value
+        token = peek()
+        if not re.fullmatch(r"\d+(?:\.\d+)?", token or ""):
+            raise ValueError("в формуле допустимы только числа и + - * /")
+        eat()
+        return Decimal(token)
+
+    if not tokens:
+        raise ValueError("пустая формула")
+    value = parse_expression()
+    if pos != len(tokens):
+        raise ValueError("формула разобрана не до конца")
+    return value
+
+
+def _prepare_formula(body: str) -> tuple[str, list[tuple[Quantity, str]]]:
+    """Replace number tokens with Decimal literals. Keep their quantities."""
+    expanded = expand_number_words(body.replace("×", "*").replace("÷", "/").replace("−", "-"))
+    pieces: list[str] = []
+    quantities_found: list[tuple[Quantity, str]] = []
+    cursor = 0
+    for match in NUMBER_RE.finditer(expanded):
+        pieces.append(expanded[cursor : match.start()])
+        parsed = iter_quantities(match.group(0), keep_small=True)
+        if not parsed:
+            pieces.append(match.group(0))
+            cursor = match.end()
+            continue
+        quantity, token = parsed[0]
+        pieces.append(format(quantity.value, "f"))
+        quantities_found.append((quantity, token))
+        cursor = match.end()
+    pieces.append(expanded[cursor:])
+    expression = "".join(pieces)
+    if re.search(r"[A-Za-zА-Яа-яЁё_]", expression):
+        raise ValueError("в формуле допустимы только числа и + - * /")
+    return expression, quantities_found
+
+
+def _split_formula(body: str) -> tuple[list[tuple[Quantity, str]], Quantity]:
+    expression, _numbers = _prepare_formula(body)
+    if expression.count("=") != 1:
+        raise ValueError("в формуле нужен один знак «=»")
+    _left, right = expression.split("=", 1)
+    # Operands are the numbers that stood on the left of «=».
+    left_expr, left_numbers = _prepare_formula(body.split("=", 1)[0])
+    if not left_numbers:
+        raise ValueError("слева от «=» нет чисел")
+    got = _eval_decimal(left_expr)
+    expected = _eval_decimal(right)
+    if abs(got - expected) > Decimal("0.000001"):
+        raise ValueError(f"результат {expected} не равен вычислению {got}")
+    return left_numbers, Quantity(expected)
+
+
+def _snippet(sentence: str) -> str:
+    compact = re.sub(r"\s+", " ", sentence).strip()
+    if len(compact) > 160:
+        return compact[:157] + "..."
+    return compact
+
+
+def _marker_present(sentence: str, kind: str) -> bool:
+    return KIND_STEM[kind] in sentence.casefold()
+
+
+def _any_marker(sentence: str) -> bool:
+    folded = sentence.casefold()
+    return any(stem in folded for stem in KIND_STEM.values())
+
+
+def review(project: Path, texts: dict, sources: list[dict], evidence: list[dict], add) -> None:
+    assumptions, assumption_error = load_assumptions(project)
+    if assumption_error:
+        add("json", assumption_error)
+        assumptions = {}
+
+    by_source = {str(row.get("id")): row for row in sources if row.get("id")}
+    evidence_source = {
+        str(row.get("id")): str(row.get("source") or "")
+        for row in evidence
+        if row.get("id")
+    }
+    source_cache: dict[str, tuple[set[Quantity], str | None]] = {}
+
+    def source_quantities(source_id: str) -> tuple[set[Quantity], str | None]:
+        if source_id in source_cache:
+            return source_cache[source_id]
+        row = by_source.get(source_id)
+        if row is None:
+            source_cache[source_id] = (set(), "нет источника")
+            return source_cache[source_id]
+        path = _source_path(project, row)
+        if path is None:
+            source_cache[source_id] = (set(), "нет локального текста")
+            return source_cache[source_id]
+        text, problem = read_material_text(path)
+        if text is None:
+            source_cache[source_id] = (set(), problem or "текст не прочитан")
+            return source_cache[source_id]
+        source_cache[source_id] = (quantities(text), None)
+        return source_cache[source_id]
+
+    allowed_years = _allowed_years(project, texts, by_source)
+    documents = _documents(project, texts)
+    for name, text in documents.items():
+        if name != "brief.md":
+            _review_years(name, text, allowed_years, add)
+        if name in QTY_FILES:
+            _review_qty_syntax(name, text, add)
+        _review_numbers(
+            project,
+            name,
+            text,
+            assumptions,
+            evidence_source,
+            source_quantities,
+            add,
+        )
+    review_inconsistent(documents, add)
+
+
+def _documents(project: Path, texts: dict) -> dict[str, str]:
+    found: dict[str, str] = {}
+    names = ("brief.md", *CLAIM_FILES)
+    for name in names:
+        text = texts.get(name) if name in texts else None
+        if text is None and name == "deliverable.md":
+            path = project / name
+            if path.is_file():
+                text = path.read_text(encoding="utf-8")
+        if not text or TEMPLATE_MARK in text:
+            continue
+        found[name] = text
+    return found
+
+
+def _allowed_years(project: Path, texts: dict, by_source: dict[str, dict]) -> set[int]:
+    years: set[int] = set()
+    brief = texts.get("brief.md")
+    if brief and TEMPLATE_MARK not in brief:
+        years |= _years_in(brief)
+    for source_id, row in by_source.items():
+        del source_id
+        path = _source_path(project, row)
+        if path is None:
+            continue
+        text, _problem = read_material_text(path)
+        if text:
+            years |= _years_in(text)
+    state_path = project / "state.json"
+    if state_path.is_file():
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            state = {}
+        if isinstance(state, dict):
+            for item in state.get("confirmed_dates") or []:
+                years |= _years_in(str(item))
+            checkpoints = state.get("checkpoints") or {}
+            if isinstance(checkpoints, dict):
+                for checkpoint in checkpoints.values():
+                    if isinstance(checkpoint, dict):
+                        years |= _years_in(str(checkpoint.get("note") or ""))
+    return years
+
+
+def _review_years(name: str, text: str, allowed: set[int], add) -> None:
+    for lineno, line in _visible_lines(text):
+        visible = re.sub(r"`[^`]*`", " ", line)
+        # The decision's own review_date is the date being set, not a claim
+        # copied from a source. It does not license that year anywhere else.
+        review_span = re.search(r"^-\s+review_date:\s*\d{4}-\d{2}-\d{2}\b", visible.strip())
+        review_at = visible.find(review_span.group(0)) if review_span else -1
+        for match in YEAR_RE.finditer(visible):
+            if review_at >= 0 and review_at <= match.start() < review_at + len(review_span.group(0)):
+                continue
+            year = int(match.group(0))
+            if year in allowed:
+                continue
+            add(
+                "year-not-in-source",
+                f"{name}:{lineno}: год {year} нет ни в одном источнике, ни в brief.md, "
+                "ни в state.json как подтверждённая дата (поле confirmed_dates или заметка "
+                "контрольной точки). Отметки created_at, updated_at и checkpoints.at год не подтверждают. "
+                "Запишите дату в бриф или командой confirm-date.",
+            )
+
+
+def _review_qty_syntax(name: str, text: str, add) -> None:
+    for lineno, line in _visible_lines(text):
+        for match in QTY_MARK_RE.finditer(line):
+            label = match.group(1).strip()
+            if parse_quantity(match.group(2)) is None:
+                add(
+                    "inconsistent-value",
+                    f"{name}:{lineno}: метка [qty:{label}=…] без числа. "
+                    "Пример: [qty:vp-year=4 млн].",
+                )
+
+
+def _review_numbers(
+    project: Path,
+    name: str,
+    text: str,
+    assumptions: dict[str, dict],
+    evidence_source: dict[str, str],
+    source_quantities,
+    add,
+) -> None:
+    for lineno, sentence in iter_units(text):
+        citations = list(CITE_RE.finditer(sentence))
+        labels = []
+        analysis: list[tuple[str, str]] = []
+        for match in citations:
+            if match.group(1):
+                labels.append(match.group(1))
+            else:
+                analysis.append((match.group(2), match.group(3)))
+        if any(label.startswith(("K", "I")) for label in labels):
+            # Knowledge-base and interview anchors are not source texts.
+            # This check only judges [S], [E] and [U].
+            labels = [label for label in labels if not label.startswith(("K", "I"))]
+            if not labels and not analysis:
+                continue
+        source_ids: list[str] = []
+        assumption_ids: list[str] = []
+        for label in labels:
+            if label.startswith("S"):
+                source_ids.append(label)
+            elif label.startswith("E"):
+                source_ids.append(evidence_source.get(label, ""))
+            elif label.startswith("U"):
+                assumption_ids.append(label)
+        formulas = _formulas(sentence)
+        plain = expand_number_words(ISO_DATE_RE.sub(" ", _without_code(sentence)))
+        numbers = iter_quantities(plain)
+        formula_results: set[Quantity] = set()
+        formula_operands: set[Quantity] = set()
+        for body in formulas:
+            try:
+                operands, result = _split_formula(body)
+            except (ValueError, SyntaxError, InvalidOperation) as exc:
+                add(
+                    "number-not-in-source",
+                    f"{name}:{lineno}: формула `{body.strip()}` не сходится ({exc}). "
+                    f"({_snippet(sentence)})",
+                )
+                continue
+            formula_results.add(result)
+            missing_operands = []
+            for quantity, token in operands:
+                formula_operands.add(quantity)
+                if _explained(
+                    quantity,
+                    sentence,
+                    source_ids,
+                    assumption_ids,
+                    assumptions,
+                    analysis,
+                    project,
+                    source_quantities,
+                    formula_results=set(),
+                ):
+                    continue
+                missing_operands.append(token.strip())
+            if missing_operands:
+                shown = ", ".join(missing_operands)
+                add(
+                    "number-not-in-source",
+                    f"{name}:{lineno}: операнд {shown} в формуле не найден ни в цитируемом источнике, "
+                    f"ни в записи допущения [U…]. ({_snippet(sentence)})",
+                )
+        if not numbers and not formulas:
+            continue
+        has_source_cite = any(label.startswith(("S", "E")) for label in labels)
+        has_assumption_cite = bool(assumption_ids)
+        has_analysis = bool(analysis)
+        if name == "deliverable.md" and numbers and not (has_source_cite or has_assumption_cite or has_analysis or formulas):
+            shown = ", ".join(token for _q, token in numbers)
+            add(
+                "ungrounded-number",
+                f"{name}:{lineno}: число {shown} без ссылки [S…], [E…], [U…] или [A….метрика] "
+                f"({_snippet(sentence)}).",
+            )
+            continue
+        if not (has_source_cite or has_assumption_cite or has_analysis or formulas):
+            continue
+        for quantity, token in numbers:
+            if quantity in formula_operands or quantity in formula_results:
+                continue
+            if _explained(
+                quantity,
+                sentence,
+                source_ids,
+                assumption_ids,
+                assumptions,
+                analysis,
+                project,
+                source_quantities,
+                formula_results,
+            ):
+                continue
+            _report_missing(
+                name,
+                lineno,
+                token,
+                quantity,
+                sentence,
+                source_ids,
+                assumption_ids,
+                assumptions,
+                source_quantities,
+                add,
+            )
+
+
+def _explained(
+    quantity: Quantity,
+    sentence: str,
+    source_ids: list[str],
+    assumption_ids: list[str],
+    assumptions: dict[str, dict],
+    analysis: list[tuple[str, str]],
+    project: Path,
+    source_quantities,
+    formula_results: set[Quantity],
+) -> bool:
+    if quantity in formula_results:
+        return True
+    for source_id in source_ids:
+        if not source_id:
+            continue
+        present, problem = source_quantities(source_id)
+        if problem:
+            continue
+        if quantity in present:
+            return True
+    for assumption_id in assumption_ids:
+        row = assumptions.get(assumption_id)
+        if row is None:
+            continue
+        parsed = parse_quantity(str(row.get("value") or ""))
+        if parsed == quantity and _marker_present(sentence, str(row.get("kind"))):
+            return True
+    for analysis_id, metric in analysis:
+        if quantity in _analysis_values(project, analysis_id, metric):
+            return True
+    return False
+
+
+def _report_missing(
+    name: str,
+    lineno: int,
+    token: str,
+    quantity: Quantity,
+    sentence: str,
+    source_ids: list[str],
+    assumption_ids: list[str],
+    assumptions: dict[str, dict],
+    source_quantities,
+    add,
+) -> None:
+    hint = ""
+    unread = []
+    for source_id in source_ids:
+        if not source_id:
+            continue
+        _present, problem = source_quantities(source_id)
+        if problem:
+            unread.append(f"{source_id}: {problem}")
+    if unread:
+        hint = " " + "; ".join(unread) + "."
+    if assumption_ids or _any_marker(sentence):
+        if not assumption_ids:
+            add(
+                "number-not-in-source",
+                f"{name}:{lineno}: число {token} помечено как допущение, прогноз или оценка, "
+                "но ссылка ведёт на источник, а не на запись допущения. "
+                "Оформите `add-assumption` и поставьте [U…] в это предложение; "
+                f"[S…] такое число не обосновывает.{hint} ({_snippet(sentence)})",
+            )
+            return
+        kinds = []
+        matched_value = False
+        for assumption_id in assumption_ids:
+            row = assumptions.get(assumption_id)
+            if row is None:
+                add(
+                    "number-not-in-source",
+                    f"{name}:{lineno}: ссылка [{assumption_id}] не найдена в assumptions.jsonl.",
+                )
+                continue
+            parsed = parse_quantity(str(row.get("value") or ""))
+            if parsed == quantity:
+                matched_value = True
+            if not _marker_present(sentence, str(row.get("kind"))):
+                add(
+                    "number-not-in-source",
+                    f"{name}:{lineno}: [{assumption_id}] — {row.get('kind')}, "
+                    f"а в предложении нет слова «{row.get('kind')}».",
+                )
+            kinds.append(f"[{assumption_id}]={row.get('value')}")
+        if matched_value:
+            return
+        shown = ", ".join(kinds) if kinds else "записи допущений"
+        add(
+            "number-not-in-source",
+            f"{name}:{lineno}: число {token} не совпадает с цитируемым допущением ({shown}) "
+            f"и его нет в источнике.{hint} ({_snippet(sentence)})",
+        )
+        return
+    cited = ", ".join(f"[{source_id}]" for source_id in source_ids if source_id) or "источник"
+    add(
+        "number-not-in-source",
+        f"{name}:{lineno}: число {token} нет в тексте источника {cited}.{hint} ({_snippet(sentence)})",
+    )
+
+
+def collect_qty(texts: dict[str, str]) -> dict[str, list[tuple[str, Quantity, int, str]]]:
+    found: dict[str, list[tuple[str, Quantity, int, str]]] = {}
+    for name, text in texts.items():
+        if TEMPLATE_MARK in text:
+            continue
+        for lineno, line in _visible_lines(text):
+            for match in QTY_MARK_RE.finditer(line):
+                label = match.group(1).strip()
+                parsed = parse_quantity(match.group(2))
+                if parsed is None:
+                    continue
+                found.setdefault(label, []).append((name, parsed, lineno, match.group(2).strip()))
+    return found
+
+
+def review_inconsistent(documents: dict[str, str], add) -> None:
+    grouped: dict[str, list[tuple[str, Quantity, int, str]]] = {}
+    for name in QTY_FILES:
+        text = documents.get(name)
+        if not text:
+            continue
+        for label, items in collect_qty({name: text}).items():
+            grouped.setdefault(label, []).extend(items)
+    for label, items in grouped.items():
+        distinct: list[tuple[str, Quantity, int, str]] = []
+        for item in items:
+            if not any(item[1] == previous[1] for previous in distinct):
+                distinct.append(item)
+        if len(distinct) < 2:
+            continue
+        shown = "; ".join(
+            f"{place}:{lineno} «{raw}»" for place, _qty, lineno, raw in distinct
+        )
+        add(
+            "inconsistent-value",
+            f"величина [qty:{label}] записана по-разному: {shown}. "
+            "Метка сравнивает только явно помеченные итоги; одинаковое имя с разными "
+            "числами — ошибка. Без метки [qty:имя=значение] проверка величины не сопоставляет.",
+        )
