@@ -906,7 +906,7 @@
             "detail": "meta.json без elapsed_seconds"
           },
           "output_chars": {
-            "value": 26739,
+            "value": 26779,
             "detail": "символы ответа, не токены"
           }
         },

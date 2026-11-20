@@ -337,6 +337,81 @@ class ExampleAndHelpTests(unittest.TestCase):
         self.assertIn("advance", result.stderr)
         self.assertNotIn("followup_message", result.stdout)
 
+    def test_unnamed_message_does_not_write_the_other_project(self) -> None:
+        assert_code(self.cli("init", "alpha", "--title", "Альфа"))
+        assert_code(self.cli("init", "beta", "--title", "Бета"))
+        recorded = self.cli("log", "1", "Запись без имени", "--grounds", "чат про альфу")
+        assert_code(recorded)
+        alpha_log = (self.projects / "alpha" / "log.md").read_text(encoding="utf-8")
+        beta_log = (self.projects / "beta" / "log.md").read_text(encoding="utf-8")
+        self.assertIn("Запись без имени", alpha_log)
+        self.assertNotIn("Запись без имени", beta_log)
+        refused = self.cli("log", "beta", "1", "Чужая запись", "--grounds", "не этот проект")
+        assert_code(refused, 1)
+        self.assertIn("Активный проект: alpha", refused.stdout)
+        self.assertIn("отклонена", refused.stdout)
+        beta_log = (self.projects / "beta" / "log.md").read_text(encoding="utf-8")
+        self.assertNotIn("Чужая запись", beta_log)
+        (self.projects / ".strat-active").unlink()
+        (self.projects / ".current").unlink()
+        unnamed = self.cli("log", "1", "Никуда", "--grounds", "имя не названо")
+        assert_code(unnamed, 1)
+        self.assertIn("alpha", unnamed.stdout)
+        self.assertIn("beta", unnamed.stdout)
+        self.assertNotIn("Никуда", (self.projects / "alpha" / "log.md").read_text(encoding="utf-8"))
+        self.assertNotIn("Никуда", (self.projects / "beta" / "log.md").read_text(encoding="utf-8"))
+
+    def test_inexact_project_name_lists_candidates(self) -> None:
+        assert_code(self.cli("init", "family-connect", "--title", "Первый"))
+        assert_code(self.cli("init", "family-connect-2", "--title", "Второй"))
+        assert_code(self.cli("init", "family-connect-3", "--title", "Третий"))
+        fuzzy = self.cli("active", "family")
+        assert_code(fuzzy, 1)
+        self.assertIn("family-connect", fuzzy.stdout)
+        self.assertIn("family-connect-2", fuzzy.stdout)
+        self.assertIn("family-connect-3", fuzzy.stdout)
+        self.assertIn("не выбираю", fuzzy.stdout)
+        self.assertEqual(
+            (self.projects / ".strat-active").read_text(encoding="utf-8").strip(),
+            "family-connect",
+        )
+        exact = self.cli("active", "family-connect-3")
+        assert_code(exact)
+        self.assertIn("Активный проект: family-connect-3", exact.stdout)
+
+    def test_check_rejects_a_cross_project_reference(self) -> None:
+        assert_code(self.cli("init", "alpha", "--title", "Альфа"))
+        assert_code(self.cli("init", "beta", "--title", "Бета"))
+        situation = self.projects / "alpha" / "situation.md"
+        situation.write_text(
+            situation.read_text(encoding="utf-8")
+            + "\nВзято из projects/beta/strategy.md и проекта beta.\n",
+            encoding="utf-8",
+        )
+        evidence = self.projects / "alpha" / "evidence.jsonl"
+        evidence.write_text(
+            json.dumps(
+                {
+                    "id": "E001",
+                    "type": "fact",
+                    "source": "S999",
+                    "claim": "Чужой источник.",
+                    "quote": "нет такого файла",
+                    "confidence": "high",
+                    "status": "active",
+                },
+                ensure_ascii=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        checked = self.cli("check", "alpha")
+        assert_code(checked, 1)
+        self.assertIn("foreign-project", checked.stdout)
+        self.assertIn("projects/beta/", checked.stdout)
+        self.assertIn("source-missing", checked.stdout)
+        self.assertIn("S999", checked.stdout)
+
 
 class WorkflowTests(unittest.TestCase):
     def setUp(self) -> None:

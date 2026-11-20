@@ -30,6 +30,7 @@ import inspect_media
 import reply_check
 import interview
 import kb
+import source_check
 
 configure_stdio()
 
@@ -428,12 +429,81 @@ def require_stage_log(project: Path, stage: int) -> None:
     )
 
 
+def active_file() -> Path:
+    """Chat pointer. Gitignored: it is not a project and not a source."""
+    return projects_root() / ".strat-active"
+
+
+def read_active_name() -> str:
+    """Last project this workspace continued. `.strat-active` wins over `.current`."""
+    for path in (active_file(), projects_root() / ".current"):
+        if not path.is_file():
+            continue
+        name = path.read_text(encoding="utf-8").strip()
+        if name:
+            return name
+    return ""
+
+
+def write_active(name: str) -> None:
+    projects_root().mkdir(parents=True, exist_ok=True)
+    write_utf8(active_file(), name + "\n")
+    write_utf8(projects_root() / ".current", name + "\n")
+
+
+def sibling_project_names() -> list[str]:
+    root = projects_root()
+    if not root.is_dir():
+        return []
+    names = []
+    for path in sorted(root.iterdir(), key=lambda item: item.name):
+        if path.name.startswith(".") or not path.is_dir():
+            continue
+        if (path / "state.json").is_file():
+            names.append(path.name)
+    return names
+
+
+def similar_project_names(token: str) -> list[str]:
+    """Names that contain the token but are not it. Never a guess, only a list."""
+    needle = Path(token).name
+    if not needle:
+        return []
+    return [name for name in sibling_project_names() if name != needle and needle in name]
+
+
+def require_exact_project(token: str) -> Path:
+    """Exact folder name only. family-connect is not family-connect-2."""
+    found = project_dir_if_any(token)
+    if found is not None and found.name == Path(token).name:
+        return found
+    similar = similar_project_names(token)
+    hint = ""
+    if similar:
+        hint = " Похожие имена: " + ", ".join(similar) + ". Ближайшее не выбираю."
+    die(f"Нет точного проекта «{Path(token).name}».{hint} Назовите id целиком.")
+
+
+def ensure_write(project: Path) -> None:
+    """Refuse to record into a project other than the active one."""
+    name = read_active_name()
+    found = project_dir_if_any(name) if name else None
+    if found is None:
+        write_active(project.name)
+        print(f"Активный проект: {project.name}")
+        return
+    if found.resolve() == project.resolve():
+        return
+    die(
+        f"Активный проект: {found.name}. Запись в «{project.name}» отклонена. "
+        "Чужой проект не продолжают и его материалы не копируют. "
+        f"Смена только явной командой: python scripts/strat.py active {project.name}"
+    )
+
+
 def current_pointer() -> tuple[str, Path | None]:
-    """Return the name stored in projects/.current and the project, if it exists."""
-    current = projects_root() / ".current"
-    if not current.is_file():
-        return "", None
-    name = current.read_text(encoding="utf-8").strip()
+    """Return the active project name and folder, if the folder exists."""
+    name = read_active_name()
     if not name:
         return "", None
     return name, project_dir_if_any(name)
@@ -465,10 +535,7 @@ def optional_project(explicit: str | None) -> Path | None:
 
 def resolve_project(explicit: str | None) -> Path:
     if explicit:
-        found = project_dir_if_any(explicit)
-        if found is None:
-            die(f"Проект не найден: {explicit}")
-        return found
+        return require_exact_project(explicit)
     name, found = current_pointer()
     if found is not None:
         return found
@@ -484,15 +551,25 @@ def resolve_project(explicit: str | None) -> Path:
     die(hint + f"Несколько проектов ({names}). Укажите id или выполните: python scripts/strat.py use <id>")
 
 
-def take_project(tokens: list[str], expected: int) -> tuple[Path, list[str]]:
+def take_project(tokens: list[str], expected: int, *, write: bool = False) -> tuple[Path, list[str]]:
     if (
         len(tokens) == expected + 1
         and tokens
         and project_dir_if_any(tokens[0]) is not None
+        and project_dir_if_any(tokens[0]).name == Path(tokens[0]).name  # type: ignore[union-attr]
     ):
-        return project_dir_if_any(tokens[0]), tokens[1:]  # type: ignore[return-value]
+        project = project_dir_if_any(tokens[0])
+        assert project is not None
+        if write:
+            ensure_write(project)
+        return project, tokens[1:]
     if len(tokens) == expected:
-        return resolve_project(None), tokens
+        project = resolve_project(None)
+        if write:
+            ensure_write(project)
+        return project, tokens
+    if tokens and expected and not project_dir_if_any(tokens[0]):
+        require_exact_project(tokens[0])
     die("Неверное число аргументов. Форма: команда [проект] <аргументы>. См. --help")
 
 
@@ -673,9 +750,8 @@ def cmd_init(args: argparse.Namespace) -> int:
         "# Журнал\n\nЗаписи добавляет `python scripts/strat.py log`. Историю не стирайте.\n",
     )
     save_state(dest, fresh_state(project_id, title))
-    current = projects_root() / ".current"
-    if not current.exists():
-        write_utf8(current, project_id + "\n")
+    if not read_active_name():
+        write_active(project_id)
     append_log(dest, 0, "Проект создан", grounds="strat init", model="cli")
     print(f"id: {project_id}")
     print(f"Создан проект «{title}». Этап 1 (бриф). Дальше: skills/01-brief/SKILL.md")
@@ -685,9 +761,37 @@ def cmd_init(args: argparse.Namespace) -> int:
 
 def cmd_use(args: argparse.Namespace) -> int:
     project = resolve_project(args.project)
-    projects_root().mkdir(parents=True, exist_ok=True)
-    write_utf8(projects_root() / ".current", project.name + "\n")
+    write_active(project.name)
     print(f"Текущий проект: {project.name}")
+    print(f"Активный проект: {project.name}")
+    return 0
+
+
+def cmd_active(args: argparse.Namespace) -> int:
+    """Remember the exact project for this workspace. No fuzzy match, no mtime."""
+    tokens = list(args.rest or [])
+    if not tokens:
+        name, found = current_pointer()
+        if found is not None:
+            print(f"Активный проект: {found.name}")
+            return 0
+        projects = list_user_projects()
+        if len(projects) == 1:
+            write_active(projects[0].name)
+            print(f"Активный проект: {projects[0].name}")
+            return 0
+        if not projects:
+            die("Нет проекта. Создайте: python scripts/strat.py init <id> --title \"...\"")
+        names = ", ".join(path.name for path in projects)
+        hint = (stale_current_hint(name) + " ") if name else ""
+        die(
+            hint
+            + f"Проект не назван. Кандидаты: {names}. "
+            "Укажите точное имя: python scripts/strat.py active <id>"
+        )
+    project = require_exact_project(tokens[0])
+    write_active(project.name)
+    print(f"Активный проект: {project.name}")
     return 0
 
 
@@ -757,7 +861,7 @@ def upsert_source(
 
 
 def cmd_add_source(args: argparse.Namespace) -> int:
-    project, tokens = take_project(args.rest, 1)
+    project, tokens = take_project(args.rest, 1, write=True)
     raw = tokens[0]
     if re.match(r"https?://", raw):
         stored, digest = raw.strip(), None
@@ -1010,7 +1114,7 @@ def snapshot_dest(project: Path, url: str, existing: tuple[str, str] | None) -> 
 
 
 def cmd_fetch(args: argparse.Namespace) -> int:
-    project, tokens = take_project(args.rest, 1)
+    project, tokens = take_project(args.rest, 1, write=True)
     url = tokens[0].strip()
     if not re.match(r"https?://", url):
         die("Нужен полный адрес http:// или https://.")
@@ -1077,6 +1181,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
 
 def cmd_add_evidence(args: argparse.Namespace) -> int:
     project = resolve_project(args.project)
+    ensure_write(project)
     sources, source_errors = load_jsonl(project / "sources.jsonl")
     evidence, evidence_errors = load_jsonl(project / "evidence.jsonl")
     if source_errors or evidence_errors:
@@ -1212,8 +1317,96 @@ def cmd_add_evidence(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_add_assumption(args: argparse.Namespace) -> int:
+    """Record a number that is not in a source. Citation form is [U001], not [A001.metric]."""
+    project = resolve_project(args.project)
+    ensure_write(project)
+    kind = str(args.kind or "").strip()
+    if kind not in source_check.ASSUMPTION_KINDS:
+        die(
+            "kind: допущение, прогноз или оценка. "
+            "Это не якорь анализа: анализ остаётся [A001.метрика], допущение — [U001]."
+        )
+    value = resolve_text(
+        args.value,
+        args.value_file,
+        label="значение допущения",
+        env_name="STRAT_ASSUMPTION_VALUE",
+        required=True,
+    )
+    name = resolve_text(
+        args.name,
+        args.name_file,
+        label="название допущения",
+        env_name="STRAT_ASSUMPTION_NAME",
+        required=True,
+    )
+    unit = resolve_text(
+        args.unit,
+        args.unit_file,
+        label="единица",
+        env_name="STRAT_ASSUMPTION_UNIT",
+    ) or ""
+    note = resolve_text(
+        args.note,
+        args.note_file,
+        label="заметка допущения",
+        env_name="STRAT_ASSUMPTION_NOTE",
+    ) or ""
+    if source_check.parse_quantity(value or "") is None:
+        die("В значении нет числа. Пример: 200, 400 тыс., 1,2 млн, 60%.")
+    assumptions, error = source_check.load_assumptions(project)
+    if error:
+        die(error)
+    assumption_id = next_serial(list(assumptions.values()), "U")
+    record = {
+        "id": assumption_id,
+        "kind": kind,
+        "name": (name or "").strip(),
+        "value": (value or "").strip(),
+        "unit": unit.strip(),
+        "note": note.strip(),
+        "status": "active",
+    }
+    rows = list(assumptions.values())
+    rows.append(record)
+    save_jsonl(project / "assumptions.jsonl", rows)
+    print(f"id: {assumption_id}")
+    print(
+        f"Допущение записано: {assumption_id} ({kind}, {record['value']}). "
+        f"В тексте ссылка [{assumption_id}], в том же предложении — слово «{kind}». "
+        "Якорь анализа [A001.метрика] этой командой не создаётся."
+    )
+    return 0
+
+
+def cmd_confirm_date(args: argparse.Namespace) -> int:
+    """Remember a year the person confirmed. Tool timestamps do not count."""
+    project, tokens = take_project(args.rest, 1, write=True)
+    raw = tokens[0].strip()
+    if not re.fullmatch(r"\d{4}(?:-\d{2}-\d{2})?", raw):
+        die("Дата: год YYYY или день YYYY-MM-DD. Пример: confirm-date <проект> 2026-12-16")
+    year = int(raw[:4])
+    if year < 1900 or year > 2099:
+        die("Год подтверждённой даты должен быть от 1900 до 2099.")
+    state = load_state(project)
+    dates = state.get("confirmed_dates")
+    if not isinstance(dates, list):
+        dates = []
+    if raw not in [str(item) for item in dates]:
+        dates.append(raw)
+    state["confirmed_dates"] = dates
+    save_state(project, state)
+    print(f"Подтверждённая дата: {raw}")
+    print(
+        "Этот год можно ставить в документы проекта. "
+        "created_at, updated_at и checkpoints.at год не подтверждают: это отметки инструмента."
+    )
+    return 0
+
+
 def cmd_retract(args: argparse.Namespace) -> int:
-    project, tokens = take_project(args.rest, 1)
+    project, tokens = take_project(args.rest, 1, write=True)
     evidence_id = tokens[0]
     evidence, errors = load_jsonl(project / "evidence.jsonl")
     if errors:
@@ -1240,7 +1433,7 @@ def cmd_retract(args: argparse.Namespace) -> int:
 
 
 def cmd_supersede(args: argparse.Namespace) -> int:
-    project, tokens = take_project(args.rest, 1)
+    project, tokens = take_project(args.rest, 1, write=True)
     old_id = tokens[0]
     new_id = args.by
     if not re.fullmatch(r"E\d{3,}", old_id) or not re.fullmatch(r"E\d{3,}", new_id or ""):
@@ -1906,6 +2099,7 @@ def check_project(project: Path, state: dict | None = None, *, strict: bool = Fa
         add(str(item["code"]), str(item["message"]), warning=bool(item.get("warning")))
     grounding.review_strategy(project, texts.get("strategy.md"), sources, evidence, add)
     grounding.review_substantive_numbers(project, texts, sources, evidence, add)
+    source_check.review(project, texts, sources, evidence, add)
     grounding.review_project_layout(project, add)
     grounding.review_privacy(project, add)
     dirty = uncommitted_tool_files()
@@ -2231,6 +2425,7 @@ def format_steps(state: dict) -> list[str]:
 
 def cmd_resume(args: argparse.Namespace) -> int:
     project, _tokens = take_project(args.rest, 0)
+    write_active(project.name)
     state = load_state(project)
     stage = int(state.get("stage") or 0)
     revision = state.get("revision") or {}
@@ -2249,6 +2444,7 @@ def cmd_resume(args: argparse.Namespace) -> int:
     if started:
         nxt = "Продолжить незавершённый шаг, не повторяя готовые: " + "; ".join(started)
     print("=== resume ===")
+    print(f"Активный проект: {project.name}")
     print(f"проект: {state.get('id')}")
     print(f"название: {state.get('title')}")
     print(f"этап: {stage} {STAGES.get(stage, '?')} ({state.get('stage_status')})")
@@ -2292,6 +2488,9 @@ def cmd_resume(args: argparse.Namespace) -> int:
 def cmd_log(args: argparse.Namespace) -> int:
     tokens = args.rest
     message_elsewhere = bool(args.message_file or os.environ.get("STRAT_LOG_MESSAGE"))
+    if tokens and project_dir_if_any(tokens[0]) is None and not str(tokens[0]).isdigit():
+        if similar_project_names(tokens[0]):
+            require_exact_project(tokens[0])
     if tokens and project_dir_if_any(tokens[0]) is not None and (
         len(tokens) >= 3 or (len(tokens) >= 2 and message_elsewhere)
     ):
@@ -2303,6 +2502,7 @@ def cmd_log(args: argparse.Namespace) -> int:
     else:
         die("Форма: log [проект] <этап> <сообщение>. Русский текст — через --message-file или «-».")
     assert project is not None
+    ensure_write(project)
     try:
         stage = int(body[0])
     except ValueError:
@@ -2340,7 +2540,7 @@ def cmd_log(args: argparse.Namespace) -> int:
 
 
 def cmd_confirm(args: argparse.Namespace) -> int:
-    project, tokens = take_project(args.rest, 1)
+    project, tokens = take_project(args.rest, 1, write=True)
     key = CHECKPOINTS.get(tokens[0].casefold())
     if key is None:
         die("Контрольная точка: brief, options или validation.")
@@ -2378,7 +2578,7 @@ def cmd_confirm(args: argparse.Namespace) -> int:
 
 
 def cmd_propose_revision(args: argparse.Namespace) -> int:
-    project, _tokens = take_project(args.rest, 0)
+    project, _tokens = take_project(args.rest, 0, write=True)
     decision = args.decision
     choice = args.choice
     if not re.fullmatch(r"D\d+", decision or "") or not re.fullmatch(r"O\d+", choice or ""):
@@ -2411,7 +2611,7 @@ def cmd_propose_revision(args: argparse.Namespace) -> int:
 
 
 def cmd_accept_revision(args: argparse.Namespace) -> int:
-    project, _tokens = take_project(args.rest, 0)
+    project, _tokens = take_project(args.rest, 0, write=True)
     state = load_state(project)
     revision = state.get("revision") or {}
     if revision.get("status") != "pending":
@@ -2487,7 +2687,7 @@ def gate_failure(project: Path, state: dict, stage: int) -> str | None:
 
 
 def cmd_advance(args: argparse.Namespace) -> int:
-    project, tokens = take_project(args.rest, 1)
+    project, tokens = take_project(args.rest, 1, write=True)
     try:
         stage = int(tokens[0])
     except ValueError:
@@ -2520,7 +2720,7 @@ def cmd_advance(args: argparse.Namespace) -> int:
 
 
 def cmd_add_option(args: argparse.Namespace) -> int:
-    project, _tokens = take_project(args.rest, 0)
+    project, _tokens = take_project(args.rest, 0, write=True)
     title = resolve_text(
         args.title,
         args.title_file,
@@ -2557,7 +2757,7 @@ def cmd_add_option(args: argparse.Namespace) -> int:
 
 
 def cmd_supersede_option(args: argparse.Namespace) -> int:
-    project, tokens = take_project(args.rest, 1)
+    project, tokens = take_project(args.rest, 1, write=True)
     option_id = tokens[0]
     if not OPTION_ID_RE.fullmatch(option_id):
         die("Укажите ID варианта, например O2.")
@@ -2779,6 +2979,8 @@ def _resolve_optional_text(value: str | None, file_value: str | None, label: str
 
 def cmd_analyze(args: argparse.Namespace) -> int:
     project, _tokens = take_project(list(getattr(args, "rest", None) or []), 0)
+    if not bool(getattr(args, "verify", False)):
+        ensure_write(project)
     if bool(getattr(args, "verify", False)):
         findings = analysis.verify_project(project)
         print(format_report(project, findings))
@@ -2918,6 +3120,7 @@ def _add_analysis_evidence(project: Path, outcome: dict, args: argparse.Namespac
 
 def cmd_inspect(args: argparse.Namespace) -> int:
     project, _tokens = take_project(list(getattr(args, "rest", None) or []), 0)
+    ensure_write(project)
 
     def one(raw: str | None) -> Path | None:
         if not raw:
@@ -3314,6 +3517,7 @@ def _register_kb_source(project: Path, record: dict) -> str:
 
 def cmd_kb_add(args: argparse.Namespace) -> int:
     project, tokens = _kb_project(list(args.rest))
+    ensure_write(project)
     if len(tokens) > 1:
         die("Лишний аргумент. Форма: kb add [проект] [файл]")
     path_arg = tokens[0] if tokens else None
@@ -3457,6 +3661,7 @@ def _append_decision_note(project: Path, note: str) -> None:
 
 def cmd_interview_guide(args: argparse.Namespace) -> int:
     project, tokens = _kb_project(list(args.rest))
+    ensure_write(project)
     if tokens:
         die("У guide нет лишних аргументов. Форма: interview guide [проект]")
     questions = read_text(project / "questions.md") or ""
@@ -3521,6 +3726,7 @@ def _add_interview_evidence(
 
 def cmd_interview_accept(args: argparse.Namespace) -> int:
     project, tokens = _kb_project(list(args.rest))
+    ensure_write(project)
     if tokens:
         die("Лишний аргумент. Форма: interview accept [проект] --file ...")
     synthetic = bool(args.synthetic)
@@ -3738,6 +3944,10 @@ def build_parser() -> argparse.ArgumentParser:
     use.add_argument("project")
     use.set_defaults(func=cmd_use)
 
+    active = sub.add_parser("active", help="запомнить точный проект этой переписки")
+    active.add_argument("rest", nargs="*", help="точное имя проекта; без имени — показать активный")
+    active.set_defaults(func=cmd_active)
+
     for name, help_text, handler in (
         ("status", "этап, точки, пробелы, затраты", cmd_status),
         ("resume", "краткий бриф для продолжения в новом чате", cmd_resume),
@@ -3805,6 +4015,34 @@ def build_parser() -> argparse.ArgumentParser:
     add_evidence.add_argument("--metric", default=None, help="имя метрики из result JSON")
     add_evidence.add_argument("--inspect", default=None, help="M001, если тезис из разбора")
     add_evidence.set_defaults(func=cmd_add_evidence)
+
+    add_assumption = sub.add_parser(
+        "add-assumption",
+        help="записать допущение, прогноз или оценку, которых нет в источнике",
+    )
+    add_assumption.add_argument("project", nargs="?")
+    add_assumption.add_argument(
+        "--kind",
+        required=True,
+        choices=source_check.ASSUMPTION_KINDS,
+        help="допущение, прогноз или оценка",
+    )
+    add_assumption.add_argument("--value", help="число: 200, 400 тыс., 1,2 млн, 60%")
+    add_assumption.add_argument("--value-file", help="значение из файла UTF-8")
+    add_assumption.add_argument("--name", help="короткое название")
+    add_assumption.add_argument("--name-file", help="название из файла UTF-8")
+    add_assumption.add_argument("--unit", help="единица, например руб.")
+    add_assumption.add_argument("--unit-file", help="единица из файла UTF-8")
+    add_assumption.add_argument("--note", help="зачем это допущение")
+    add_assumption.add_argument("--note-file", help="заметка из файла UTF-8")
+    add_assumption.set_defaults(func=cmd_add_assumption)
+
+    confirm_date = sub.add_parser(
+        "confirm-date",
+        help="записать год, который человек подтвердил (не отметку created_at)",
+    )
+    confirm_date.add_argument("rest", nargs="+", help="[проект] <YYYY или YYYY-MM-DD>")
+    confirm_date.set_defaults(func=cmd_confirm_date)
 
     add_option = sub.add_parser("add-option", help="выдать варианту стабильный ID один раз")
     add_option.add_argument("rest", nargs="*", help="необязательный проект")

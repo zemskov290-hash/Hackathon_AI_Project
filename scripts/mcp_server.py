@@ -68,6 +68,9 @@ INSTRUCTIONS = (
     "только с consent=yes либо с synthetic=true. Без согласия приём отклоняется. "
     "Синтетическое интервью — не реальный человек. Персональные данные в репозиторий не пиши.\n"
     "Число в содержательном разделе strategy.md без источника, расчёта или интервью — ошибка strat_check. "
+    "Число со ссылкой [S…] или [E…] должно встречаться в тексте этого источника. "
+    "Допущение, прогноз и оценка, которых в источнике нет, — strat_add_assumption и ссылка [U…], не [S…]. "
+    "Год, которого нет в источниках и в брифе, в документ не ставь: подтверди его strat_confirm_date. "
     "Непроверенную ссылку помечай словом «непроверен» и не держи на ней вывод один. "
     "Долю проверенных ссылок держи не ниже 90%. Этап не закрывай, пока strat_check не чист.\n"
     "Перед итоговым ответом человеку вызови strat_reply_check на черновике. "
@@ -577,6 +580,41 @@ def handle_add_evidence(arguments: dict) -> dict:
     if found:
         data["id"] = found
     return finish(code, text, data)
+
+
+def handle_add_assumption(arguments: dict) -> dict:
+    project = confine_project(arguments["project"])
+    value = reject_dash(arguments["value"], "value")
+    name = reject_dash(arguments["name"], "name")
+    unit = reject_dash(arguments.get("unit") or "", "unit")
+    note = reject_dash(arguments.get("note") or "", "note")
+    code, text = invoke(
+        strat.cmd_add_assumption,
+        ns(
+            project=project.name,
+            kind=arguments["kind"],
+            value=value,
+            value_file=None,
+            name=name,
+            name_file=None,
+            unit=unit,
+            unit_file=None,
+            note=note,
+            note_file=None,
+        ),
+    )
+    data: dict = {"project": project.name, "kind": arguments["kind"]}
+    found = parsed_id(text)
+    if found:
+        data["id"] = found
+    return finish(code, text, data)
+
+
+def handle_confirm_date(arguments: dict) -> dict:
+    project = confine_project(arguments["project"])
+    raw = arguments["date"].strip()
+    code, text = invoke(strat.cmd_confirm_date, ns(rest=[project.name, raw]))
+    return finish(code, text, {"project": project.name, "date": raw})
 
 
 def handle_add_option(arguments: dict) -> dict:
@@ -1299,6 +1337,45 @@ def build_tools() -> list[dict]:
             ),
             {**MUTATION, "title": "Добавить свидетельство"},
             handle_add_evidence,
+        ),
+        tool(
+            "strat_add_assumption",
+            "Записать число, которого нет в источнике: допущение, прогноз или оценка. "
+            "Идентификатор U001, ссылка в тексте [U001]. Якорь анализа [A001.метрика] не затрагивается. "
+            "В том же предложении должно быть слово kind. value — само число: 200, 400 тыс., 1,2 млн, 60%.",
+            project_schema(
+                {
+                    "kind": {
+                        "type": "string",
+                        "enum": ["допущение", "прогноз", "оценка"],
+                        "description": "Почему числа нет в источнике.",
+                    },
+                    "value": string_prop("Число: 200, 400 тыс., 1,2 млн или 60%.", max_length=80),
+                    "name": string_prop("Короткое название, например стоимость обращения.", max_length=300),
+                    "unit": string_prop("Единица, например руб.", max_length=40),
+                    "note": string_prop("Зачем это допущение.", max_length=2_000),
+                },
+                ["kind", "value", "name"],
+            ),
+            {**MUTATION, "title": "Записать допущение"},
+            handle_add_assumption,
+        ),
+        tool(
+            "strat_confirm_date",
+            "Записать год, который человек подтвердил. После этого год можно ставить в документы. "
+            "created_at, updated_at и checkpoints.at год не подтверждают. date — YYYY или YYYY-MM-DD.",
+            project_schema(
+                {
+                    "date": string_prop(
+                        "Год YYYY или дата YYYY-MM-DD.",
+                        pattern=r"^\d{4}(?:-\d{2}-\d{2})?$",
+                        max_length=10,
+                    ),
+                },
+                ["date"],
+            ),
+            {**MUTATION, "title": "Подтвердить дату"},
+            handle_confirm_date,
         ),
         tool(
             "strat_add_option",

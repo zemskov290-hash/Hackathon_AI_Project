@@ -13,8 +13,9 @@ import re
 from pathlib import Path
 
 import grounding
+import source_check
 
-REPLY_CITE_RE = re.compile(r"\[(S\d+|E\d+)\]|\[(A\d+)\.([A-Za-z0-9_]+)\]")
+REPLY_CITE_RE = re.compile(r"\[(S\d+|E\d+|U\d+)\]|\[(A\d+)\.([A-Za-z0-9_]+)\]")
 LIST_MARKER_RE = re.compile(r"^(?:[-*]\s+|\d+\.\s+)")
 
 
@@ -138,6 +139,13 @@ def _citation_ok(
         if label not in evidence_ids:
             return "нет такой записи в evidence.jsonl"
         return None
+    if label.startswith("U"):
+        import source_check
+
+        ok, reason = source_check.assumption_status(project, label)
+        if not ok:
+            return reason or "нет такой записи в assumptions.jsonl"
+        return None
     return "неизвестный id"
 
 
@@ -158,6 +166,7 @@ def check_reply(project: Path, text: str) -> list[dict]:
         add(0, "registry", problem)
 
     for line, sentence in _sentences(text):
+        sentence = source_check.expand_number_words(sentence)
         citations = _citations(sentence)
         valid = False
         for label, analysis_id, metric in citations:
@@ -179,7 +188,7 @@ def check_reply(project: Path, text: str) -> list[dict]:
             add(
                 line,
                 "reply-number",
-                f"строка {line}: число {token} без ссылки [S…], [E…] или [A….метрика] "
+                f"строка {line}: число {token} без ссылки [S…], [E…], [U…] или [A….метрика] "
                 f"в том же предложении ({snippet}). "
                 "Поставьте id из реестра в это предложение или уберите число и назовите файл.",
             )
