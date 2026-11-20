@@ -30,6 +30,7 @@ import inspect_media
 import reply_check
 import interview
 import kb
+import indicators
 import source_check
 
 configure_stdio()
@@ -1353,8 +1354,32 @@ def cmd_add_assumption(args: argparse.Namespace) -> int:
         label="заметка допущения",
         env_name="STRAT_ASSUMPTION_NOTE",
     ) or ""
+    indicator_name = resolve_text(
+        getattr(args, "indicator", None),
+        getattr(args, "indicator_file", None),
+        label="показатель",
+        env_name="STRAT_INDICATOR",
+    ) or ""
+    forecast_scenario = resolve_text(
+        getattr(args, "scenario", None),
+        getattr(args, "scenario_file", None),
+        label="сценарий прогноза",
+        env_name="STRAT_SCENARIO",
+    ) or ""
+    because = resolve_text(
+        getattr(args, "because", None),
+        getattr(args, "because_file", None),
+        label="обоснование прогноза",
+        env_name="STRAT_BECAUSE",
+    ) or ""
+    forecast_role = str(getattr(args, "forecast_role", "") or "").strip() or "initiative"
     if source_check.parse_quantity(value or "") is None:
-        die("В значении нет числа. Пример: 200, 400 тыс., 1,2 млн, 60%.")
+        die("В значении нет числа. Пример: 200, 400 тыс., 1,2 млн, 60%, 8 п.п.")
+    if indicators.gaming_note(note) or indicators.gaming_note(because):
+        die(
+            "В заметке нельзя писать, что число подогнано под проверку. "
+            "Исправьте смысл или расчёт. Единицу и формулировку ради прохождения check не меняют."
+        )
     assumptions, error = source_check.load_assumptions(project)
     if error:
         die(error)
@@ -1368,7 +1393,70 @@ def cmd_add_assumption(args: argparse.Namespace) -> int:
         "note": note.strip(),
         "status": "active",
     }
+    if indicator_name.strip():
+        if kind != "прогноз":
+            die("К показателю привязывают только прогноз. Допущение без показателя записывайте как раньше.")
+        if not forecast_scenario.strip():
+            die(
+                "У прогноза показателя нужен свой сценарий: название этого прогноза, "
+                "а не заголовок столбца брифа."
+            )
+        if forecast_role not in {"initiative", "alternate"}:
+            die("forecast-role: initiative или alternate.")
+        cells, cell_error = indicators.load_indicators(project)
+        if cell_error:
+            die(cell_error)
+        known = [
+            cell
+            for cell in indicators.active_indicators(cells)
+            if indicators._same(cell["indicator"], indicator_name)
+        ]
+        if not known:
+            die("Такого показателя нет в реестре. Сначала: python scripts/strat.py indicators add ...")
+        indicator_name = known[0]["indicator"]
+        record["indicator"] = indicator_name
+        record["scenario"] = forecast_scenario.strip()
+        record["forecast_role"] = forecast_role
+        if forecast_role == "initiative":
+            already = [
+                row
+                for row in assumptions.values()
+                if row.get("status", "active") == "active"
+                and indicators._same(str(row.get("indicator") or ""), indicator_name)
+                and row.get("forecast_role", "initiative") == "initiative"
+            ]
+            if already:
+                die(
+                    f"У «{indicator_name}» уже есть прогноз {already[0]['id']}. "
+                    "Второй запишите с --forecast-role alternate или не дублируйте показатель."
+                )
+    if because.strip():
+        record["because"] = because.strip()
     rows = list(assumptions.values())
+    probe = dict(record)
+    for other in rows:
+        if other.get("status", "active") != "active":
+            continue
+        same_pair = (
+            probe.get("indicator")
+            and probe.get("scenario")
+            and indicators._same(str(other.get("indicator") or ""), str(probe.get("indicator")))
+            and indicators._same(str(other.get("scenario") or ""), str(probe.get("scenario")))
+        )
+        if same_pair:
+            die(
+                f"Уже есть {other['id']} для этого показателя и сценария. "
+                "Вторую запись с другой единицей не создают."
+            )
+        left = indicators._meaning_key(probe)
+        right = indicators._meaning_key(other)
+        left_q = source_check.assumption_quantity(probe)
+        right_q = source_check.assumption_quantity(other)
+        if left and right and left == right and left_q is not None and right_q is not None and left_q.value == right_q.value:
+            die(
+                f"Уже есть {other['id']} с тем же значением и тем же смыслом. "
+                "Проценты и процентные пункты не повод заводить вторую запись."
+            )
     rows.append(record)
     save_jsonl(project / "assumptions.jsonl", rows)
     print(f"id: {assumption_id}")
@@ -1377,6 +1465,159 @@ def cmd_add_assumption(args: argparse.Namespace) -> int:
         f"В тексте ссылка [{assumption_id}], в том же предложении — слово «{kind}». "
         "Якорь анализа [A001.метрика] этой командой не создаётся."
     )
+    return 0
+
+
+def _source_contains_quantity(text: str, quantity: source_check.Quantity) -> bool:
+    present = {
+        item
+        for item, _token in source_check.iter_quantities(
+            source_check.expand_number_words(text),
+            keep_small=True,
+        )
+    }
+    return source_check._value_in(quantity, present)
+
+
+def cmd_indicators_add(args: argparse.Namespace) -> int:
+    """Register one source cell: indicator, verbatim scenario, value, direction, role."""
+    project, _tokens = take_project(list(args.rest or []), 0, write=True)
+    indicator_name = resolve_text(
+        args.indicator,
+        args.indicator_file,
+        label="показатель",
+        env_name="STRAT_INDICATOR",
+        required=True,
+    )
+    scenario = resolve_text(
+        args.scenario,
+        args.scenario_file,
+        label="сценарий",
+        env_name="STRAT_SCENARIO",
+        required=True,
+    )
+    value = resolve_text(
+        args.value,
+        args.value_file,
+        label="значение",
+        env_name="STRAT_INDICATOR_VALUE",
+        required=True,
+    )
+    unit = resolve_text(
+        args.unit,
+        args.unit_file,
+        label="единица",
+        env_name="STRAT_INDICATOR_UNIT",
+    ) or ""
+    direction = indicators.canonical_direction(str(args.direction or ""))
+    role = indicators.canonical_role(str(args.role or ""))
+    if direction is None:
+        die("direction: больше или меньше. больше — рост лучше, меньше — снижение лучше.")
+    if role is None:
+        die("role: база, цель или контекст. Это роль столбца, не его заголовок.")
+    source_id = str(args.source or "").strip()
+    if not re.fullmatch(r"S\d{3,}", source_id):
+        die("Укажите источник этой ячейки: --source S001.")
+    sources, errors = load_jsonl(project / "sources.jsonl")
+    if errors:
+        die("sources.jsonl повреждён:\n" + "\n".join(errors))
+    source_row = next((row for row in sources if row.get("id") == source_id), None)
+    if source_row is None:
+        die(f"Источник {source_id} не найден в sources.jsonl этого проекта.")
+    path = source_check._source_path(project, source_row)
+    if path is None:
+        die(f"У {source_id} нет локального файла. Ячейку нельзя сверить.")
+    text, problem = source_check.source_text(path)
+    if not text:
+        die(problem or "текст источника не прочитан")
+    folded = re.sub(r"\s+", " ", text.casefold())
+    if re.sub(r"\s+", " ", indicator_name.casefold()) not in folded:
+        die("Названия показателя нет в источнике дословно. Берите его из таблицы, не из памяти.")
+    if re.sub(r"\s+", " ", scenario.casefold()) not in folded:
+        die("Такого столбца нет в источнике дословно. Сценарий — заголовок столбца как в источнике.")
+    quantity = source_check.assumption_quantity({"value": value, "unit": unit})
+    if quantity is None:
+        die("В значении нет числа.")
+    if not _source_contains_quantity(text, quantity):
+        die("Этого числа нет в тексте источника. Соседний столбец подставлять нельзя.")
+    cells, cell_error = indicators.load_indicators(project)
+    if cell_error:
+        die(cell_error)
+    active = indicators.active_indicators(cells)
+    for cell in active:
+        if indicators._same(cell["indicator"], indicator_name) and indicators._same(cell["scenario"], scenario):
+            die(
+                f"Ячейка уже есть: {cell['id']}. "
+                "Снимите её командой indicators retract, если значение было не тем."
+            )
+        if indicators._same(cell["indicator"], indicator_name) and cell["direction"] != direction:
+            die(
+                f"У «{cell['indicator']}» уже направление {cell['direction']}. "
+                "У показателя оно одно."
+            )
+        if indicators._same(cell["scenario"], scenario) and cell["role"] != role:
+            die(
+                f"Столбец «{cell['scenario']}» уже с ролью {cell['role']}. "
+                "У столбца одна роль во всех строках."
+            )
+    record = {
+        "id": next_serial(cells, "Q"),
+        "indicator": indicator_name.strip(),
+        "scenario": scenario.strip(),
+        "value": value.strip(),
+        "unit": unit.strip(),
+        "direction": direction,
+        "role": role,
+        "source": source_id,
+        "status": "active",
+    }
+    cells.append(record)
+    save_jsonl(project / "indicators.jsonl", cells)
+    print(f"id: {record['id']}")
+    print(
+        f"Ячейка {record['id']}: «{record['indicator']}», сценарий «{record['scenario']}», "
+        f"{source_check._assumption_label(record)}, {record['direction']}, роль {record['role']}, {source_id}."
+    )
+    print("Заголовок сценария записан как в источнике. Роль столбца подтверждает человек в брифе.")
+    return 0
+
+
+def cmd_indicators_table(args: argparse.Namespace) -> int:
+    project, _tokens = take_project(list(args.rest or []), 0, write=bool(args.into))
+    cells, cell_error = indicators.load_indicators(project)
+    if cell_error:
+        die(cell_error)
+    if not indicators.active_indicators(cells):
+        die("Нет ячеек показателей. Сначала indicators add для каждой клетки таблицы.")
+    assumptions, assumption_error = source_check.load_assumptions(project)
+    if assumption_error:
+        die(assumption_error)
+    block = indicators.render_block(cells, list(assumptions.values()))
+    if not args.into:
+        print(block)
+        return 0
+    if args.into not in {"brief.md", "strategy.md", "deliverable.md"}:
+        die("into: brief.md, strategy.md или deliverable.md.")
+    path = project / args.into
+    current = path.read_text(encoding="utf-8") if path.is_file() else ""
+    write_utf8(path, indicators.place_block(current, block))
+    print(f"Таблица показателей записана в {args.into}.")
+    print("Это снимок реестра. Ячейки вручную не переписывают.")
+    return 0
+
+
+def cmd_indicators_retract(args: argparse.Namespace) -> int:
+    project, tokens = take_project(list(args.rest or []), 1, write=True)
+    cell_id = tokens[0]
+    cells, cell_error = indicators.load_indicators(project)
+    if cell_error:
+        die(cell_error)
+    found = next((row for row in cells if row.get("id") == cell_id), None)
+    if found is None:
+        die(f"Ячейка не найдена: {cell_id}")
+    found["status"] = "retracted"
+    save_jsonl(project / "indicators.jsonl", cells)
+    print(f"Снята ячейка {cell_id}. Номер не переиспользуется.")
     return 0
 
 
@@ -2100,6 +2341,7 @@ def check_project(project: Path, state: dict | None = None, *, strict: bool = Fa
     grounding.review_strategy(project, texts.get("strategy.md"), sources, evidence, add)
     grounding.review_substantive_numbers(project, texts, sources, evidence, add)
     source_check.review(project, texts, sources, evidence, add)
+    indicators.review(project, texts, add)
     grounding.review_project_layout(project, add)
     grounding.review_privacy(project, add)
     dirty = uncommitted_tool_files()
@@ -4035,7 +4277,43 @@ def build_parser() -> argparse.ArgumentParser:
     add_assumption.add_argument("--unit-file", help="единица из файла UTF-8")
     add_assumption.add_argument("--note", help="зачем это допущение")
     add_assumption.add_argument("--note-file", help="заметка из файла UTF-8")
+    add_assumption.add_argument("--indicator", help="показатель из реестра, если это его прогноз")
+    add_assumption.add_argument("--indicator-file", help="название показателя из файла UTF-8")
+    add_assumption.add_argument("--scenario", help="название этого прогноза, не столбец брифа")
+    add_assumption.add_argument("--scenario-file", help="сценарий прогноза из файла UTF-8")
+    add_assumption.add_argument(
+        "--forecast-role",
+        choices=["initiative", "alternate"],
+        default="initiative",
+        help="initiative сравнивается с базой и целью; alternate — другой прогноз того же показателя",
+    )
+    add_assumption.add_argument("--because", help="почему прогноз хуже сценария без изменений, если так вышло")
+    add_assumption.add_argument("--because-file", help="обоснование из файла UTF-8")
     add_assumption.set_defaults(func=cmd_add_assumption)
+
+    indicators_cmd = sub.add_parser("indicators", help="ячейки таблицы показателей и снимок для документов")
+    indicators_sub = indicators_cmd.add_subparsers(dest="indicators_cmd", required=True)
+    indicators_add = indicators_sub.add_parser("add", help="одна ячейка: показатель, столбец как в источнике, значение")
+    indicators_add.add_argument("rest", nargs="*", help="необязательный проект")
+    indicators_add.add_argument("--indicator")
+    indicators_add.add_argument("--indicator-file")
+    indicators_add.add_argument("--scenario", help="заголовок столбца дословно из источника")
+    indicators_add.add_argument("--scenario-file")
+    indicators_add.add_argument("--value")
+    indicators_add.add_argument("--value-file")
+    indicators_add.add_argument("--unit")
+    indicators_add.add_argument("--unit-file")
+    indicators_add.add_argument("--direction", required=True, help="больше или меньше")
+    indicators_add.add_argument("--role", required=True, help="база, цель или контекст")
+    indicators_add.add_argument("--source", required=True, help="S001")
+    indicators_add.set_defaults(func=cmd_indicators_add)
+    indicators_table = indicators_sub.add_parser("table", help="таблица из реестра, не вручную")
+    indicators_table.add_argument("rest", nargs="*", help="необязательный проект")
+    indicators_table.add_argument("--into", help="brief.md, strategy.md или deliverable.md")
+    indicators_table.set_defaults(func=cmd_indicators_table)
+    indicators_retract = indicators_sub.add_parser("retract", help="снять ячейку, сохранив её номер")
+    indicators_retract.add_argument("rest", nargs="+", help="[проект] Q001")
+    indicators_retract.set_defaults(func=cmd_indicators_retract)
 
     confirm_date = sub.add_parser(
         "confirm-date",

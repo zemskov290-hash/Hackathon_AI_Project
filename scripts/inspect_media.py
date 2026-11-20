@@ -294,9 +294,11 @@ def transcript_plain(raw: str) -> str:
 
 
 def read_pdf(path: Path) -> dict:
+    import pdf_text
+
     try:
-        from pypdf import PdfReader
-    except ImportError:
+        text = pdf_text.read_pdf_pages(path)
+    except pdf_text.PdfUnavailable:
         return {
             "status": "unavailable",
             "message": (
@@ -305,15 +307,13 @@ def read_pdf(path: Path) -> dict:
             ),
             "pages": [],
         }
-    try:
-        reader = PdfReader(str(path))
-        pages = [{"page": index, "text": page.extract_text() or ""} for index, page in enumerate(reader.pages, start=1)]
-    except Exception as exc:  # noqa: BLE001 — optional parser, show the reason
+    except pdf_text.PdfFailed as exc:
         return {
             "status": "unavailable",
             "message": f"PDF открыть не удалось ({path.name}): {exc}. Текст страниц не выдумывается.",
             "pages": [],
         }
+    pages = [{"page": index, "text": chunk} for index, chunk in enumerate(text, start=1)]
     return {"status": "ok", "message": "", "pages": pages}
 
 

@@ -24,17 +24,16 @@ def finish_extract(label: str, path: Path, text: str) -> str:
 
 
 def read_pdf(path: Path) -> str:
+    import pdf_text
+
     try:
-        from pypdf import PdfReader
-    except ImportError:
+        text = pdf_text.read_pdf(path)
+    except pdf_text.PdfUnavailable:
         die(
             "Для PDF нужен пакет pypdf: pip install pypdf. "
             "Ядро агента работает и без него — откройте файл в IDE и перенесите цитату вручную."
         )
-    try:
-        reader = PdfReader(str(path))
-        text = "\n\n".join((page.extract_text() or "") for page in reader.pages)
-    except Exception as exc:  # noqa: BLE001 — optional parser, show the reason in Russian
+    except pdf_text.PdfFailed as exc:
         die(f"PDF открыть не удалось ({path.name}): {exc}. Процитируйте фрагмент вручную.")
     return finish_extract("PDF", path, text)
 

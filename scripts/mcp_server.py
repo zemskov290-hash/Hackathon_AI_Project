@@ -70,6 +70,8 @@ INSTRUCTIONS = (
     "Число в содержательном разделе strategy.md без источника, расчёта или интервью — ошибка strat_check. "
     "Число со ссылкой [S…] или [E…] должно встречаться в тексте этого источника. "
     "Допущение, прогноз и оценка, которых в источнике нет, — strat_add_assumption и ссылка [U…], не [S…]. "
+    "Таблицу показателей регистрируй по ячейкам strat_indicators_add и вставляй strat_indicators_table. "
+    "Ошибку проверки исправляй смыслом, не единицей и не второй записью «для проверки». "
     "Год, которого нет в источниках и в брифе, в документ не ставь: подтверди его strat_confirm_date. "
     "Непроверенную ссылку помечай словом «непроверен» и не держи на ней вывод один. "
     "Долю проверенных ссылок держи не ниже 90%. Этап не закрывай, пока strat_check не чист.\n"
@@ -582,6 +584,42 @@ def handle_add_evidence(arguments: dict) -> dict:
     return finish(code, text, data)
 
 
+def handle_indicators_add(arguments: dict) -> dict:
+    project = confine_project(arguments["project"])
+    code, text = invoke(
+        strat.cmd_indicators_add,
+        ns(
+            rest=[project.name],
+            indicator=reject_dash(arguments["indicator"], "indicator"),
+            indicator_file=None,
+            scenario=reject_dash(arguments["scenario"], "scenario"),
+            scenario_file=None,
+            value=reject_dash(arguments["value"], "value"),
+            value_file=None,
+            unit=reject_dash(arguments.get("unit") or "", "unit"),
+            unit_file=None,
+            direction=arguments["direction"],
+            role=arguments["role"],
+            source=arguments["source"],
+        ),
+    )
+    data: dict = {"project": project.name, "source": arguments["source"]}
+    found = parsed_id(text)
+    if found:
+        data["id"] = found
+    return finish(code, text, data)
+
+
+def handle_indicators_table(arguments: dict) -> dict:
+    project = confine_project(arguments["project"])
+    into = arguments.get("into") or ""
+    code, text = invoke(
+        strat.cmd_indicators_table,
+        ns(rest=[project.name], into=into or None),
+    )
+    return finish(code, text, {"project": project.name, "into": into})
+
+
 def handle_add_assumption(arguments: dict) -> dict:
     project = confine_project(arguments["project"])
     value = reject_dash(arguments["value"], "value")
@@ -601,6 +639,13 @@ def handle_add_assumption(arguments: dict) -> dict:
             unit_file=None,
             note=note,
             note_file=None,
+            indicator=arguments.get("indicator") or "",
+            indicator_file=None,
+            scenario=arguments.get("scenario") or "",
+            scenario_file=None,
+            forecast_role=arguments.get("forecast_role") or "initiative",
+            because=arguments.get("because") or "",
+            because_file=None,
         ),
     )
     data: dict = {"project": project.name, "kind": arguments["kind"]}
@@ -1353,12 +1398,67 @@ def build_tools() -> list[dict]:
                     "value": string_prop("Число: 200, 400 тыс., 1,2 млн или 60%.", max_length=80),
                     "name": string_prop("Короткое название, например стоимость обращения.", max_length=300),
                     "unit": string_prop("Единица, например руб.", max_length=40),
-                    "note": string_prop("Зачем это допущение.", max_length=2_000),
+                    "note": string_prop("Зачем это допущение. Не пишите «для проверки».", max_length=2_000),
+                    "indicator": string_prop("Показатель из реестра, если это его прогноз.", max_length=300),
+                    "scenario": string_prop("Название этого прогноза, не заголовок столбца брифа.", max_length=300),
+                    "forecast_role": {
+                        "type": "string",
+                        "enum": ["initiative", "alternate"],
+                        "description": "initiative сравнивается с базой и целью.",
+                    },
+                    "because": string_prop(
+                        "Почему прогноз хуже сценария без изменений, если так вышло.",
+                        max_length=2_000,
+                    ),
                 },
                 ["kind", "value", "name"],
             ),
             {**MUTATION, "title": "Записать допущение"},
             handle_add_assumption,
+        ),
+        tool(
+            "strat_indicators_add",
+            "Зарегистрировать одну ячейку таблицы показателей. indicator и scenario — дословно из источника. "
+            "direction: больше (рост лучше) или меньше (снижение лучше). "
+            "role: база (сценарий без изменений на период прогноза), цель или контекст. "
+            "Какой столбец база, а какой цель, решают по заголовкам и подтверждают в брифе.",
+            project_schema(
+                {
+                    "indicator": string_prop("Название показателя как в источнике.", max_length=300),
+                    "scenario": string_prop("Заголовок столбца как в источнике.", max_length=300),
+                    "value": string_prop("Число ячейки.", max_length=80),
+                    "unit": string_prop("Единица: %, п.п., млн, часы. Пусто, если её нет.", max_length=40),
+                    "direction": {
+                        "type": "string",
+                        "enum": ["больше", "меньше", "higher", "lower"],
+                        "description": "больше — рост лучше, меньше — снижение лучше.",
+                    },
+                    "role": {
+                        "type": "string",
+                        "enum": ["база", "цель", "контекст", "baseline", "goal", "context"],
+                        "description": "Роль столбца, не его заголовок.",
+                    },
+                    "source": string_prop("Источник ячейки, например S001.", pattern=r"^S\d{3,}$", max_length=12),
+                },
+                ["indicator", "scenario", "value", "direction", "role", "source"],
+            ),
+            {**MUTATION, "title": "Записать ячейку показателя"},
+            handle_indicators_add,
+        ),
+        tool(
+            "strat_indicators_table",
+            "Вставить в документ таблицу показателей из реестра. Вручную ячейки не переписывают. "
+            "into: brief.md, strategy.md или deliverable.md. Без into команда только печатает таблицу.",
+            project_schema(
+                {
+                    "into": string_prop(
+                        "brief.md, strategy.md или deliverable.md.",
+                        max_length=40,
+                    ),
+                },
+            ),
+            {**MUTATION, "title": "Вставить таблицу показателей"},
+            handle_indicators_table,
         ),
         tool(
             "strat_confirm_date",

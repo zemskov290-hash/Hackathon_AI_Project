@@ -50,13 +50,14 @@ ATOM_RE = re.compile(
     rf"(?P<whole>\d+)"
     rf"(?P<frac>[.,]\d+)?"
     rf"(?:\s*(?P<mag>{MAGNITUDE}))?"
-    rf"(?P<pct>\s*%|\s+(?:{PERCENT_WORD})(?!\w))?",
+    rf"(?:(?P<pct>\s*%|\s+(?:{PERCENT_WORD})(?!\w))"
+    rf"|(?P<pts>\s*п\.\s*п\.?|\s+процентн\w*\s+пункт\w*))?",
     re.IGNORECASE,
 )
 SPACE_GAP_RE = re.compile(r"[ \t\u00a0\u202f\u2007\u2009]+")
 DASH_GAP_RE = re.compile(r"\s*[-–—]\s*")
 ABBREV_RE = re.compile(
-    r"\b(руб|тыс|млн|млрд|шт|коп|др|пр|см|стр)\.",
+    r"\b(руб|тыс|млн|млрд|шт|коп|др|пр|см|стр|п)\.",
     re.IGNORECASE,
 )
 SCALE = {
@@ -239,18 +240,29 @@ MAG_FACTOR = (
 class Quantity:
     """A comparable magnitude. 2,0 and 2.0 match; 60% does not match 60."""
 
-    def __init__(self, value: Decimal, percent: bool = False) -> None:
+    def __init__(self, value: Decimal, percent: bool = False, points: bool = False) -> None:
         self.value = value
-        self.percent = percent
+        self.percent = percent and not points
+        self.points = points
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, Quantity) and self.percent == other.percent and self.value == other.value
+        return (
+            isinstance(other, Quantity)
+            and self.percent == other.percent
+            and self.points == other.points
+            and self.value == other.value
+        )
 
     def __hash__(self) -> int:
-        return hash((self.value, self.percent))
+        return hash((self.value, self.percent, self.points))
 
     def __repr__(self) -> str:
-        suffix = "%" if self.percent else ""
+        if self.points:
+            suffix = "п.п."
+        elif self.percent:
+            suffix = "%"
+        else:
+            suffix = ""
         return f"{self.value}{suffix}"
 
 
@@ -346,7 +358,7 @@ def _year_token(whole: str, frac: str | None, mag: str | None, pct: str | None) 
 
 def _plain_group(match: re.Match[str]) -> str | None:
     """A bare integer that can continue a row of table numbers. A sign starts a new number."""
-    if match.group("frac") or match.group("mag") or match.group("pct") or match.group("sign"):
+    if match.group("frac") or match.group("mag") or match.group("pct") or match.group("pts") or match.group("sign"):
         return None
     whole = match.group("whole")
     if _year_token(whole, None, None, None):
@@ -356,7 +368,7 @@ def _plain_group(match: re.Match[str]) -> str | None:
 
 def _cluster_head(match: re.Match[str]) -> tuple[str, str] | None:
     """(sign, digits) for an integer that may begin «+1 000». A year does not."""
-    if match.group("frac") or match.group("mag") or match.group("pct"):
+    if match.group("frac") or match.group("mag") or match.group("pct") or match.group("pts"):
         return None
     whole = match.group("whole")
     if _year_token(whole, None, None, None):
@@ -372,9 +384,10 @@ def _atom_span(match: re.Match[str], *, keep_small: bool) -> tuple[Quantity, str
     frac = match.group("frac")
     mag = match.group("mag")
     pct = match.group("pct")
+    pts = match.group("pts")
     if _year_token(whole, frac, mag, pct):
         return None
-    small = len(whole) < 2 and not frac and not mag and not pct
+    small = len(whole) < 2 and not frac and not mag and not pct and not pts
     if small and not keep_small:
         return None
     number = whole
@@ -386,7 +399,7 @@ def _atom_span(match: re.Match[str], *, keep_small: bool) -> tuple[Quantity, str
         return None
     if (match.group("sign") or "").replace("−", "-") == "-":
         value = -value
-    return (Quantity(value, bool(pct)), match.group(0).strip(), match.start(), match.end())
+    return (Quantity(value, bool(pct), bool(pts)), match.group(0).strip(), match.start(), match.end())
 
 
 def _segment_cluster(
@@ -440,9 +453,14 @@ def _promote_percent_range(
     if item[0].percent or atom_index + 1 >= len(atoms):
         return item
     gap = text[atoms[atom_index].end() : atoms[atom_index + 1].start()]
-    if DASH_GAP_RE.fullmatch(gap) and atoms[atom_index + 1].group("pct"):
-        quantity, token, start, end = item
-        return (Quantity(quantity.value, True), token, start, end)
+    nxt = atoms[atom_index + 1]
+    if not DASH_GAP_RE.fullmatch(gap):
+        return item
+    quantity, token, start, end = item
+    if nxt.group("pct"):
+        return (Quantity(quantity.value, True, False), token, start, end)
+    if nxt.group("pts"):
+        return (Quantity(quantity.value, False, True), token, start, end)
     return item
 
 
@@ -488,7 +506,7 @@ def _negate_first(
     quantity, token, start, end = pieces[0]
     if start != origin:
         return pieces
-    pieces[0] = (Quantity(-quantity.value, quantity.percent), token, start, end)
+    pieces[0] = (Quantity(-quantity.value, quantity.percent, quantity.points), token, start, end)
     return pieces
 
 
@@ -581,14 +599,11 @@ def _years_in(text: str) -> set[int]:
 
 
 def _read_pdf(path: Path) -> str | None:
+    import pdf_text
+
     try:
-        from pypdf import PdfReader
-    except ImportError:
-        return None
-    try:
-        reader = PdfReader(str(path))
-        return "\n".join((page.extract_text() or "") for page in reader.pages)
-    except Exception:
+        return pdf_text.read_pdf(path)
+    except (pdf_text.PdfUnavailable, pdf_text.PdfFailed):
         return None
 
 
@@ -696,7 +711,7 @@ def assumption_quantity(row: dict) -> Quantity | None:
     value = str(row.get("value") or "").strip()
     unit = str(row.get("unit") or "").strip()
     direct = parse_quantity(value)
-    if direct is not None and re.search(r"тыс|млн|млрд|%|процент", value, re.I):
+    if direct is not None and re.search(r"тыс|млн|млрд|%|процент|п\.п|пункт", value, re.I):
         return direct
     combined = parse_quantity(f"{value} {unit}".strip()) if unit else None
     return combined or direct
@@ -1127,14 +1142,20 @@ def _review_assumption_visibility(name: str, text: str, assumptions: dict[str, d
                 expected = assumption_quantity(row)
                 if expected is None:
                     continue
-                if _value_in(expected, present):
+                if _reading_in(expected, present):
                     continue
                 shown = _assumption_label(row)
+                hint = ""
+                if expected.points and any(item.percent and item.value == expected.value for item in present):
+                    hint = " Проценты и процентные пункты — разные величины. Единицу ради проверки не меняют."
+                if expected.percent and any(item.points and item.value == expected.value for item in present):
+                    hint = " Процентные пункты и проценты — разные величины. Единицу ради проверки не меняют."
                 add(
                     "assumption-value",
                     f"{name}:{lineno}: [{assumption_id}] без своего значения в этой фразе или ячейке. "
                     f"В реестре {shown}. Напишите число рядом со ссылкой, например «{shown} [{assumption_id}]». "
-                    "Другое число в той же фразе реестр не подтверждает.",
+                    "Другое число в той же фразе реестр не подтверждает."
+                    + hint,
                 )
 
 
@@ -1255,6 +1276,14 @@ def _review_numbers(
             )
 
 
+def _reading_in(quantity: Quantity, present: set[Quantity]) -> bool:
+    """Same number and the same kind of unit. 8 п.п. is not 8 % and not a bare 8."""
+    return any(
+        item.value == quantity.value and item.percent == quantity.percent and item.points == quantity.points
+        for item in present
+    )
+
+
 def _value_in(quantity: Quantity, present: set[Quantity]) -> bool:
     """Same magnitude, whether or not one spelling carries a percent sign."""
     if quantity in present:
@@ -1290,7 +1319,7 @@ def _explained(
         if row is None:
             continue
         parsed = assumption_quantity(row)
-        if parsed is not None and _value_in(quantity, {parsed}) and _marker_present(sentence, str(row.get("kind"))):
+        if parsed is not None and _reading_in(quantity, {parsed}) and _marker_present(sentence, str(row.get("kind"))):
             return True
     for analysis_id, metric in analysis:
         if quantity in _analysis_values(project, analysis_id, metric):

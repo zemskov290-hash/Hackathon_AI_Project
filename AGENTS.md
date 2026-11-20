@@ -41,6 +41,10 @@ python scripts/strat.py resume
 
 Не читай и не копируй `situation.md`, `options.md`, `evidence.jsonl`, `strategy.md`, `deliverable.md` и остальные тексты из другой папки `projects/`. Свидетельство ссылается только на источник из `sources.jsonl` этого проекта. `check` отвечает `foreign-project`, если в текстах проекта есть `projects/<другой>/` или имя чужой папки, и `source-missing`, если источник свидетельства в реестре этого проекта отсутствует. Запись в проект, который не активен, CLI отклоняет: смена только явной командой `active <id>`.
 
+## Показатели и сценарии
+
+Таблица показателей в брифе регистрируется по ячейкам: `indicators add` пишет показатель, заголовок столбца дословно из источника, значение, единицу, направление (больше лучше или меньше лучше) и роль столбца. Какой столбец — сценарий без изменений на период прогноза, а какой — цель, агент решает по заголовкам и показывает человеку на контрольной точке брифа. В стратегию и deliverable таблица вставляется командой `indicators table`, а не набирается заново. Прогноз инициативы сравнивается с этой базой и с целью. Ошибку `check` исправляют смыслом или расчётом. Единицу не подменяют, второе допущение с тем же значением не заводят, в заметке не пишут «для проверки». Процентные пункты и проценты — разные величины.
+
 ## Экономия
 
 Один основной агент ведёт задачу. Три роли подключай только по назначению: сбор свидетельств, возражения на этапе 5, синтетическая персона по явной просьбе. Модель по умолчанию — подписка IDE. Платный API не вызывай, пока человек не заполнил `.env`. Модели в `.claude/agents/` не меняй.
@@ -166,7 +170,7 @@ chcp 65001
 
 Из корня репозитория: `python scripts/strat.py --help`.
 
-`init`, `status`, `resume`, `use`, `active`, `show`, `fetch` (`--force`), `add-source`, `add-evidence`, `supersede`, `add-option`, `supersede-option`, `analyze` (`--id`, `--verify`), `inspect`, `kb add`, `kb index`, `kb search`, `interview guide`, `interview accept`, `reply-check`, `check` (`--strict`), `impact`, `retract`, `log` (`--minutes`, `--input-chars`, `--output-chars`, `--tier`), `cost` (`--estimate`), `confirm`, `advance`, `propose-revision`, `accept-revision`, `doctor`, `complete` (`--tier cheap|strong|ide`), `classify` (`--task claim-type|impact|route`).
+`init`, `status`, `resume`, `use`, `active`, `show`, `fetch` (`--force`), `add-source`, `add-evidence`, `supersede`, `add-option`, `supersede-option`, `indicators add`, `indicators table`, `analyze` (`--id`, `--verify`), `inspect`, `kb add`, `kb index`, `kb search`, `interview guide`, `interview accept`, `reply-check`, `check` (`--strict`), `impact`, `retract`, `log` (`--minutes`, `--input-chars`, `--output-chars`, `--tier`), `cost` (`--estimate`), `confirm`, `advance`, `propose-revision`, `accept-revision`, `doctor`, `complete` (`--tier cheap|strong|ide`), `classify` (`--task claim-type|impact|route`).
 
 Те же команды, кроме `use`, есть как инструменты MCP `strat_*`, включая `strat_analyze` и `strat_inspect`. Если они есть в сессии, предпочитай их. `confirm` / `advance` / `accept-revision` в MCP требуют `human_confirmed=true`.
 
