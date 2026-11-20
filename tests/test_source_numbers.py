@@ -66,6 +66,53 @@ class QuantityNormalizationTests(unittest.TestCase):
         self.assertEqual(source_check.expand_number_words(untouched), untouched)
         self.assertEqual(source_check.quantities("сто тысяч"), source_check.quantities("100000"))
         self.assertEqual(source_check.quantities("пять"), set())
+        self.assertIn("60", source_check.expand_number_words("не ниже шестидесяти"))
+
+
+BRIEF_TABLE = (
+    "Показатель Базовый год Плановый год План Оценка Без изменений Цель, не ниже "
+    "Валовая прибыль за год, млн руб. 282 275 279 285 "
+    "Активные семейные группы за последний месяц года 5 000 4 000 5 000 8 000 "
+    "Подключённые семейные группы на конец года 7 500 6 500 8 000 12 000 "
+    "Подключённые владельцы нескольких номеров на конец года 1 000 800 1 000 2 000 "
+    "Группы, активированные за 14 дней, среди созданных в последнем квартале "
+    "50 % 42 % 45 % 60 %"
+)
+
+
+class BriefTableTokenTests(unittest.TestCase):
+    """The family-connect brief row is one line. Neighbours must stay separate tokens."""
+
+    def test_table_line_keeps_each_cell(self) -> None:
+        present = source_check.quantities(BRIEF_TABLE)
+        values = {item.value for item in present}
+        for number in (
+            14,
+            275,
+            279,
+            282,
+            285,
+            800,
+            1000,
+            2000,
+            4000,
+            5000,
+            6500,
+            7500,
+            8000,
+            12000,
+        ):
+            self.assertIn(number, values, number)
+        for number in (42, 45, 50, 60):
+            self.assertTrue(
+                any(item.value == number and item.percent for item in present),
+                number,
+            )
+        self.assertNotIn(282275279285, values)
+        self.assertNotIn(1000800, values)
+        self.assertNotIn(9000, values)
+        self.assertNotIn(6200, values)
+        self.assertFalse(any(item.value == 69 for item in present))
 
 
 class SourceNumberCheckTests(unittest.TestCase):
@@ -352,6 +399,59 @@ class SourceNumberCheckTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.assertNotIn("year-not-in-source", codes(self.project))
+
+    def test_brief_table_false_positives_and_real_misses(self) -> None:
+        note = self.project / "sources" / "brief.md"
+        note.write_text(BRIEF_TABLE + "\n", encoding="utf-8")
+        self.write_deliverable(
+            "База сорок два процента, план сорок пять, цель не ниже шестидесяти [S001].\n"
+            "Оценка 275 и прогноз 279 уже стоят в таблице брифа [S001].\n"
+            "Владельцев 800 и 2 000 [S001].\n"
+            "Доля `5000 / 8000 = 62,5 %` [S001].\n"
+            "Прогноз 9 000 групп и 6 200 подключений [S001].\n"
+            "Активация 69 % [S001].\n"
+            "Эффект +4 млн [S001].\n"
+            "Чужой операнд `2 * 5000 = 10000` [S001].\n"
+        )
+        (self.project / "strategy.md").write_text(
+            "# Стратегия\n\nПросьба к руководству на конец Q1 2026.\n",
+            encoding="utf-8",
+        )
+        blob = messages(self.project, "number-not-in-source")
+        self.assertNotIn("число 45", blob)
+        self.assertNotIn("число 42%", blob)
+        self.assertNotIn("число 275", blob)
+        self.assertNotIn("число 279", blob)
+        self.assertNotIn("число 800", blob)
+        self.assertNotIn("62", blob)
+        flat = blob.replace(" ", "")
+        self.assertIn("9000", flat)
+        self.assertIn("6200", flat)
+        self.assertIn("69%", blob.replace(" ", ""))
+        self.assertIn("4млн", flat)
+        self.assertIn("операнд", blob)
+        self.assertIn("2026", messages(self.project, "year-not-in-source"))
+
+    def test_pdf_extract_sidecar_fills_numbers_the_pdf_layer_missed(self) -> None:
+        pdf = self.project / "sources" / "brief-family-devices.pdf"
+        pdf.write_bytes(_minimal_pdf("Price 500 only"))
+        (self.project / "sources" / "brief-family-devices-extract.txt").write_text(
+            BRIEF_TABLE + "\n",
+            encoding="utf-8",
+        )
+        strat.cmd_add_source(
+            Namespace(
+                rest=["family", "sources/brief-family-devices.pdf"],
+                kind="doc",
+                title="PDF",
+                title_file=None,
+                reliability="med",
+            )
+        )
+        self.write_deliverable("В брифе 800 владельцев [S002] и выдумка 7777 [S002].\n")
+        blob = messages(self.project, "number-not-in-source")
+        self.assertIn("7777", blob)
+        self.assertNotIn("число 800", blob)
 
     def test_pdf_number_is_read_or_refused(self) -> None:
         pdf = self.project / "sources" / "note.pdf"

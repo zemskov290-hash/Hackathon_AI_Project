@@ -42,15 +42,19 @@ MAGNITUDE = (
     r"млн\.?|миллионов|миллиона|миллион|"
     r"млрд\.?|миллиардов|миллиарда|миллиард"
 )
-PERCENT_WORD = r"процентов|процента|процент"
-NUMBER_RE = re.compile(
+PERCENT_WORD = r"процентами|процентам|процентов|процента|проценте|процент"
+# One numeric atom. Thousand groups are NOT swallowed here: «1 000 800» is three
+# atoms, and a later pass joins only an unambiguous thousand («5 000», «12 000»).
+ATOM_RE = re.compile(
     rf"(?<![\w.])(?P<sign>[+-](?=\d))?"
-    rf"(?P<whole>\d{{1,3}}(?:[ \u00a0\u202f]\d{{3}})+|\d+)"
+    rf"(?P<whole>\d+)"
     rf"(?P<frac>[.,]\d+)?"
     rf"(?:\s*(?P<mag>{MAGNITUDE}))?"
     rf"(?P<pct>\s*%|\s+(?:{PERCENT_WORD})(?!\w))?",
     re.IGNORECASE,
 )
+SPACE_GAP_RE = re.compile(r"[ \t\u00a0\u202f\u2007\u2009]+")
+DASH_GAP_RE = re.compile(r"\s*[-–—]\s*")
 ABBREV_RE = re.compile(
     r"\b(руб|тыс|млн|млрд|шт|коп|др|пр|см|стр)\.",
     re.IGNORECASE,
@@ -76,6 +80,9 @@ CARDINAL = {
     "одно": 1,
     "два": 2,
     "две": 2,
+    "двух": 2,
+    "двум": 2,
+    "двумя": 2,
     "три": 3,
     "четыре": 4,
     "пять": 5,
@@ -110,8 +117,35 @@ CARDINAL = {
     "семьсот": 700,
     "восемьсот": 800,
     "девятьсот": 900,
+    "десяти": 10,
+    "десятью": 10,
+    "двадцати": 20,
+    "двадцатью": 20,
+    "тридцати": 30,
+    "тридцатью": 30,
+    "сорока": 40,
+    "пятидесяти": 50,
+    "пятьюдесятью": 50,
+    "шестидесяти": 60,
+    "шестьюдесятью": 60,
+    "семидесяти": 70,
+    "семьюдесятью": 70,
+    "восьмидесяти": 80,
+    "восьмьюдесятью": 80,
+    "девяноста": 90,
+    "ста": 100,
+    "двухсот": 200,
+    "трехсот": 300,
+    "трёхсот": 300,
+    "четырехсот": 400,
+    "четырёхсот": 400,
+    "пятисот": 500,
+    "шестисот": 600,
+    "семисот": 700,
+    "восьмисот": 800,
+    "девятисот": 900,
 }
-PERCENT_WORDS = {"процент", "процента", "процентов"}
+PERCENT_WORDS = {"процент", "процента", "процентов", "процентам", "процентами", "проценте"}
 WORD_LIST = sorted(
     list(CARDINAL) + list(SCALE) + list(PERCENT_WORDS),
     key=len,
@@ -236,37 +270,126 @@ def _year_token(whole: str, frac: str | None, mag: str | None, pct: str | None) 
     return bool(YEAR_RE.fullmatch(digits))
 
 
+def _plain_group(match: re.Match[str]) -> str | None:
+    """A bare integer that can sit in a row of table numbers. A year is not one."""
+    if match.group("frac") or match.group("mag") or match.group("pct") or match.group("sign"):
+        return None
+    whole = match.group("whole")
+    if _year_token(whole, None, None, None):
+        return None
+    return whole
+
+
+def _atom_span(match: re.Match[str], *, keep_small: bool) -> tuple[Quantity, str, int, int] | None:
+    whole = match.group("whole")
+    frac = match.group("frac")
+    mag = match.group("mag")
+    pct = match.group("pct")
+    if _year_token(whole, frac, mag, pct):
+        return None
+    small = len(whole) < 2 and not frac and not mag and not pct
+    if small and not keep_small:
+        return None
+    number = whole
+    if frac:
+        number += "." + re.sub(r"\D", "", frac)
+    try:
+        value = Decimal(number) * _magnitude(mag or "")
+    except InvalidOperation:
+        return None
+    if match.group("sign") == "-":
+        value = -value
+    return (Quantity(value, bool(pct)), match.group(0).strip(), match.start(), match.end())
+
+
+def _segment_cluster(
+    cluster: list[tuple[str, int, int]],
+    text: str,
+    *,
+    keep_small: bool,
+) -> list[tuple[Quantity, str, int, int]]:
+    """Join «5 000» and «1 000 000». Do not join «282 275» or «1 000 800»."""
+    found: list[tuple[Quantity, str, int, int]] = []
+    index = 0
+    total = len(cluster)
+    while index < total:
+        digits, start, _end = cluster[index]
+        take = 1
+        if index + 1 < total and len(cluster[index + 1][0]) == 3 and len(digits) <= 3:
+            nxt = cluster[index + 1][0]
+            if len(digits) <= 2 or nxt == "000":
+                take = 2
+                while index + take < total and cluster[index + take][0] == "000":
+                    take += 1
+        if take > 1:
+            end = cluster[index + take - 1][2]
+            joined = "".join(cluster[index + offset][0] for offset in range(take))
+            try:
+                value = Decimal(joined)
+            except InvalidOperation:
+                index += 1
+                continue
+            found.append((Quantity(value), text[start:end].strip(), start, end))
+            index += take
+            continue
+        if len(digits) >= 2 or keep_small:
+            try:
+                value = Decimal(digits)
+            except InvalidOperation:
+                index += 1
+                continue
+            found.append((Quantity(value), digits, start, cluster[index][2]))
+        index += 1
+    return found
+
+
+def _promote_percent_range(
+    text: str,
+    atoms: list[re.Match[str]],
+    atom_index: int,
+    item: tuple[Quantity, str, int, int],
+) -> tuple[Quantity, str, int, int]:
+    """«20–25%» is 20% and 25%, not a bare 20 beside 25%."""
+    if item[0].percent or atom_index + 1 >= len(atoms):
+        return item
+    gap = text[atoms[atom_index].end() : atoms[atom_index + 1].start()]
+    if DASH_GAP_RE.fullmatch(gap) and atoms[atom_index + 1].group("pct"):
+        quantity, token, start, end = item
+        return (Quantity(quantity.value, True), token, start, end)
+    return item
+
+
+def iter_quantity_spans(text: str, *, keep_small: bool = False) -> list[tuple[Quantity, str, int, int]]:
+    """Numbers with spans. A table row keeps each cell's number, including inside «1 000 800»."""
+    atoms = list(ATOM_RE.finditer(text))
+    found: list[tuple[Quantity, str, int, int]] = []
+    index = 0
+    while index < len(atoms):
+        if _plain_group(atoms[index]) is None:
+            item = _atom_span(atoms[index], keep_small=keep_small)
+            if item is not None:
+                found.append(_promote_percent_range(text, atoms, index, item))
+            index += 1
+            continue
+        cluster = [(_plain_group(atoms[index]) or "", atoms[index].start(), atoms[index].end())]
+        cursor = index + 1
+        while cursor < len(atoms) and _plain_group(atoms[cursor]) is not None:
+            gap = text[atoms[cursor - 1].end() : atoms[cursor].start()]
+            if SPACE_GAP_RE.fullmatch(gap) is None:
+                break
+            cluster.append((_plain_group(atoms[cursor]) or "", atoms[cursor].start(), atoms[cursor].end()))
+            cursor += 1
+        pieces = _segment_cluster(cluster, text, keep_small=keep_small)
+        if len(pieces) == 1 and cursor < len(atoms):
+            pieces = [_promote_percent_range(text, atoms, cursor - 1, pieces[0])]
+        found.extend(pieces)
+        index = cursor
+    return found
+
+
 def iter_quantities(text: str, *, keep_small: bool = False) -> list[tuple[Quantity, str]]:
     """Quantities in text that has already been word-expanded. Years are skipped."""
-    found: list[tuple[Quantity, str]] = []
-    matches = list(NUMBER_RE.finditer(text))
-    for index, match in enumerate(matches):
-        whole = match.group("whole")
-        frac = match.group("frac")
-        mag = match.group("mag")
-        pct = match.group("pct")
-        if not pct and index + 1 < len(matches):
-            gap = text[match.end() : matches[index + 1].start()]
-            if re.fullmatch(r"\s*[-–—]\s*", gap) and matches[index + 1].group("pct"):
-                pct = matches[index + 1].group("pct")
-        if _year_token(whole, frac, mag, pct):
-            continue
-        digits = re.sub(r"\D", "", whole)
-        small = len(digits) < 2 and not frac and not mag and not pct
-        if small and not keep_small:
-            continue
-        number = digits
-        if frac:
-            number += "." + re.sub(r"\D", "", frac)
-        try:
-            value = Decimal(number) * _magnitude(mag or "")
-        except InvalidOperation:
-            continue
-        if match.group("sign") == "-":
-            value = -value
-        token = match.group(0).strip()
-        found.append((Quantity(value, bool(pct)), token))
-    return found
+    return [(quantity, token) for quantity, token, _start, _end in iter_quantity_spans(text, keep_small=keep_small)]
 
 
 def quantities(text: str) -> set[Quantity]:
@@ -362,6 +485,27 @@ def _read_pdf(path: Path) -> str | None:
         return "\n".join((page.extract_text() or "") for page in reader.pages)
     except Exception:
         return None
+
+
+def _companion_extracts(path: Path) -> list[str]:
+    """A saved text next to a PDF: brief-family-devices-extract.txt or the same stem .txt."""
+    if path.suffix.lower() != ".pdf":
+        return []
+    texts: list[str] = []
+    for candidate in (path.with_name(path.stem + "-extract.txt"), path.with_suffix(".txt")):
+        if candidate.is_file():
+            texts.append(candidate.read_text(encoding="utf-8", errors="replace"))
+    return texts
+
+
+def source_text(path: Path) -> tuple[str | None, str | None]:
+    """PDF text, plus a sidecar extract when the agent saved one. Other files are read as-is."""
+    text, problem = read_material_text(path)
+    chunks = [text] if text else []
+    chunks.extend(_companion_extracts(path))
+    if chunks:
+        return "\n".join(chunks), None
+    return None, problem or "текст не прочитан"
 
 
 def read_material_text(path: Path) -> tuple[str | None, str | None]:
@@ -537,17 +681,11 @@ def _prepare_formula(body: str) -> tuple[str, list[tuple[Quantity, str]]]:
     pieces: list[str] = []
     quantities_found: list[tuple[Quantity, str]] = []
     cursor = 0
-    for match in NUMBER_RE.finditer(expanded):
-        pieces.append(expanded[cursor : match.start()])
-        parsed = iter_quantities(match.group(0), keep_small=True)
-        if not parsed:
-            pieces.append(match.group(0))
-            cursor = match.end()
-            continue
-        quantity, token = parsed[0]
+    for quantity, token, start, end in iter_quantity_spans(expanded, keep_small=True):
+        pieces.append(expanded[cursor:start])
         pieces.append(format(quantity.value, "f"))
         quantities_found.append((quantity, token))
-        cursor = match.end()
+        cursor = end
     pieces.append(expanded[cursor:])
     expression = "".join(pieces)
     if re.search(r"[A-Za-zА-Яа-яЁё_]", expression):
@@ -559,16 +697,26 @@ def _split_formula(body: str) -> tuple[list[tuple[Quantity, str]], Quantity]:
     expression, _numbers = _prepare_formula(body)
     if expression.count("=") != 1:
         raise ValueError("в формуле нужен один знак «=»")
-    _left, right = expression.split("=", 1)
-    # Operands are the numbers that stood on the left of «=».
-    left_expr, left_numbers = _prepare_formula(body.split("=", 1)[0])
+    left_body, right_body = body.split("=", 1)
+    left_expr, left_numbers = _prepare_formula(left_body)
+    right_expr, right_numbers = _prepare_formula(right_body)
     if not left_numbers:
         raise ValueError("слева от «=» нет чисел")
+    if not right_numbers:
+        raise ValueError("справа от «=» нет числа")
     got = _eval_decimal(left_expr)
-    expected = _eval_decimal(right)
-    if abs(got - expected) > Decimal("0.000001"):
-        raise ValueError(f"результат {expected} не равен вычислению {got}")
-    return left_numbers, Quantity(expected)
+    expected = _eval_decimal(right_expr)
+    percent_result = any(quantity.percent for quantity, _token in right_numbers)
+    # «5000 / 8000 = 62,5 %» is 0.625 × 100, not 0.625 itself.
+    tolerance = Decimal("0.000001")
+    matches = abs(got - expected) <= tolerance
+    if percent_result:
+        matches = matches or abs(got * 100 - expected) <= tolerance
+    if not matches:
+        scale = " × 100" if percent_result else ""
+        raise ValueError(f"результат {expected} не равен вычислению {got}{scale}")
+    result = right_numbers[-1][0]
+    return left_numbers, result
 
 
 def _snippet(sentence: str) -> str:
@@ -612,7 +760,7 @@ def review(project: Path, texts: dict, sources: list[dict], evidence: list[dict]
         if path is None:
             source_cache[source_id] = (set(), "нет локального текста")
             return source_cache[source_id]
-        text, problem = read_material_text(path)
+        text, problem = source_text(path)
         if text is None:
             source_cache[source_id] = (set(), problem or "текст не прочитан")
             return source_cache[source_id]
@@ -663,7 +811,7 @@ def _allowed_years(project: Path, texts: dict, by_source: dict[str, dict]) -> se
         path = _source_path(project, row)
         if path is None:
             continue
-        text, _problem = read_material_text(path)
+        text, _problem = source_text(path)
         if text:
             years |= _years_in(text)
     state_path = project / "state.json"
@@ -833,6 +981,13 @@ def _review_numbers(
             )
 
 
+def _value_in(quantity: Quantity, present: set[Quantity]) -> bool:
+    """Same magnitude, whether or not one spelling carries a percent sign."""
+    if quantity in present:
+        return True
+    return any(item.value == quantity.value for item in present)
+
+
 def _explained(
     quantity: Quantity,
     sentence: str,
@@ -852,7 +1007,9 @@ def _explained(
         present, problem = source_quantities(source_id)
         if problem:
             continue
-        if quantity in present:
+        # «45» and «45 %» are the same magnitude. «оценка» next to a number that
+        # is already in the source does not turn that number into an assumption.
+        if _value_in(quantity, present):
             return True
     for assumption_id in assumption_ids:
         row = assumptions.get(assumption_id)
