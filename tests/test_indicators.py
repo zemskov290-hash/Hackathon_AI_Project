@@ -390,6 +390,26 @@ class IndicatorScenarioTests(unittest.TestCase):
                 ],
                 [("доля возврата", "после шага", "9", "п.п.", "сдвиг после шага")],
             ),
+            (
+                "registry-digits",
+                (
+                    "Показатель когорта 2024 если ничего не менять порог\n"
+                    "срок 14 дней 3 шт 5 шт 8 шт\n"
+                    "конверсия 10 % 4 % 6 % 9 %\n"
+                ),
+                [
+                    ("срок 14 дней", "когорта 2024", "3", "шт", "больше", "контекст"),
+                    ("срок 14 дней", "если ничего не менять", "5", "шт", "больше", "база"),
+                    ("срок 14 дней", "порог", "8", "шт", "больше", "цель"),
+                    ("конверсия 10 %", "когорта 2024", "4", "%", "больше", "контекст"),
+                    ("конверсия 10 %", "если ничего не менять", "6", "%", "больше", "база"),
+                    ("конверсия 10 %", "порог", "9", "%", "больше", "цель"),
+                ],
+                [
+                    ("срок 14 дней", "горизонт 18 месяцев", "8", "шт", "срок после шага"),
+                    ("конверсия 10 %", "горизонт 18 месяцев", "9", "%", "конверсия после шага"),
+                ],
+            ),
         ]
         for project, source, cells, forecasts in registries:
             folder = self.init_project(project, source)
@@ -445,6 +465,26 @@ class IndicatorScenarioTests(unittest.TestCase):
                     self._strip_template(folder, name)
             found = [item for item in strat.check_project(folder) if not item.get("warning")]
             self.assertEqual(found, [], "\n".join(item["code"] + ": " + item["message"] for item in found))
+            if project == "registry-digits":
+                blob = "\n".join(
+                    (folder / doc).read_text(encoding="utf-8")
+                    for doc in ("brief.md", "strategy.md", "deliverable.md")
+                )
+                for piece in ("срок 14 дней", "конверсия 10 %", "когорта 2024", "горизонт 18 месяцев"):
+                    self.assertIn(piece, blob)
+                deliverable = folder / "deliverable.md"
+                deliverable.write_text(
+                    deliverable.read_text(encoding="utf-8") + "\nОтдельное значение 30 без ссылки.\n",
+                    encoding="utf-8",
+                )
+                bare = "\n".join(
+                    item["message"]
+                    for item in strat.check_project(folder)
+                    if item["code"] == "ungrounded-number"
+                )
+                self.assertIn("30", bare)
+                self.assertNotIn("14", bare)
+                self.assertNotIn("2024", bare)
             strategy = (folder / "strategy.md").read_text(encoding="utf-8")
             self.assertIn("прогноз:", strategy)
             self.assertNotIn("прогноз  ", strategy)

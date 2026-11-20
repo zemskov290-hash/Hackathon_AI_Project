@@ -960,6 +960,81 @@ def _body_headers(text: str) -> dict[int, list[str]]:
     return found
 
 
+def registry_labels(project: Path) -> list[str]:
+    """Indicator names and scenario titles. Digits inside them are not cell values."""
+    labels: list[str] = []
+    rows, _error = _load_jsonl(project / "indicators.jsonl")
+    for row in rows:
+        if row.get("status", "active") != "active":
+            continue
+        for key in ("indicator", "scenario"):
+            text = str(row.get(key) or "").strip()
+            if text:
+                labels.append(text)
+    assumptions, _assumption_error = load_assumptions(project)
+    for row in assumptions.values():
+        if row.get("status", "active") != "active":
+            continue
+        scenario = str(row.get("scenario") or "").strip()
+        if scenario:
+            labels.append(scenario)
+    return labels
+
+
+def _label_spans(fragment: str, labels: list[str]) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    seen: set[str] = set()
+    for label in labels:
+        folded = re.sub(r"\s+", " ", label).strip()
+        if len(folded) < 2 or folded.casefold() in seen:
+            continue
+        seen.add(folded.casefold())
+        for match in re.finditer(re.escape(folded), fragment, re.IGNORECASE):
+            spans.append((match.start(), match.end()))
+    return spans
+
+
+def inside_registry_label(fragment: str, start: int, end: int, labels: list[str]) -> bool:
+    """True when this number sits inside a registered name that also has letters.
+
+    A cell value that merely repeats those digits is not covered: the name has to
+    extend past the number with a word.
+    """
+    if not labels or start >= end:
+        return False
+    for left, right in _label_spans(fragment, labels):
+        if start < left or end > right:
+            continue
+        outside = fragment[left:start] + fragment[end:right]
+        if re.search(r"[A-Za-zА-Яа-яЁё]", outside):
+            return True
+    return False
+
+
+def _token_spans(fragment: str, token: str) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    start = 0
+    while True:
+        at = fragment.find(token, start)
+        if at < 0:
+            break
+        after = at + len(token)
+        before_digit = at > 0 and fragment[at - 1].isdigit()
+        after_digit = after < len(fragment) and fragment[after].isdigit()
+        if not before_digit and not after_digit:
+            spans.append((at, after))
+        start = at + 1
+    return spans
+
+
+def token_only_inside_labels(fragment: str, token: str, labels: list[str]) -> bool:
+    """Every occurrence of this token is part of a registered name or scenario."""
+    spans = _token_spans(fragment, token)
+    if not spans:
+        return False
+    return all(inside_registry_label(fragment, start, end, labels) for start, end in spans)
+
+
 def _units_with_marker(text: str):
     """Yield (line, fragment, marker context). A header marks its own column."""
     headers = _body_headers(text)
@@ -1179,7 +1254,10 @@ def _review_assumption_visibility(name: str, text: str, assumptions: dict[str, d
                     ids.append(match.group(1))
             if not ids:
                 continue
-            present = quantities(expand_number_words(scope))
+            present = {
+                item
+                for item, _token in iter_quantities(expand_number_words(scope), keep_small=True)
+            }
             for assumption_id in ids:
                 row = assumptions.get(assumption_id)
                 if row is None:
@@ -1217,6 +1295,7 @@ def _review_numbers(
     source_quantities,
     add,
 ) -> None:
+    label_list = registry_labels(project)
     for lineno, sentence, marker_context in _units_with_marker(text):
         citations = list(CITE_RE.finditer(sentence))
         labels = []
@@ -1243,7 +1322,11 @@ def _review_numbers(
                 assumption_ids.append(label)
         formulas = _formulas(sentence)
         plain = expand_number_words(ISO_DATE_RE.sub(" ", _without_code(sentence)))
-        numbers = iter_quantities(plain)
+        numbers = [
+            (quantity, token)
+            for quantity, token, start, end in iter_quantity_spans(plain)
+            if not inside_registry_label(plain, start, end, label_list)
+        ]
         formula_results: set[Quantity] = set()
         formula_operands: set[Quantity] = set()
         for body in formulas:

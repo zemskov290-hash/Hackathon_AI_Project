@@ -383,10 +383,16 @@ def review_strategy(
         if title not in SUBSTANTIVE.get(parent, ()):
             continue
         claims = _claims(body)
-        for claim in claims:
-            import source_check
+        import source_check
 
-            numbers = _numbers(source_check.expand_number_words(claim))
+        label_list = source_check.registry_labels(project)
+        for claim in claims:
+            expanded = source_check.expand_number_words(claim)
+            numbers = [
+                token
+                for token in _numbers(expanded)
+                if not source_check.token_only_inside_labels(expanded, token, label_list)
+            ]
             if not numbers:
                 continue
             if _cited(claim) or _calc_grounded(claim, claims):
@@ -528,8 +534,14 @@ def review_substantive_numbers(
             continue
         import source_check
 
+        label_list = source_check.registry_labels(project)
         for line, sentence in reply_check._sentences(text):
-            numbers = scorer_numbers(source_check.expand_number_words(sentence))
+            expanded = source_check.expand_number_words(sentence)
+            numbers = [
+                token
+                for token in scorer_numbers(expanded)
+                if not source_check.token_only_inside_labels(expanded, token, label_list)
+            ]
             citations = reply_check._citations(sentence)
             valid = False
             for label, analysis_id, metric in citations:
