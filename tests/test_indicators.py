@@ -45,7 +45,7 @@ class IndicatorScenarioTests(unittest.TestCase):
         self.env = {**os.environ, "STRAT_PROJECTS_DIR": str(self.projects)}
         self.addCleanup(self.tmp.cleanup)
 
-    def cli(self, *args: str) -> subprocess.CompletedProcess[str]:
+    def cli(self, *args: str, input: str | None = None) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "strat.py"), *args],
             cwd=str(ROOT),
@@ -53,12 +53,15 @@ class IndicatorScenarioTests(unittest.TestCase):
             text=True,
             encoding="utf-8",
             env=self.env,
+            input=input,
             timeout=30,
         )
 
     def init_project(self, project: str, source: str) -> Path:
         created = self.cli("init", project, "--title", "Синтетический бриф")
         self.assertEqual(created.returncode, 0, created.stdout + created.stderr)
+        switched = self.cli("active", project)
+        self.assertEqual(switched.returncode, 0, switched.stdout + switched.stderr)
         folder = self.projects / project
         (folder / "sources" / "table.md").write_text(source, encoding="utf-8")
         added = self.cli("add-source", project, "sources/table.md", "--kind", "own", "--title", "Таблица")
@@ -354,6 +357,175 @@ class IndicatorScenarioTests(unittest.TestCase):
         table = pdf_text.markdown_table(rows)
         self.assertIn("| простой | 9 | 3 |", table)
         self.assertNotIn("93", table)
+
+    def _strip_template(self, folder: Path, name: str) -> None:
+        path = folder / name
+        text = path.read_text(encoding="utf-8").replace("<!-- template: empty -->", "")
+        path.write_text(text, encoding="utf-8")
+
+    def test_generated_tables_pass_check_without_hand_edits(self) -> None:
+        registries = [
+            (
+                "registry-percent",
+                "Показатель старт если ничего не менять порог\nотток 20 % 15 % 8 %\nвыручка 6 млн 10 млн 14 млн\n",
+                [
+                    ("отток", "старт", "20", "%", "меньше", "контекст"),
+                    ("отток", "если ничего не менять", "15", "%", "меньше", "база"),
+                    ("отток", "порог", "8", "%", "меньше", "цель"),
+                    ("выручка", "старт", "6", "млн", "больше", "контекст"),
+                    ("выручка", "если ничего не менять", "10", "млн", "больше", "база"),
+                    ("выручка", "порог", "14", "млн", "больше", "цель"),
+                ],
+                [
+                    ("отток", "с программой", "7", "%", "отток с программой"),
+                    ("выручка", "с программой", "14", "млн", "выручка с программой"),
+                ],
+            ),
+            (
+                "registry-points",
+                "Показатель база сдвига цель сдвига\nдоля возврата 4 п.п. 9 п.п.\n",
+                [
+                    ("доля возврата", "база сдвига", "4", "п.п.", "больше", "база"),
+                    ("доля возврата", "цель сдвига", "9", "п.п.", "больше", "цель"),
+                ],
+                [("доля возврата", "после шага", "9", "п.п.", "сдвиг после шага")],
+            ),
+        ]
+        for project, source, cells, forecasts in registries:
+            folder = self.init_project(project, source)
+            added = self.cli(
+                "indicators",
+                "add",
+                project,
+                "--json",
+                "-",
+                input=json.dumps(
+                    [
+                        {
+                            "indicator": indicator,
+                            "scenario": scenario,
+                            "value": value,
+                            "unit": unit,
+                            "direction": direction,
+                            "role": role,
+                            "source": "S001",
+                        }
+                        for indicator, scenario, value, unit, direction, role in cells
+                    ],
+                    ensure_ascii=False,
+                ),
+            )
+            self.assertEqual(added.returncode, 0, added.stdout + added.stderr)
+            self.assertFalse(list(folder.glob("_tmp_*")))
+            assumed = self.cli(
+                "add-assumption",
+                project,
+                "--json",
+                "-",
+                input=json.dumps(
+                    [
+                        {
+                            "kind": "прогноз",
+                            "name": name,
+                            "value": value,
+                            "unit": unit,
+                            "indicator": indicator,
+                            "scenario": scenario,
+                        }
+                        for indicator, scenario, value, unit, name in forecasts
+                    ],
+                    ensure_ascii=False,
+                ),
+            )
+            self.assertEqual(assumed.returncode, 0, assumed.stdout + assumed.stderr)
+            for name in ("brief.md", "strategy.md", "deliverable.md"):
+                placed = self.cli("indicators", "table", project, "--into", name)
+                self.assertEqual(placed.returncode, 0, placed.stdout + placed.stderr)
+                if name != "deliverable.md":
+                    self._strip_template(folder, name)
+            found = [item for item in strat.check_project(folder) if not item.get("warning")]
+            self.assertEqual(found, [], "\n".join(item["code"] + ": " + item["message"] for item in found))
+            strategy = (folder / "strategy.md").read_text(encoding="utf-8")
+            self.assertIn("прогноз:", strategy)
+            self.assertNotIn("прогноз  ", strategy)
+            edited = strategy.replace(" [U001]", " прогноз [U001]", 1)
+            (folder / "strategy.md").write_text(edited, encoding="utf-8")
+            self.assertIn("indicators-table", codes(folder))
+
+    def test_column_header_is_the_kind_marker_for_its_cells(self) -> None:
+        project = "header-mark"
+        folder = self.init_project(project, "Показатель шаг\nдоля 12 %\n")
+        added = self.add_cell(
+            project,
+            indicator="доля",
+            scenario="шаг",
+            value="12",
+            unit="%",
+            direction="больше",
+            role="база",
+        )
+        self.assertEqual(added.returncode, 0, added.stdout + added.stderr)
+        forecast = self.cli(
+            "add-assumption",
+            project,
+            "--kind",
+            "прогноз",
+            "--name",
+            "доля после",
+            "--value",
+            "12",
+            "--unit",
+            "%",
+            "--indicator",
+            "доля",
+            "--scenario",
+            "после",
+        )
+        self.assertEqual(forecast.returncode, 0, forecast.stdout + forecast.stderr)
+        (folder / "deliverable.md").write_text(
+            "| показатель | прогноз: после |\n| --- | --- |\n| доля | 12 % [U001] |\n",
+            encoding="utf-8",
+        )
+        self.assertNotIn("number-not-in-source", codes(folder))
+        (folder / "deliverable.md").write_text(
+            "| показатель | итог |\n| --- | --- |\n| доля | 12 % [U001] |\n",
+            encoding="utf-8",
+        )
+        self.assertIn("number-not-in-source", codes(folder))
+
+    def test_temp_file_inside_project_is_a_warning_and_json_outside_is_removed(self) -> None:
+        project = "scratch"
+        folder = self.init_project(project, "Показатель шаг\nдоля 4 %\n")
+        (folder / "_tmp_fields.txt").write_text("черновик\n", encoding="utf-8")
+        warned = [item for item in strat.check_project(folder) if item["code"] == "temp-file"]
+        self.assertTrue(warned)
+        self.assertTrue(all(item.get("warning") for item in warned))
+        outside = self.projects / "_tmp_outside.json"
+        outside.write_text(
+            json.dumps(
+                {
+                    "indicator": "доля",
+                    "scenario": "шаг",
+                    "value": "4",
+                    "unit": "%",
+                    "direction": "больше",
+                    "role": "база",
+                    "source": "S001",
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        added = self.cli("indicators", "add", project, "--json", str(outside))
+        self.assertEqual(added.returncode, 0, added.stdout + added.stderr)
+        self.assertFalse(outside.exists())
+        self.assertIn("удалён", added.stdout)
+        inside = folder / "cells.json"
+        inside.write_text("{}", encoding="utf-8")
+        refused = self.cli("indicators", "add", project, "--json", str(inside))
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertTrue(inside.exists())
+        self.assertIn("--json -", refused.stdout)
 
 
 if __name__ == "__main__":

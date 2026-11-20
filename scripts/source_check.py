@@ -917,13 +917,62 @@ def _snippet(sentence: str) -> str:
     return compact
 
 
-def _marker_present(sentence: str, kind: str) -> bool:
-    return KIND_STEM[kind] in sentence.casefold()
+def _marker_present(sentence: str, kind: str, context: str = "") -> bool:
+    """A column header is the marker for every cell under it, not only for its own line."""
+    return KIND_STEM[kind] in f"{sentence}\n{context}".casefold()
 
 
-def _any_marker(sentence: str) -> bool:
-    folded = sentence.casefold()
+def _any_marker(sentence: str, context: str = "") -> bool:
+    folded = f"{sentence}\n{context}".casefold()
     return any(stem in folded for stem in KIND_STEM.values())
+
+
+def _split_cells(row: str) -> list[str]:
+    stripped = row.strip()
+    if not stripped.startswith("|"):
+        return [row]
+    return [cell.strip() for cell in stripped.strip("|").split("|")]
+
+
+def _separator_row(row: str) -> bool:
+    cells = [cell for cell in _split_cells(row) if cell]
+    return bool(cells) and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells)
+
+
+def _body_headers(text: str) -> dict[int, list[str]]:
+    """Line number of a body row → header cells. The header is not hard-coded text."""
+    lines = text.splitlines()
+    found: dict[int, list[str]] = {}
+    index = 0
+    while index < len(lines):
+        if not lines[index].strip().startswith("|"):
+            index += 1
+            continue
+        start = index
+        while index < len(lines) and lines[index].strip().startswith("|"):
+            index += 1
+        block = lines[start:index]
+        if len(block) < 3 or not _separator_row(block[1]):
+            continue
+        header = _split_cells(block[0])
+        for offset in range(2, len(block)):
+            found[start + 1 + offset] = header
+    return found
+
+
+def _units_with_marker(text: str):
+    """Yield (line, fragment, marker context). A header marks its own column."""
+    headers = _body_headers(text)
+    for lineno, sentence in iter_units(text):
+        header = headers.get(lineno)
+        if header is None or not sentence.strip().startswith("|"):
+            yield lineno, sentence, ""
+            continue
+        for index, cell in enumerate(_split_cells(sentence)):
+            if not cell or re.fullmatch(r":?-{3,}:?", cell):
+                continue
+            context = header[index] if index < len(header) else ""
+            yield lineno, cell, context
 
 
 def review(project: Path, texts: dict, sources: list[dict], evidence: list[dict], add) -> None:
@@ -1168,7 +1217,7 @@ def _review_numbers(
     source_quantities,
     add,
 ) -> None:
-    for lineno, sentence in iter_units(text):
+    for lineno, sentence, marker_context in _units_with_marker(text):
         citations = list(CITE_RE.finditer(sentence))
         labels = []
         analysis: list[tuple[str, str]] = []
@@ -1222,6 +1271,7 @@ def _review_numbers(
                     project,
                     source_quantities,
                     formula_results=set(),
+                    marker_context=marker_context,
                 ):
                     continue
                 missing_operands.append(token.strip())
@@ -1260,6 +1310,7 @@ def _review_numbers(
                 project,
                 source_quantities,
                 formula_results,
+                marker_context=marker_context,
             ):
                 continue
             _report_missing(
@@ -1273,6 +1324,7 @@ def _review_numbers(
                 assumptions,
                 source_quantities,
                 add,
+                marker_context=marker_context,
             )
 
 
@@ -1301,6 +1353,7 @@ def _explained(
     project: Path,
     source_quantities,
     formula_results: set[Quantity],
+    marker_context: str = "",
 ) -> bool:
     if quantity in formula_results:
         return True
@@ -1319,7 +1372,11 @@ def _explained(
         if row is None:
             continue
         parsed = assumption_quantity(row)
-        if parsed is not None and _reading_in(quantity, {parsed}) and _marker_present(sentence, str(row.get("kind"))):
+        if (
+            parsed is not None
+            and _reading_in(quantity, {parsed})
+            and _marker_present(sentence, str(row.get("kind")), marker_context)
+        ):
             return True
     for analysis_id, metric in analysis:
         if quantity in _analysis_values(project, analysis_id, metric):
@@ -1338,6 +1395,7 @@ def _report_missing(
     assumptions: dict[str, dict],
     source_quantities,
     add,
+    marker_context: str = "",
 ) -> None:
     hint = ""
     unread = []
@@ -1349,7 +1407,7 @@ def _report_missing(
             unread.append(f"{source_id}: {problem}")
     if unread:
         hint = " " + "; ".join(unread) + "."
-    if assumption_ids or _any_marker(sentence):
+    if assumption_ids or _any_marker(sentence, marker_context):
         if not assumption_ids:
             add(
                 "number-not-in-source",
@@ -1372,7 +1430,7 @@ def _report_missing(
             parsed = assumption_quantity(row)
             if parsed is not None and _value_in(quantity, {parsed}):
                 matched_value = True
-            if not _marker_present(sentence, str(row.get("kind"))):
+            if not _marker_present(sentence, str(row.get("kind")), marker_context):
                 add(
                     "number-not-in-source",
                     f"{name}:{lineno}: [{assumption_id}] — {row.get('kind')}, "

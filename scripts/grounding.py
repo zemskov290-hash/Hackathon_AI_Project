@@ -466,6 +466,27 @@ def review_privacy(project: Path, add) -> None:
                 )
 
 
+def review_temp_files(project: Path, add) -> None:
+    """Argument scratch files are not project material."""
+    if not project.is_dir():
+        return
+    pattern = re.compile(r"(?i)^_tmp_|^tmp_.*\.txt$|\.tmp$")
+    for path in sorted(project.rglob("*")):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(project)
+        if any(part.startswith(".") for part in relative.parts):
+            continue
+        if not pattern.search(path.name):
+            continue
+        add(
+            "temp-file",
+            f"{relative.as_posix()}: посторонний временный файл в папке проекта. "
+            "Несколько полей передавайте одним JSON в stdin (--json -), не файлами _tmp_.",
+            warning=True,
+        )
+
+
 def review_project_layout(project: Path, add) -> None:
     """Raw inputs belong in sources/ or in kb/docs written by kb add."""
     if not project.is_dir():

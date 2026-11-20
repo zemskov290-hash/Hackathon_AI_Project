@@ -163,6 +163,8 @@ WINDOWS_TEXT_HINT = (
     "кириллица превращается в знаки вопроса.\n"
     "Запишите текст в файл UTF-8 и укажите парный флаг с суффиксом -file "
     "(--title-file, --message-file, --grounds-file, --reason-file, --claim-file, --quote-file, --note-file).\n"
+    "Несколько полей сразу передайте одним JSON в stdin: --json - . "
+    "Файл _tmp_ в папке проекта не создавайте.\n"
     "Либо передайте значение «-» и подайте UTF-8 в stdin (так можно только для одного аргумента за вызов).\n"
     "Либо задайте переменную окружения: STRAT_TITLE, STRAT_LOG_MESSAGE, STRAT_GROUNDS, "
     "STRAT_REASON, STRAT_CLAIM, STRAT_QUOTE, STRAT_NOTE. Python читает её в Unicode.\n"
@@ -252,6 +254,43 @@ def read_utf8_arg_file(path_str: str) -> str:
         return path.read_text(encoding="utf-8-sig")
     except UnicodeDecodeError:
         die(f"Файл {path} не в кодировке UTF-8. Сохраните его как UTF-8.")
+
+
+TEMP_FILE_NAME = re.compile(r"(?i)^_tmp_|^tmp_.*\.txt$|\.tmp$")
+
+
+def load_command_json(token: str, project: Path):
+    """One JSON object or a list. Stdin avoids temporary files inside the project."""
+    path: Path | None
+    if token == "-":
+        raw = sys.stdin.read()
+        path = None
+    else:
+        path = Path(token)
+        if not path.is_file():
+            die(f"Файл не найден: {path}")
+        try:
+            path.resolve().relative_to(project.resolve())
+            inside = True
+        except ValueError:
+            inside = False
+        if inside:
+            die(
+                "JSON с полями команды не кладите в папку проекта: от него остаются файлы _tmp_. "
+                "Передайте UTF-8 в стандартный ввод: --json -"
+            )
+        try:
+            raw = path.read_text(encoding="utf-8-sig")
+        except UnicodeDecodeError:
+            die(f"Файл {path} не в кодировке UTF-8. Сохраните его как UTF-8.")
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        die(f"JSON не разобран: {exc.msg}")
+    if path is not None and TEMP_FILE_NAME.search(path.name):
+        path.unlink()
+        print(f"Временный файл удалён: {path}")
+    return payload
 
 
 def strip_one_trailing_newline(text: str) -> str:
@@ -1322,6 +1361,25 @@ def cmd_add_assumption(args: argparse.Namespace) -> int:
     """Record a number that is not in a source. Citation form is [U001], not [A001.metric]."""
     project = resolve_project(args.project)
     ensure_write(project)
+    if getattr(args, "json", None):
+        payload = load_command_json(str(args.json), project)
+        rows = payload if isinstance(payload, list) else [payload]
+        if not isinstance(rows, list) or not rows:
+            die("JSON: объект допущения или непустой список таких объектов.")
+        for row in rows:
+            if not isinstance(row, dict):
+                die("Каждое допущение JSON — объект.")
+            local = argparse.Namespace(**vars(args))
+            local.json = None
+            for key, raw in row.items():
+                if raw is None:
+                    continue
+                setattr(local, str(key).replace("-", "_"), str(raw))
+            for key in list(vars(local)):
+                if key.endswith("_file"):
+                    setattr(local, key, None)
+            cmd_add_assumption(local)
+        return 0
     kind = str(args.kind or "").strip()
     if kind not in source_check.ASSUMPTION_KINDS:
         die(
@@ -1479,45 +1537,31 @@ def _source_contains_quantity(text: str, quantity: source_check.Quantity) -> boo
     return source_check._value_in(quantity, present)
 
 
-def cmd_indicators_add(args: argparse.Namespace) -> int:
-    """Register one source cell: indicator, verbatim scenario, value, direction, role."""
-    project, _tokens = take_project(list(args.rest or []), 0, write=True)
-    indicator_name = resolve_text(
-        args.indicator,
-        args.indicator_file,
-        label="показатель",
-        env_name="STRAT_INDICATOR",
-        required=True,
-    )
-    scenario = resolve_text(
-        args.scenario,
-        args.scenario_file,
-        label="сценарий",
-        env_name="STRAT_SCENARIO",
-        required=True,
-    )
-    value = resolve_text(
-        args.value,
-        args.value_file,
-        label="значение",
-        env_name="STRAT_INDICATOR_VALUE",
-        required=True,
-    )
-    unit = resolve_text(
-        args.unit,
-        args.unit_file,
-        label="единица",
-        env_name="STRAT_INDICATOR_UNIT",
-    ) or ""
-    direction = indicators.canonical_direction(str(args.direction or ""))
-    role = indicators.canonical_role(str(args.role or ""))
+def _register_indicator_cell(
+    project: Path,
+    indicator_name: str,
+    scenario: str,
+    value: str,
+    unit: str,
+    direction_token: str,
+    role_token: str,
+    source_id: str,
+) -> None:
+    indicator_name = indicator_name.strip()
+    scenario = scenario.strip()
+    value = value.strip()
+    unit = unit.strip()
+    direction = indicators.canonical_direction(direction_token)
+    role = indicators.canonical_role(role_token)
+    if not indicator_name or not scenario or not value:
+        die("Нужны показатель, сценарий и значение.")
     if direction is None:
         die("direction: больше или меньше. больше — рост лучше, меньше — снижение лучше.")
     if role is None:
         die("role: база, цель или контекст. Это роль столбца, не его заголовок.")
-    source_id = str(args.source or "").strip()
+    source_id = source_id.strip()
     if not re.fullmatch(r"S\d{3,}", source_id):
-        die("Укажите источник этой ячейки: --source S001.")
+        die("Укажите источник этой ячейки: source S001.")
     sources, errors = load_jsonl(project / "sources.jsonl")
     if errors:
         die("sources.jsonl повреждён:\n" + "\n".join(errors))
@@ -1579,6 +1623,67 @@ def cmd_indicators_add(args: argparse.Namespace) -> int:
         f"{source_check._assumption_label(record)}, {record['direction']}, роль {record['role']}, {source_id}."
     )
     print("Заголовок сценария записан как в источнике. Роль столбца подтверждает человек в брифе.")
+
+
+def cmd_indicators_add(args: argparse.Namespace) -> int:
+    """Register one source cell: indicator, verbatim scenario, value, direction, role."""
+    project, _tokens = take_project(list(args.rest or []), 0, write=True)
+    if getattr(args, "json", None):
+        payload = load_command_json(str(args.json), project)
+        rows = payload if isinstance(payload, list) else [payload]
+        if not isinstance(rows, list) or not rows:
+            die("JSON: объект ячейки или непустой список таких объектов.")
+        for row in rows:
+            if not isinstance(row, dict):
+                die("Каждая ячейка JSON — объект с полями indicator, scenario, value, direction, role, source.")
+            _register_indicator_cell(
+                project,
+                str(row.get("indicator") or ""),
+                str(row.get("scenario") or ""),
+                str(row.get("value") or ""),
+                str(row.get("unit") or ""),
+                str(row.get("direction") or ""),
+                str(row.get("role") or ""),
+                str(row.get("source") or ""),
+            )
+        return 0
+    indicator_name = resolve_text(
+        args.indicator,
+        args.indicator_file,
+        label="показатель",
+        env_name="STRAT_INDICATOR",
+        required=True,
+    )
+    scenario = resolve_text(
+        args.scenario,
+        args.scenario_file,
+        label="сценарий",
+        env_name="STRAT_SCENARIO",
+        required=True,
+    )
+    value = resolve_text(
+        args.value,
+        args.value_file,
+        label="значение",
+        env_name="STRAT_INDICATOR_VALUE",
+        required=True,
+    )
+    unit = resolve_text(
+        args.unit,
+        args.unit_file,
+        label="единица",
+        env_name="STRAT_INDICATOR_UNIT",
+    ) or ""
+    _register_indicator_cell(
+        project,
+        indicator_name or "",
+        scenario or "",
+        value or "",
+        unit,
+        str(args.direction or ""),
+        str(args.role or ""),
+        str(args.source or ""),
+    )
     return 0
 
 
@@ -1602,7 +1707,10 @@ def cmd_indicators_table(args: argparse.Namespace) -> int:
     current = path.read_text(encoding="utf-8") if path.is_file() else ""
     write_utf8(path, indicators.place_block(current, block))
     print(f"Таблица показателей записана в {args.into}.")
-    print("Это снимок реестра. Ячейки вручную не переписывают.")
+    print(
+        "Блок между indicators:start и indicators:end руками не правят. "
+        "Слово «прогноз», «допущение» или «оценка» в заголовке столбца относится ко всем ячейкам этого столбца."
+    )
     return 0
 
 
@@ -2343,6 +2451,7 @@ def check_project(project: Path, state: dict | None = None, *, strict: bool = Fa
     source_check.review(project, texts, sources, evidence, add)
     indicators.review(project, texts, add)
     grounding.review_project_layout(project, add)
+    grounding.review_temp_files(project, add)
     grounding.review_privacy(project, add)
     dirty = uncommitted_tool_files()
     if dirty:
@@ -4265,9 +4374,8 @@ def build_parser() -> argparse.ArgumentParser:
     add_assumption.add_argument("project", nargs="?")
     add_assumption.add_argument(
         "--kind",
-        required=True,
         choices=source_check.ASSUMPTION_KINDS,
-        help="допущение, прогноз или оценка",
+        help="допущение, прогноз или оценка; обязательно без --json",
     )
     add_assumption.add_argument("--value", help="число: 200, 400 тыс., 1,2 млн, 60%")
     add_assumption.add_argument("--value-file", help="значение из файла UTF-8")
@@ -4289,6 +4397,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_assumption.add_argument("--because", help="почему прогноз хуже сценария без изменений, если так вышло")
     add_assumption.add_argument("--because-file", help="обоснование из файла UTF-8")
+    add_assumption.add_argument(
+        "--json",
+        help="объект или список объектов UTF-8; «-» читает stdin. Не кладите этот файл в папку проекта",
+    )
     add_assumption.set_defaults(func=cmd_add_assumption)
 
     indicators_cmd = sub.add_parser("indicators", help="ячейки таблицы показателей и снимок для документов")
@@ -4303,9 +4415,13 @@ def build_parser() -> argparse.ArgumentParser:
     indicators_add.add_argument("--value-file")
     indicators_add.add_argument("--unit")
     indicators_add.add_argument("--unit-file")
-    indicators_add.add_argument("--direction", required=True, help="больше или меньше")
-    indicators_add.add_argument("--role", required=True, help="база, цель или контекст")
-    indicators_add.add_argument("--source", required=True, help="S001")
+    indicators_add.add_argument("--direction", help="больше или меньше; обязательно без --json")
+    indicators_add.add_argument("--role", help="база, цель или контекст; обязательно без --json")
+    indicators_add.add_argument("--source", help="S001")
+    indicators_add.add_argument(
+        "--json",
+        help="объект ячейки или список; «-» читает stdin. Не кладите этот файл в папку проекта",
+    )
     indicators_add.set_defaults(func=cmd_indicators_add)
     indicators_table = indicators_sub.add_parser("table", help="таблица из реестра, не вручную")
     indicators_table.add_argument("rest", nargs="*", help="необязательный проект")

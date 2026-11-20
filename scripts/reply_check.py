@@ -45,12 +45,14 @@ def _sentences(text: str) -> list[tuple[int, str]]:
             pieces.append(piece)
             index_line.extend([lineno] * len(piece))
         joined = "".join(pieces)
+        # «п.п.» and «руб.» are not the end of a sentence. Same rule as source_check.
+        protected = source_check.ABBREV_RE.sub(lambda match: match.group(0)[:-1] + "\u0001", joined)
         start = 0
-        spans = list(re.finditer(r"(?<=[.!?])\s+", joined))
+        spans = list(re.finditer(r"(?<=[.!?])\s+", protected))
         points = [match.end() for match in spans]
         cuts = [match.start() for match in spans] + [len(joined)]
         for cut, end in zip([0, *points], cuts):
-            fragment = joined[cut:end].strip()
+            fragment = protected[cut:end].replace("\u0001", ".").strip()
             if not fragment:
                 continue
             origin = index_line[cut] if cut < len(index_line) else chunks[0][0]
@@ -78,9 +80,10 @@ def _sentences(text: str) -> list[tuple[int, str]]:
         if fence or not stripped or stripped.startswith("#"):
             flush()
             continue
-        if LIST_MARKER_RE.match(stripped):
+        if stripped.startswith("|") or LIST_MARKER_RE.match(stripped):
             flush()
-            emit([(lineno, LIST_MARKER_RE.sub("", stripped))])
+            piece = stripped if stripped.startswith("|") else LIST_MARKER_RE.sub("", stripped)
+            emit([(lineno, piece)])
             continue
         paragraph.append((lineno, stripped))
     flush()
