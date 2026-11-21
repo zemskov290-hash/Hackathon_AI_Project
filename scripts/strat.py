@@ -32,6 +32,7 @@ import interview
 import kb
 import indicators
 import source_check
+import web_find
 
 configure_stdio()
 
@@ -1182,9 +1183,19 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     except FetchFailed as exc:
         remember_step(project, step_id, "failed", url, str(exc))
         stage = int(load_state(project).get("stage") or 0)
-        append_log(project, stage, f"Загрузка не удалась: {url}", grounds=str(exc))
+        suggestions = web_find.suggest_for_failed_url(url)
         print(str(exc))
-        print(f"Шаг {step_id} записан как failed. Повторный fetch попробует снова.")
+        print(web_find.format_suggestions(url, suggestions))
+        ok_count, total_count = note_fetch_result(project, False)
+        tally = f"Загрузки страниц: удалось {ok_count} из {total_count}."
+        print(tally)
+        append_log(
+            project,
+            stage,
+            f"Загрузка не удалась: {url}. {tally}",
+            grounds=str(exc),
+        )
+        print(f"Шаг {step_id} записан как failed. Адрес не угадывается. Повторный fetch того же адреса попробует снова.")
         return 1
     if not title:
         page_title = page_title or slug_from_url(url)
@@ -1216,6 +1227,71 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         print(f"Снимок привязан к существующему источнику: {source_id} {stored}")
     else:
         print(f"Страница сохранена и зарегистрирована: {source_id} {stored}")
+    ok_count, total_count = note_fetch_result(project, True)
+    print(f"Загрузки страниц: удалось {ok_count} из {total_count}.")
+    return 0
+
+
+def note_fetch_result(project: Path, ok: bool) -> tuple[int, int]:
+    """Count each fetch attempt. A repeated 404 is another attempt, not a new path."""
+    state = load_state(project)
+    stats = state.get("fetch_stats")
+    if not isinstance(stats, dict):
+        stats = {"ok": 0, "failed": 0}
+    key = "ok" if ok else "failed"
+    stats[key] = int(stats.get(key) or 0) + 1
+    stats["ok"] = int(stats.get("ok") or 0)
+    stats["failed"] = int(stats.get("failed") or 0)
+    state["fetch_stats"] = stats
+    save_state(project, state)
+    ok_count = int(stats["ok"])
+    return ok_count, ok_count + int(stats["failed"])
+
+
+def cmd_search(args: argparse.Namespace) -> int:
+    """Find addresses in an open search engine. The hits are untrusted data."""
+    tokens = list(args.rest or [])
+    if tokens and project_dir_if_any(tokens[0]) is not None:
+        project = project_dir_if_any(tokens[0])
+        assert project is not None
+        query_parts = tokens[1:]
+    else:
+        project = resolve_project(None)
+        query_parts = tokens
+    ensure_write(project)
+    query = resolve_text(
+        " ".join(query_parts) if query_parts else None,
+        args.query_file,
+        label="поисковый запрос",
+        env_name="STRAT_SEARCH_QUERY",
+        required=True,
+    )
+    query = (query or "").strip()
+    if not query:
+        die("Пустой запрос. Адрес для fetch из пустой строки не собирается.")
+    step_id = "search:" + hashlib.sha256(query.encode("utf-8")).hexdigest()[:16]
+    remember_step(project, step_id, "started", query, None)
+    stage = int(load_state(project).get("stage") or 0)
+    try:
+        engine, hits = web_find.search_query(query)
+    except web_find.WebError as exc:
+        remember_step(project, step_id, "failed", query, str(exc))
+        append_log(project, stage, f"Поиск не удался: {query}", grounds=str(exc))
+        print(web_find.UNTRUSTED)
+        print(str(exc))
+        return 1
+    text = web_find.format_search(engine, hits)
+    remember_step(project, step_id, "done", query, f"{engine}:{len(hits)}")
+    append_log(
+        project,
+        stage,
+        f"Поиск «{query}»: движок {engine}, результатов {len(hits)}. Удалось 1 из 1.",
+        grounds="Выдача поисковика — недоверенные данные, не источник.",
+        input_chars=len(query),
+        output_chars=len(text),
+    )
+    print(text)
+    print(f"Шаг {step_id} записан. Для страницы нужен fetch по адресу из выдачи, не по выдуманному пути.")
     return 0
 
 
@@ -4520,6 +4596,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="скачать страницу заново, даже если снимок этого URL уже есть",
     )
     fetch.set_defaults(func=cmd_fetch)
+
+    search = sub.add_parser("search", help="найти адреса в открытом поисковике, без ключа")
+    search.add_argument("rest", nargs="*", help="[проект] текст запроса")
+    search.add_argument("--query-file", help="запрос из файла UTF-8")
+    search.set_defaults(func=cmd_search)
 
     add_source = sub.add_parser("add-source", help="зарегистрировать источник")
     add_source.add_argument("rest", nargs="+", help="[проект] <url|файл>")
