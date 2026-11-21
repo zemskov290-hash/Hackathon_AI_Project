@@ -16,6 +16,8 @@ import zlib
 from html.parser import HTMLParser
 from pathlib import Path
 
+import optional_packages
+
 ID_RE = re.compile(r"^M\d{3,}$")
 PRICE_RE = re.compile(
     r"(?<!\d)(?:\d{1,3}(?:[ \u00a0]\d{3})+|\d+)(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.|RUB|USD|EUR|€|\$)",
@@ -301,10 +303,7 @@ def read_pdf(path: Path) -> dict:
     except pdf_text.PdfUnavailable:
         return {
             "status": "unavailable",
-            "message": (
-                "Текст PDF не извлечён: пакет pypdf не установлен (pip install pypdf). "
-                "Ядро работает без него. Содержимое страниц не выдумывается."
-            ),
+            "message": "Текст PDF не извлечён: " + optional_packages.missing_message("pypdf"),
             "pages": [],
         }
     except pdf_text.PdfFailed as exc:

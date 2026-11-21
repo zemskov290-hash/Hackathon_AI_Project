@@ -606,8 +606,11 @@ class SourceNumberCheckTests(unittest.TestCase):
             import pypdf  # noqa: F401
         except ImportError:
             blob = messages(self.project, "number-not-in-source")
-            self.assertIn("PDF", blob)
-            self.assertIn("7777", blob)
+            self.assertNotIn("7777", blob)
+            tool = messages(self.project, "tooling")
+            self.assertIn("pypdf", tool)
+            self.assertIn("install", tool)
+            self.assertEqual(tool.count("Нет пакета"), 1)
             return
         blob = messages(self.project, "number-not-in-source")
         self.assertIn("7777", blob)

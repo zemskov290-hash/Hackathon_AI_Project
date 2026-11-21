@@ -44,6 +44,7 @@ REQUIRED_TOOLS = {
     "strat_add_source",
     "strat_fetch",
     "strat_search",
+    "strat_install",
     "strat_add_evidence",
     "strat_add_option",
     "strat_supersede_option",

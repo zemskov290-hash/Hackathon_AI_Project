@@ -13,6 +13,8 @@ import re
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+import optional_packages
+
 ASSUMPTION_KINDS = ("допущение", "прогноз", "оценка")
 ASSUMPTION_ID_RE = re.compile(r"^U\d{3,}$")
 KIND_STEM = {
@@ -1084,6 +1086,19 @@ def review(project: Path, texts: dict, sources: list[dict], evidence: list[dict]
 
     allowed_years = _allowed_years(project, texts, by_source)
     documents = _documents(project, texts)
+    unreadable_pdfs = _unreadable_pdfs(project, sources)
+    if unreadable_pdfs:
+        listed = ", ".join(unreadable_pdfs)
+        if optional_packages.present("pypdf"):
+            add(
+                "tooling",
+                "Текст PDF не извлечён у "
+                + listed
+                + ": слой пуст или файл не читается. Положите рядом файл *-extract.txt "
+                "с тем же текстом. Числа из этих PDF не проверяются постранично, пока слоя нет.",
+            )
+        else:
+            add("tooling", optional_packages.missing_message("pypdf") + " Источники: " + listed)
     for name, text in documents.items():
         if name != "brief.md":
             _review_years(name, text, allowed_years, add)
@@ -1097,6 +1112,7 @@ def review(project: Path, texts: dict, sources: list[dict], evidence: list[dict]
             evidence_source,
             source_quantities,
             add,
+            unreadable_pdfs,
         )
         _review_assumption_visibility(name, text, assumptions, add)
     review_isolation(project, add)
@@ -1286,6 +1302,20 @@ def _review_assumption_visibility(name: str, text: str, assumptions: dict[str, d
                 )
 
 
+def _unreadable_pdfs(project: Path, sources: list[dict]) -> set[str]:
+    """PDF sources with no text layer and no sidecar. One tooling error covers them."""
+    missing: set[str] = set()
+    for row in sources:
+        source_id = str(row.get("id") or "")
+        path = _source_path(project, row)
+        if not source_id or path is None or path.suffix.lower() != ".pdf":
+            continue
+        text, _problem = source_text(path)
+        if text is None:
+            missing.add(source_id)
+    return missing
+
+
 def _review_numbers(
     project: Path,
     name: str,
@@ -1294,6 +1324,7 @@ def _review_numbers(
     evidence_source: dict[str, str],
     source_quantities,
     add,
+    unreadable_pdfs: set[str] | None = None,
 ) -> None:
     label_list = registry_labels(project)
     for lineno, sentence, marker_context in _units_with_marker(text):
@@ -1320,6 +1351,9 @@ def _review_numbers(
                 source_ids.append(evidence_source.get(label, ""))
             elif label.startswith("U"):
                 assumption_ids.append(label)
+        cited = [sid for sid in source_ids if sid]
+        if cited and unreadable_pdfs and all(sid in unreadable_pdfs for sid in cited):
+            continue
         formulas = _formulas(sentence)
         plain = expand_number_words(ISO_DATE_RE.sub(" ", _without_code(sentence)))
         numbers = [

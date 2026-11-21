@@ -17,6 +17,8 @@ import subprocess
 import sys
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+
+import optional_packages
 from statistics import StatisticsError
 
 RUNNER = Path(__file__).resolve().parent / "analysis_runner.py"
@@ -279,10 +281,7 @@ def load_xlsx_table(path: Path) -> list[dict[str, str]]:
     try:
         import pandas  # noqa: F401
     except ImportError:
-        raise AnalysisError(
-            "Для XLSX нужен пакет openpyxl или pandas: pip install openpyxl. "
-            "CSV и JSON считаются стандартной библиотекой, ядро работает и без этих пакетов."
-        ) from None
+        raise AnalysisError(optional_packages.missing_message("openpyxl")) from None
     try:
         return _xlsx_pandas(path)
     except AnalysisError:
@@ -418,7 +417,7 @@ def try_chart(rows: list[dict[str, str]], spec: dict, dest: Path) -> str | None:
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
-        return "matplotlib не установлен, график не построен"
+        return optional_packages.missing_message("matplotlib")
     chosen = apply_filters(rows, spec.get("filters") or [])
     column = str(chart["column"])
     agg = str(chart.get("agg") or "count")

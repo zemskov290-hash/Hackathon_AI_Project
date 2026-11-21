@@ -71,6 +71,104 @@ def mentions_secret(command: str) -> bool:
     return bool(SECRET_RE.search(scrub_examples(command)))
 
 
+ALLOWED_PACKAGES = (
+    "pypdf",
+    "python-docx",
+    "openpyxl",
+    "pandas",
+    "matplotlib",
+    "sentence-transformers",
+)
+PACKAGE_ALIASES = {
+    "docx": "python-docx",
+    "sentence_transformers": "sentence-transformers",
+}
+PIP_DENY = (
+    "Прямой pip запрещён. Ставит только python scripts/strat.py install "
+    "из белого списка, после явного подтверждения человека."
+)
+PIPE_DENY = "Установка через curl или wget в оболочку запрещена."
+INSTALL_DENY = "strat install принимает только пакет и версию из белого списка requirements.txt."
+PIP_RE = re.compile(r"(?i)(?:^|[;&|`\n])\s*(?:python(?:3)?\s+-m\s+)?pip3?\s+")
+PIPE_RE = re.compile(
+    r"(?i)\b(?:curl|wget)\b[^|\n]*\|\s*(?:sh|bash|zsh|ksh|iex|powershell|pwsh)\b"
+)
+INSTALL_RE = re.compile(
+    r"(?i)(?:python(?:3)?\s+)?(?:scripts[/\\]strat\.py|\bstrat)\s+install\b([^;&|\n]*)"
+)
+INSTALL_FLAGS = {"--confirmed"}
+FORBIDDEN_INSTALL_FLAGS = (
+    "--index-url",
+    "--extra-index-url",
+    "--trusted-host",
+    "--find-links",
+    "--no-index",
+)
+
+
+def pinned_versions() -> dict[str, str]:
+    path = ROOT / "requirements.txt"
+    found: dict[str, str] = {}
+    if not path.is_file():
+        return found
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if "==" not in line:
+            continue
+        name, version = line.split("==", 1)
+        name = name.strip()
+        version = version.strip()
+        if name in ALLOWED_PACKAGES and version:
+            found[name] = version
+    return found
+
+
+def _install_tail_reason(tail: str) -> str | None:
+    folded = tail.casefold()
+    for flag in FORBIDDEN_INSTALL_FLAGS:
+        if flag in folded:
+            return INSTALL_DENY + f" Флаг {flag} запрещён."
+    if "://" in tail or "git+" in folded:
+        return INSTALL_DENY + " URL и git+ запрещены."
+    positionals: list[str] = []
+    for token in tail.split():
+        if token.startswith("-"):
+            if token.casefold() not in INSTALL_FLAGS:
+                return INSTALL_DENY + f" Флаг {token} запрещён."
+            continue
+        positionals.append(token)
+    if len(positionals) == 1:
+        spec = positionals[0]
+    elif len(positionals) == 2:
+        spec = positionals[1]
+    else:
+        return INSTALL_DENY
+    if "==" in spec:
+        name, version = spec.split("==", 1)
+    else:
+        name, version = spec, None
+    canon = PACKAGE_ALIASES.get(name.casefold(), name)
+    pins = pinned_versions()
+    pinned = pins.get(canon)
+    if pinned is None:
+        return INSTALL_DENY + f" Пакет {name} вне списка."
+    if version is not None and version != pinned:
+        return INSTALL_DENY + f" Закреплено только {canon}=={pinned}."
+    return None
+
+
+def install_block_reason(command: str) -> str | None:
+    if PIPE_RE.search(command):
+        return PIPE_DENY
+    if PIP_RE.search(command):
+        return PIP_DENY
+    for match in INSTALL_RE.finditer(command):
+        reason = _install_tail_reason(match.group(1))
+        if reason:
+            return reason
+    return None
+
+
 def shell_block_reason(command: str) -> str | None:
     cleaned = scrub_examples(command)
     if mentions_secret(command) and WRITE_RE.search(command):
@@ -84,7 +182,7 @@ def shell_block_reason(command: str) -> str | None:
         return INJECTION + " Фрагмент: " + injected[:180]
     if executes_snapshot(command):
         return INJECTION
-    return None
+    return install_block_reason(command)
 
 
 def read_block_reason(file_path: str) -> str | None:

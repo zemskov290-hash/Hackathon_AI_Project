@@ -31,6 +31,7 @@ import reply_check
 import interview
 import kb
 import indicators
+import optional_packages
 import source_check
 import web_find
 
@@ -1292,6 +1293,52 @@ def cmd_search(args: argparse.Namespace) -> int:
     )
     print(text)
     print(f"Шаг {step_id} записан. Для страницы нужен fetch по адресу из выдачи, не по выдуманному пути.")
+    return 0
+
+
+def run_pip(argv: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(argv, text=True, capture_output=True)
+
+
+def cmd_install(args: argparse.Namespace, pip_runner=None) -> int:
+    """Install one pinned package from the closed list. Nothing happens without confirmation."""
+    tokens = list(args.rest or [])
+    if not tokens:
+        print("Укажите пакет из белого списка. Ничего не установлено.")
+        return 1
+    if any(optional_packages._dangerous(token) for token in tokens):
+        print(
+            "URL, путь, git+ и лишние флаги отклонены. "
+            "Ставится только имя из белого списка. Ничего не установлено."
+        )
+        return 1
+    project, rest = take_project(tokens, 1, write=True)
+    spec = rest[0]
+    try:
+        name, version, argv = optional_packages.plan(spec)
+    except optional_packages.InstallRejected as exc:
+        print(str(exc))
+        return 1
+    if not args.confirmed:
+        print(optional_packages.ask_block(name, version, project.name))
+        return 2
+    runner = pip_runner or run_pip
+    result = runner(argv)
+    if result.returncode != 0:
+        print(f"Установка {name}=={version} не выполнена.")
+        detail = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part and part.strip())
+        if detail:
+            print(detail)
+        return result.returncode or 1
+    stage = int(load_state(project).get("stage") or 0)
+    append_log(
+        project,
+        stage,
+        f"Установлен пакет {name}=={version}. Подтвердил: человек.",
+        grounds="явное «да» в этом ходе, флаг --confirmed",
+        model="ide/subscription",
+    )
+    print(f"Установлен пакет {name}=={version}. Подтвердил: человек. Журнал: {project.name}.")
     return 0
 
 
@@ -3984,20 +4031,11 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     )
     for line in classify.doctor_lines():
         print(line)
-    optional_packages = (
-        ("pypdf", "PDF: страницы в inspect и текст в read_material"),
-        ("docx", "DOCX через scripts/read_material.py"),
-        ("openpyxl", "XLSX в analyze и read_material"),
-        ("pandas", "запасной путь XLSX; метрики анализа считаются стандартной библиотекой"),
-        ("matplotlib", "PNG-график analyze, если в декларации есть chart"),
-        ("sentence_transformers", "семантический поиск базы знаний; без пакета остаётся BM25"),
-    )
-    for module, purpose in optional_packages:
-        try:
-            __import__(module)
-            print(f"Пакет {module}: установлен ({purpose})")
-        except ImportError:
-            print(f"Пакет {module}: нет ({purpose}). Ядро работает без него.")
+    for name in optional_packages.CATALOG:
+        if optional_packages.present(name):
+            print(f"Пакет {name}: установлен. Без него {optional_packages.without(name)}.")
+        else:
+            print("Пакет " + name + ": " + optional_packages.missing_message(name))
     projects = list_user_projects()
     if projects:
         print("Проекты: " + ", ".join(path.name for path in projects))
@@ -4214,7 +4252,7 @@ def cmd_kb_index(args: argparse.Namespace) -> int:
     if kb.semantic_available():
         print("Семантический поиск: пакет sentence_transformers установлен.")
     else:
-        print("Семантический поиск: нет пакета sentence_transformers. Рабочий метод — BM25.")
+        print(optional_packages.missing_message("sentence-transformers") + " Рабочий метод — BM25.")
     return 0
 
 
@@ -4601,6 +4639,15 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("rest", nargs="*", help="[проект] текст запроса")
     search.add_argument("--query-file", help="запрос из файла UTF-8")
     search.set_defaults(func=cmd_search)
+
+    install = sub.add_parser("install", help="поставить пакет из белого списка после «да» человека")
+    install.add_argument("rest", nargs="+", help="[проект] пакет из белого списка")
+    install.add_argument(
+        "--confirmed",
+        action="store_true",
+        help="только после явной фразы человека в этом ходе",
+    )
+    install.set_defaults(func=cmd_install)
 
     add_source = sub.add_parser("add-source", help="зарегистрировать источник")
     add_source.add_argument("rest", nargs="+", help="[проект] <url|файл>")
