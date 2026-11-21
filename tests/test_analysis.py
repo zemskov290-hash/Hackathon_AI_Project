@@ -119,7 +119,8 @@ class AnalysisCliTests(unittest.TestCase):
         if __import__("importlib").util.find_spec("matplotlib"):
             self.assertTrue((project / "analysis" / "A001" / "chart.png").is_file())
         else:
-            self.assertIn("matplotlib не установлен", first.stdout)
+            self.assertIn("Нет пакета matplotlib", first.stdout)
+            self.assertIn("install", first.stdout)
         again = self.cli("analyze", "calc", "--id", "A001")
         assert_code(again)
         self.assertIn("Тот же результат.", again.stdout)

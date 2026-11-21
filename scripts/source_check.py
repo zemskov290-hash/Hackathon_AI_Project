@@ -13,6 +13,8 @@ import re
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+import optional_packages
+
 ASSUMPTION_KINDS = ("допущение", "прогноз", "оценка")
 ASSUMPTION_ID_RE = re.compile(r"^U\d{3,}$")
 KIND_STEM = {
@@ -50,13 +52,14 @@ ATOM_RE = re.compile(
     rf"(?P<whole>\d+)"
     rf"(?P<frac>[.,]\d+)?"
     rf"(?:\s*(?P<mag>{MAGNITUDE}))?"
-    rf"(?P<pct>\s*%|\s+(?:{PERCENT_WORD})(?!\w))?",
+    rf"(?:(?P<pct>\s*%|\s+(?:{PERCENT_WORD})(?!\w))"
+    rf"|(?P<pts>\s*п\.\s*п\.?|\s+процентн\w*\s+пункт\w*))?",
     re.IGNORECASE,
 )
 SPACE_GAP_RE = re.compile(r"[ \t\u00a0\u202f\u2007\u2009]+")
 DASH_GAP_RE = re.compile(r"\s*[-–—]\s*")
 ABBREV_RE = re.compile(
-    r"\b(руб|тыс|млн|млрд|шт|коп|др|пр|см|стр)\.",
+    r"\b(руб|тыс|млн|млрд|шт|коп|др|пр|см|стр|п)\.",
     re.IGNORECASE,
 )
 SCALE = {
@@ -239,18 +242,29 @@ MAG_FACTOR = (
 class Quantity:
     """A comparable magnitude. 2,0 and 2.0 match; 60% does not match 60."""
 
-    def __init__(self, value: Decimal, percent: bool = False) -> None:
+    def __init__(self, value: Decimal, percent: bool = False, points: bool = False) -> None:
         self.value = value
-        self.percent = percent
+        self.percent = percent and not points
+        self.points = points
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, Quantity) and self.percent == other.percent and self.value == other.value
+        return (
+            isinstance(other, Quantity)
+            and self.percent == other.percent
+            and self.points == other.points
+            and self.value == other.value
+        )
 
     def __hash__(self) -> int:
-        return hash((self.value, self.percent))
+        return hash((self.value, self.percent, self.points))
 
     def __repr__(self) -> str:
-        suffix = "%" if self.percent else ""
+        if self.points:
+            suffix = "п.п."
+        elif self.percent:
+            suffix = "%"
+        else:
+            suffix = ""
         return f"{self.value}{suffix}"
 
 
@@ -346,7 +360,7 @@ def _year_token(whole: str, frac: str | None, mag: str | None, pct: str | None) 
 
 def _plain_group(match: re.Match[str]) -> str | None:
     """A bare integer that can continue a row of table numbers. A sign starts a new number."""
-    if match.group("frac") or match.group("mag") or match.group("pct") or match.group("sign"):
+    if match.group("frac") or match.group("mag") or match.group("pct") or match.group("pts") or match.group("sign"):
         return None
     whole = match.group("whole")
     if _year_token(whole, None, None, None):
@@ -356,7 +370,7 @@ def _plain_group(match: re.Match[str]) -> str | None:
 
 def _cluster_head(match: re.Match[str]) -> tuple[str, str] | None:
     """(sign, digits) for an integer that may begin «+1 000». A year does not."""
-    if match.group("frac") or match.group("mag") or match.group("pct"):
+    if match.group("frac") or match.group("mag") or match.group("pct") or match.group("pts"):
         return None
     whole = match.group("whole")
     if _year_token(whole, None, None, None):
@@ -372,9 +386,10 @@ def _atom_span(match: re.Match[str], *, keep_small: bool) -> tuple[Quantity, str
     frac = match.group("frac")
     mag = match.group("mag")
     pct = match.group("pct")
+    pts = match.group("pts")
     if _year_token(whole, frac, mag, pct):
         return None
-    small = len(whole) < 2 and not frac and not mag and not pct
+    small = len(whole) < 2 and not frac and not mag and not pct and not pts
     if small and not keep_small:
         return None
     number = whole
@@ -386,7 +401,7 @@ def _atom_span(match: re.Match[str], *, keep_small: bool) -> tuple[Quantity, str
         return None
     if (match.group("sign") or "").replace("−", "-") == "-":
         value = -value
-    return (Quantity(value, bool(pct)), match.group(0).strip(), match.start(), match.end())
+    return (Quantity(value, bool(pct), bool(pts)), match.group(0).strip(), match.start(), match.end())
 
 
 def _segment_cluster(
@@ -440,9 +455,14 @@ def _promote_percent_range(
     if item[0].percent or atom_index + 1 >= len(atoms):
         return item
     gap = text[atoms[atom_index].end() : atoms[atom_index + 1].start()]
-    if DASH_GAP_RE.fullmatch(gap) and atoms[atom_index + 1].group("pct"):
-        quantity, token, start, end = item
-        return (Quantity(quantity.value, True), token, start, end)
+    nxt = atoms[atom_index + 1]
+    if not DASH_GAP_RE.fullmatch(gap):
+        return item
+    quantity, token, start, end = item
+    if nxt.group("pct"):
+        return (Quantity(quantity.value, True, False), token, start, end)
+    if nxt.group("pts"):
+        return (Quantity(quantity.value, False, True), token, start, end)
     return item
 
 
@@ -488,7 +508,7 @@ def _negate_first(
     quantity, token, start, end = pieces[0]
     if start != origin:
         return pieces
-    pieces[0] = (Quantity(-quantity.value, quantity.percent), token, start, end)
+    pieces[0] = (Quantity(-quantity.value, quantity.percent, quantity.points), token, start, end)
     return pieces
 
 
@@ -581,14 +601,11 @@ def _years_in(text: str) -> set[int]:
 
 
 def _read_pdf(path: Path) -> str | None:
+    import pdf_text
+
     try:
-        from pypdf import PdfReader
-    except ImportError:
-        return None
-    try:
-        reader = PdfReader(str(path))
-        return "\n".join((page.extract_text() or "") for page in reader.pages)
-    except Exception:
+        return pdf_text.read_pdf(path)
+    except (pdf_text.PdfUnavailable, pdf_text.PdfFailed):
         return None
 
 
@@ -696,7 +713,7 @@ def assumption_quantity(row: dict) -> Quantity | None:
     value = str(row.get("value") or "").strip()
     unit = str(row.get("unit") or "").strip()
     direct = parse_quantity(value)
-    if direct is not None and re.search(r"тыс|млн|млрд|%|процент", value, re.I):
+    if direct is not None and re.search(r"тыс|млн|млрд|%|процент|п\.п|пункт", value, re.I):
         return direct
     combined = parse_quantity(f"{value} {unit}".strip()) if unit else None
     return combined or direct
@@ -902,13 +919,137 @@ def _snippet(sentence: str) -> str:
     return compact
 
 
-def _marker_present(sentence: str, kind: str) -> bool:
-    return KIND_STEM[kind] in sentence.casefold()
+def _marker_present(sentence: str, kind: str, context: str = "") -> bool:
+    """A column header is the marker for every cell under it, not only for its own line."""
+    return KIND_STEM[kind] in f"{sentence}\n{context}".casefold()
 
 
-def _any_marker(sentence: str) -> bool:
-    folded = sentence.casefold()
+def _any_marker(sentence: str, context: str = "") -> bool:
+    folded = f"{sentence}\n{context}".casefold()
     return any(stem in folded for stem in KIND_STEM.values())
+
+
+def _split_cells(row: str) -> list[str]:
+    stripped = row.strip()
+    if not stripped.startswith("|"):
+        return [row]
+    return [cell.strip() for cell in stripped.strip("|").split("|")]
+
+
+def _separator_row(row: str) -> bool:
+    cells = [cell for cell in _split_cells(row) if cell]
+    return bool(cells) and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells)
+
+
+def _body_headers(text: str) -> dict[int, list[str]]:
+    """Line number of a body row → header cells. The header is not hard-coded text."""
+    lines = text.splitlines()
+    found: dict[int, list[str]] = {}
+    index = 0
+    while index < len(lines):
+        if not lines[index].strip().startswith("|"):
+            index += 1
+            continue
+        start = index
+        while index < len(lines) and lines[index].strip().startswith("|"):
+            index += 1
+        block = lines[start:index]
+        if len(block) < 3 or not _separator_row(block[1]):
+            continue
+        header = _split_cells(block[0])
+        for offset in range(2, len(block)):
+            found[start + 1 + offset] = header
+    return found
+
+
+def registry_labels(project: Path) -> list[str]:
+    """Indicator names and scenario titles. Digits inside them are not cell values."""
+    labels: list[str] = []
+    rows, _error = _load_jsonl(project / "indicators.jsonl")
+    for row in rows:
+        if row.get("status", "active") != "active":
+            continue
+        for key in ("indicator", "scenario"):
+            text = str(row.get(key) or "").strip()
+            if text:
+                labels.append(text)
+    assumptions, _assumption_error = load_assumptions(project)
+    for row in assumptions.values():
+        if row.get("status", "active") != "active":
+            continue
+        scenario = str(row.get("scenario") or "").strip()
+        if scenario:
+            labels.append(scenario)
+    return labels
+
+
+def _label_spans(fragment: str, labels: list[str]) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    seen: set[str] = set()
+    for label in labels:
+        folded = re.sub(r"\s+", " ", label).strip()
+        if len(folded) < 2 or folded.casefold() in seen:
+            continue
+        seen.add(folded.casefold())
+        for match in re.finditer(re.escape(folded), fragment, re.IGNORECASE):
+            spans.append((match.start(), match.end()))
+    return spans
+
+
+def inside_registry_label(fragment: str, start: int, end: int, labels: list[str]) -> bool:
+    """True when this number sits inside a registered name that also has letters.
+
+    A cell value that merely repeats those digits is not covered: the name has to
+    extend past the number with a word.
+    """
+    if not labels or start >= end:
+        return False
+    for left, right in _label_spans(fragment, labels):
+        if start < left or end > right:
+            continue
+        outside = fragment[left:start] + fragment[end:right]
+        if re.search(r"[A-Za-zА-Яа-яЁё]", outside):
+            return True
+    return False
+
+
+def _token_spans(fragment: str, token: str) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    start = 0
+    while True:
+        at = fragment.find(token, start)
+        if at < 0:
+            break
+        after = at + len(token)
+        before_digit = at > 0 and fragment[at - 1].isdigit()
+        after_digit = after < len(fragment) and fragment[after].isdigit()
+        if not before_digit and not after_digit:
+            spans.append((at, after))
+        start = at + 1
+    return spans
+
+
+def token_only_inside_labels(fragment: str, token: str, labels: list[str]) -> bool:
+    """Every occurrence of this token is part of a registered name or scenario."""
+    spans = _token_spans(fragment, token)
+    if not spans:
+        return False
+    return all(inside_registry_label(fragment, start, end, labels) for start, end in spans)
+
+
+def _units_with_marker(text: str):
+    """Yield (line, fragment, marker context). A header marks its own column."""
+    headers = _body_headers(text)
+    for lineno, sentence in iter_units(text):
+        header = headers.get(lineno)
+        if header is None or not sentence.strip().startswith("|"):
+            yield lineno, sentence, ""
+            continue
+        for index, cell in enumerate(_split_cells(sentence)):
+            if not cell or re.fullmatch(r":?-{3,}:?", cell):
+                continue
+            context = header[index] if index < len(header) else ""
+            yield lineno, cell, context
 
 
 def review(project: Path, texts: dict, sources: list[dict], evidence: list[dict], add) -> None:
@@ -945,6 +1086,19 @@ def review(project: Path, texts: dict, sources: list[dict], evidence: list[dict]
 
     allowed_years = _allowed_years(project, texts, by_source)
     documents = _documents(project, texts)
+    unreadable_pdfs = _unreadable_pdfs(project, sources)
+    if unreadable_pdfs:
+        listed = ", ".join(unreadable_pdfs)
+        if optional_packages.present("pypdf"):
+            add(
+                "tooling",
+                "Текст PDF не извлечён у "
+                + listed
+                + ": слой пуст или файл не читается. Положите рядом файл *-extract.txt "
+                "с тем же текстом. Числа из этих PDF не проверяются постранично, пока слоя нет.",
+            )
+        else:
+            add("tooling", optional_packages.missing_message("pypdf") + " Источники: " + listed)
     for name, text in documents.items():
         if name != "brief.md":
             _review_years(name, text, allowed_years, add)
@@ -958,6 +1112,7 @@ def review(project: Path, texts: dict, sources: list[dict], evidence: list[dict]
             evidence_source,
             source_quantities,
             add,
+            unreadable_pdfs,
         )
         _review_assumption_visibility(name, text, assumptions, add)
     review_isolation(project, add)
@@ -1115,7 +1270,10 @@ def _review_assumption_visibility(name: str, text: str, assumptions: dict[str, d
                     ids.append(match.group(1))
             if not ids:
                 continue
-            present = quantities(expand_number_words(scope))
+            present = {
+                item
+                for item, _token in iter_quantities(expand_number_words(scope), keep_small=True)
+            }
             for assumption_id in ids:
                 row = assumptions.get(assumption_id)
                 if row is None:
@@ -1127,15 +1285,35 @@ def _review_assumption_visibility(name: str, text: str, assumptions: dict[str, d
                 expected = assumption_quantity(row)
                 if expected is None:
                     continue
-                if _value_in(expected, present):
+                if _reading_in(expected, present):
                     continue
                 shown = _assumption_label(row)
+                hint = ""
+                if expected.points and any(item.percent and item.value == expected.value for item in present):
+                    hint = " Проценты и процентные пункты — разные величины. Единицу ради проверки не меняют."
+                if expected.percent and any(item.points and item.value == expected.value for item in present):
+                    hint = " Процентные пункты и проценты — разные величины. Единицу ради проверки не меняют."
                 add(
                     "assumption-value",
                     f"{name}:{lineno}: [{assumption_id}] без своего значения в этой фразе или ячейке. "
                     f"В реестре {shown}. Напишите число рядом со ссылкой, например «{shown} [{assumption_id}]». "
-                    "Другое число в той же фразе реестр не подтверждает.",
+                    "Другое число в той же фразе реестр не подтверждает."
+                    + hint,
                 )
+
+
+def _unreadable_pdfs(project: Path, sources: list[dict]) -> set[str]:
+    """PDF sources with no text layer and no sidecar. One tooling error covers them."""
+    missing: set[str] = set()
+    for row in sources:
+        source_id = str(row.get("id") or "")
+        path = _source_path(project, row)
+        if not source_id or path is None or path.suffix.lower() != ".pdf":
+            continue
+        text, _problem = source_text(path)
+        if text is None:
+            missing.add(source_id)
+    return missing
 
 
 def _review_numbers(
@@ -1146,8 +1324,10 @@ def _review_numbers(
     evidence_source: dict[str, str],
     source_quantities,
     add,
+    unreadable_pdfs: set[str] | None = None,
 ) -> None:
-    for lineno, sentence in iter_units(text):
+    label_list = registry_labels(project)
+    for lineno, sentence, marker_context in _units_with_marker(text):
         citations = list(CITE_RE.finditer(sentence))
         labels = []
         analysis: list[tuple[str, str]] = []
@@ -1171,9 +1351,16 @@ def _review_numbers(
                 source_ids.append(evidence_source.get(label, ""))
             elif label.startswith("U"):
                 assumption_ids.append(label)
+        cited = [sid for sid in source_ids if sid]
+        if cited and unreadable_pdfs and all(sid in unreadable_pdfs for sid in cited):
+            continue
         formulas = _formulas(sentence)
         plain = expand_number_words(ISO_DATE_RE.sub(" ", _without_code(sentence)))
-        numbers = iter_quantities(plain)
+        numbers = [
+            (quantity, token)
+            for quantity, token, start, end in iter_quantity_spans(plain)
+            if not inside_registry_label(plain, start, end, label_list)
+        ]
         formula_results: set[Quantity] = set()
         formula_operands: set[Quantity] = set()
         for body in formulas:
@@ -1201,6 +1388,7 @@ def _review_numbers(
                     project,
                     source_quantities,
                     formula_results=set(),
+                    marker_context=marker_context,
                 ):
                     continue
                 missing_operands.append(token.strip())
@@ -1239,6 +1427,7 @@ def _review_numbers(
                 project,
                 source_quantities,
                 formula_results,
+                marker_context=marker_context,
             ):
                 continue
             _report_missing(
@@ -1252,7 +1441,16 @@ def _review_numbers(
                 assumptions,
                 source_quantities,
                 add,
+                marker_context=marker_context,
             )
+
+
+def _reading_in(quantity: Quantity, present: set[Quantity]) -> bool:
+    """Same number and the same kind of unit. 8 п.п. is not 8 % and not a bare 8."""
+    return any(
+        item.value == quantity.value and item.percent == quantity.percent and item.points == quantity.points
+        for item in present
+    )
 
 
 def _value_in(quantity: Quantity, present: set[Quantity]) -> bool:
@@ -1272,6 +1470,7 @@ def _explained(
     project: Path,
     source_quantities,
     formula_results: set[Quantity],
+    marker_context: str = "",
 ) -> bool:
     if quantity in formula_results:
         return True
@@ -1290,7 +1489,11 @@ def _explained(
         if row is None:
             continue
         parsed = assumption_quantity(row)
-        if parsed is not None and _value_in(quantity, {parsed}) and _marker_present(sentence, str(row.get("kind"))):
+        if (
+            parsed is not None
+            and _reading_in(quantity, {parsed})
+            and _marker_present(sentence, str(row.get("kind")), marker_context)
+        ):
             return True
     for analysis_id, metric in analysis:
         if quantity in _analysis_values(project, analysis_id, metric):
@@ -1309,6 +1512,7 @@ def _report_missing(
     assumptions: dict[str, dict],
     source_quantities,
     add,
+    marker_context: str = "",
 ) -> None:
     hint = ""
     unread = []
@@ -1320,7 +1524,7 @@ def _report_missing(
             unread.append(f"{source_id}: {problem}")
     if unread:
         hint = " " + "; ".join(unread) + "."
-    if assumption_ids or _any_marker(sentence):
+    if assumption_ids or _any_marker(sentence, marker_context):
         if not assumption_ids:
             add(
                 "number-not-in-source",
@@ -1343,7 +1547,7 @@ def _report_missing(
             parsed = assumption_quantity(row)
             if parsed is not None and _value_in(quantity, {parsed}):
                 matched_value = True
-            if not _marker_present(sentence, str(row.get("kind"))):
+            if not _marker_present(sentence, str(row.get("kind")), marker_context):
                 add(
                     "number-not-in-source",
                     f"{name}:{lineno}: [{assumption_id}] — {row.get('kind')}, "

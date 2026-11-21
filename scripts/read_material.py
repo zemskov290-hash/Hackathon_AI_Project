@@ -6,6 +6,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import optional_packages
 from stdio_utf8 import configure_stdio
 
 configure_stdio()
@@ -24,17 +25,13 @@ def finish_extract(label: str, path: Path, text: str) -> str:
 
 
 def read_pdf(path: Path) -> str:
+    import pdf_text
+
     try:
-        from pypdf import PdfReader
-    except ImportError:
-        die(
-            "Для PDF нужен пакет pypdf: pip install pypdf. "
-            "Ядро агента работает и без него — откройте файл в IDE и перенесите цитату вручную."
-        )
-    try:
-        reader = PdfReader(str(path))
-        text = "\n\n".join((page.extract_text() or "") for page in reader.pages)
-    except Exception as exc:  # noqa: BLE001 — optional parser, show the reason in Russian
+        text = pdf_text.read_pdf(path)
+    except pdf_text.PdfUnavailable:
+        die(optional_packages.missing_message("pypdf"))
+    except pdf_text.PdfFailed as exc:
         die(f"PDF открыть не удалось ({path.name}): {exc}. Процитируйте фрагмент вручную.")
     return finish_extract("PDF", path, text)
 
@@ -43,10 +40,7 @@ def read_docx(path: Path) -> str:
     try:
         import docx
     except ImportError:
-        die(
-            "Для DOCX нужен пакет python-docx: pip install python-docx. "
-            "Ядро агента работает и без него — откройте файл в IDE и перенесите цитату вручную."
-        )
+        die(optional_packages.missing_message("python-docx"))
     try:
         document = docx.Document(str(path))
         text = "\n".join(paragraph.text for paragraph in document.paragraphs)
@@ -59,10 +53,7 @@ def read_xlsx(path: Path) -> str:
     try:
         import openpyxl
     except ImportError:
-        die(
-            "Для XLSX нужен пакет openpyxl: pip install openpyxl. "
-            "Ядро агента работает и без него — откройте таблицу в IDE и перенесите цитату вручную."
-        )
+        die(optional_packages.missing_message("openpyxl"))
     try:
         workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
         chunks: list[str] = []

@@ -383,10 +383,16 @@ def review_strategy(
         if title not in SUBSTANTIVE.get(parent, ()):
             continue
         claims = _claims(body)
-        for claim in claims:
-            import source_check
+        import source_check
 
-            numbers = _numbers(source_check.expand_number_words(claim))
+        label_list = source_check.registry_labels(project)
+        for claim in claims:
+            expanded = source_check.expand_number_words(claim)
+            numbers = [
+                token
+                for token in _numbers(expanded)
+                if not source_check.token_only_inside_labels(expanded, token, label_list)
+            ]
             if not numbers:
                 continue
             if _cited(claim) or _calc_grounded(claim, claims):
@@ -466,6 +472,27 @@ def review_privacy(project: Path, add) -> None:
                 )
 
 
+def review_temp_files(project: Path, add) -> None:
+    """Argument scratch files are not project material."""
+    if not project.is_dir():
+        return
+    pattern = re.compile(r"(?i)^_tmp_|^tmp_.*\.txt$|\.tmp$")
+    for path in sorted(project.rglob("*")):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(project)
+        if any(part.startswith(".") for part in relative.parts):
+            continue
+        if not pattern.search(path.name):
+            continue
+        add(
+            "temp-file",
+            f"{relative.as_posix()}: посторонний временный файл в папке проекта. "
+            "Несколько полей передавайте одним JSON в stdin (--json -), не файлами _tmp_.",
+            warning=True,
+        )
+
+
 def review_project_layout(project: Path, add) -> None:
     """Raw inputs belong in sources/ or in kb/docs written by kb add."""
     if not project.is_dir():
@@ -507,8 +534,14 @@ def review_substantive_numbers(
             continue
         import source_check
 
+        label_list = source_check.registry_labels(project)
         for line, sentence in reply_check._sentences(text):
-            numbers = scorer_numbers(source_check.expand_number_words(sentence))
+            expanded = source_check.expand_number_words(sentence)
+            numbers = [
+                token
+                for token in scorer_numbers(expanded)
+                if not source_check.token_only_inside_labels(expanded, token, label_list)
+            ]
             citations = reply_check._citations(sentence)
             valid = False
             for label, analysis_id, metric in citations:

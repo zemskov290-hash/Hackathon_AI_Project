@@ -30,7 +30,10 @@ import inspect_media
 import reply_check
 import interview
 import kb
+import indicators
+import optional_packages
 import source_check
+import web_find
 
 configure_stdio()
 
@@ -162,6 +165,8 @@ WINDOWS_TEXT_HINT = (
     "кириллица превращается в знаки вопроса.\n"
     "Запишите текст в файл UTF-8 и укажите парный флаг с суффиксом -file "
     "(--title-file, --message-file, --grounds-file, --reason-file, --claim-file, --quote-file, --note-file).\n"
+    "Несколько полей сразу передайте одним JSON в stdin: --json - . "
+    "Файл _tmp_ в папке проекта не создавайте.\n"
     "Либо передайте значение «-» и подайте UTF-8 в stdin (так можно только для одного аргумента за вызов).\n"
     "Либо задайте переменную окружения: STRAT_TITLE, STRAT_LOG_MESSAGE, STRAT_GROUNDS, "
     "STRAT_REASON, STRAT_CLAIM, STRAT_QUOTE, STRAT_NOTE. Python читает её в Unicode.\n"
@@ -251,6 +256,43 @@ def read_utf8_arg_file(path_str: str) -> str:
         return path.read_text(encoding="utf-8-sig")
     except UnicodeDecodeError:
         die(f"Файл {path} не в кодировке UTF-8. Сохраните его как UTF-8.")
+
+
+TEMP_FILE_NAME = re.compile(r"(?i)^_tmp_|^tmp_.*\.txt$|\.tmp$")
+
+
+def load_command_json(token: str, project: Path):
+    """One JSON object or a list. Stdin avoids temporary files inside the project."""
+    path: Path | None
+    if token == "-":
+        raw = sys.stdin.read()
+        path = None
+    else:
+        path = Path(token)
+        if not path.is_file():
+            die(f"Файл не найден: {path}")
+        try:
+            path.resolve().relative_to(project.resolve())
+            inside = True
+        except ValueError:
+            inside = False
+        if inside:
+            die(
+                "JSON с полями команды не кладите в папку проекта: от него остаются файлы _tmp_. "
+                "Передайте UTF-8 в стандартный ввод: --json -"
+            )
+        try:
+            raw = path.read_text(encoding="utf-8-sig")
+        except UnicodeDecodeError:
+            die(f"Файл {path} не в кодировке UTF-8. Сохраните его как UTF-8.")
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        die(f"JSON не разобран: {exc.msg}")
+    if path is not None and TEMP_FILE_NAME.search(path.name):
+        path.unlink()
+        print(f"Временный файл удалён: {path}")
+    return payload
 
 
 def strip_one_trailing_newline(text: str) -> str:
@@ -1142,9 +1184,19 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     except FetchFailed as exc:
         remember_step(project, step_id, "failed", url, str(exc))
         stage = int(load_state(project).get("stage") or 0)
-        append_log(project, stage, f"Загрузка не удалась: {url}", grounds=str(exc))
+        suggestions = web_find.suggest_for_failed_url(url)
         print(str(exc))
-        print(f"Шаг {step_id} записан как failed. Повторный fetch попробует снова.")
+        print(web_find.format_suggestions(url, suggestions))
+        ok_count, total_count = note_fetch_result(project, False)
+        tally = f"Загрузки страниц: удалось {ok_count} из {total_count}."
+        print(tally)
+        append_log(
+            project,
+            stage,
+            f"Загрузка не удалась: {url}. {tally}",
+            grounds=str(exc),
+        )
+        print(f"Шаг {step_id} записан как failed. Адрес не угадывается. Повторный fetch того же адреса попробует снова.")
         return 1
     if not title:
         page_title = page_title or slug_from_url(url)
@@ -1176,6 +1228,127 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         print(f"Снимок привязан к существующему источнику: {source_id} {stored}")
     else:
         print(f"Страница сохранена и зарегистрирована: {source_id} {stored}")
+    ok_count, total_count = note_fetch_result(project, True)
+    print(f"Загрузки страниц: удалось {ok_count} из {total_count}.")
+    return 0
+
+
+def note_fetch_result(project: Path, ok: bool) -> tuple[int, int]:
+    """Count each fetch attempt. A repeated 404 is another attempt, not a new path."""
+    state = load_state(project)
+    stats = state.get("fetch_stats")
+    if not isinstance(stats, dict):
+        stats = {"ok": 0, "failed": 0}
+    key = "ok" if ok else "failed"
+    stats[key] = int(stats.get(key) or 0) + 1
+    stats["ok"] = int(stats.get("ok") or 0)
+    stats["failed"] = int(stats.get("failed") or 0)
+    state["fetch_stats"] = stats
+    save_state(project, state)
+    ok_count = int(stats["ok"])
+    return ok_count, ok_count + int(stats["failed"])
+
+
+def cmd_search(args: argparse.Namespace) -> int:
+    """Find addresses in an open search engine. The hits are untrusted data."""
+    tokens = list(args.rest or [])
+    if tokens and project_dir_if_any(tokens[0]) is not None:
+        project = project_dir_if_any(tokens[0])
+        assert project is not None
+        query_parts = tokens[1:]
+    else:
+        project = resolve_project(None)
+        query_parts = tokens
+    ensure_write(project)
+    query = resolve_text(
+        " ".join(query_parts) if query_parts else None,
+        args.query_file,
+        label="поисковый запрос",
+        env_name="STRAT_SEARCH_QUERY",
+        required=True,
+    )
+    query = (query or "").strip()
+    if not query:
+        die("Пустой запрос. Адрес для fetch из пустой строки не собирается.")
+    step_id = "search:" + hashlib.sha256(query.encode("utf-8")).hexdigest()[:16]
+    remember_step(project, step_id, "started", query, None)
+    stage = int(load_state(project).get("stage") or 0)
+    try:
+        engine, hits = web_find.search_query(query)
+    except web_find.WebError as exc:
+        remember_step(project, step_id, "failed", query, str(exc))
+        append_log(project, stage, f"Поиск не удался: {query}", grounds=str(exc))
+        print(web_find.UNTRUSTED)
+        print(str(exc))
+        return 1
+    text = web_find.format_search(engine, hits)
+    remember_step(project, step_id, "done", query, f"{engine}:{len(hits)}")
+    append_log(
+        project,
+        stage,
+        f"Поиск «{query}»: движок {engine}, результатов {len(hits)}. Удалось 1 из 1.",
+        grounds="Выдача поисковика — недоверенные данные, не источник.",
+        input_chars=len(query),
+        output_chars=len(text),
+    )
+    print(text)
+    print(f"Шаг {step_id} записан. Для страницы нужен fetch по адресу из выдачи, не по выдуманному пути.")
+    return 0
+
+
+def run_pip(argv: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(argv, text=True, capture_output=True)
+
+
+def cmd_install(args: argparse.Namespace, pip_runner=None, version_of=None) -> int:
+    """Install one whitelisted package. Nothing happens without confirmation.
+
+    A version already at or above the minimum is left as it is.
+    """
+    tokens = list(args.rest or [])
+    if not tokens:
+        print("Укажите пакет из белого списка. Ничего не установлено.")
+        return 1
+    if any(optional_packages._dangerous(token) for token in tokens):
+        print(
+            "URL, путь, git+ и лишние флаги отклонены. "
+            "Ставится только имя из белого списка. Ничего не установлено."
+        )
+        return 1
+    project, rest = take_project(tokens, 1, write=True)
+    spec = rest[0]
+    try:
+        name, minimum, requested, argv = optional_packages.plan(spec)
+    except optional_packages.InstallRejected as exc:
+        print(str(exc))
+        return 1
+    lookup = version_of or optional_packages.installed_version
+    installed = lookup(name)
+    if optional_packages.request_met(installed, minimum, requested):
+        print(optional_packages.already_message(name, installed or "", minimum))
+        return 0
+    if not args.confirmed:
+        print(optional_packages.ask_block(name, minimum, project.name, installed))
+        return 2
+    runner = pip_runner or run_pip
+    result = runner(argv)
+    if result.returncode != 0:
+        print(f"Установка {name}>={minimum} не выполнена.")
+        detail = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part and part.strip())
+        if detail:
+            print(detail)
+        return result.returncode or 1
+    seen = lookup(name)
+    shown = seen if seen and optional_packages.version_at_least(seen, minimum) else f"не ниже {minimum}"
+    stage = int(load_state(project).get("stage") or 0)
+    append_log(
+        project,
+        stage,
+        f"Установлен пакет {name} {shown}. Минимум {minimum}. Подтвердил: человек.",
+        grounds="явное «да» в этом ходе, флаг --confirmed",
+        model="ide/subscription",
+    )
+    print(f"Установлен пакет {name} {shown}. Минимум {minimum}. Подтвердил: человек. Журнал: {project.name}.")
     return 0
 
 
@@ -1321,6 +1494,25 @@ def cmd_add_assumption(args: argparse.Namespace) -> int:
     """Record a number that is not in a source. Citation form is [U001], not [A001.metric]."""
     project = resolve_project(args.project)
     ensure_write(project)
+    if getattr(args, "json", None):
+        payload = load_command_json(str(args.json), project)
+        rows = payload if isinstance(payload, list) else [payload]
+        if not isinstance(rows, list) or not rows:
+            die("JSON: объект допущения или непустой список таких объектов.")
+        for row in rows:
+            if not isinstance(row, dict):
+                die("Каждое допущение JSON — объект.")
+            local = argparse.Namespace(**vars(args))
+            local.json = None
+            for key, raw in row.items():
+                if raw is None:
+                    continue
+                setattr(local, str(key).replace("-", "_"), str(raw))
+            for key in list(vars(local)):
+                if key.endswith("_file"):
+                    setattr(local, key, None)
+            cmd_add_assumption(local)
+        return 0
     kind = str(args.kind or "").strip()
     if kind not in source_check.ASSUMPTION_KINDS:
         die(
@@ -1353,8 +1545,32 @@ def cmd_add_assumption(args: argparse.Namespace) -> int:
         label="заметка допущения",
         env_name="STRAT_ASSUMPTION_NOTE",
     ) or ""
+    indicator_name = resolve_text(
+        getattr(args, "indicator", None),
+        getattr(args, "indicator_file", None),
+        label="показатель",
+        env_name="STRAT_INDICATOR",
+    ) or ""
+    forecast_scenario = resolve_text(
+        getattr(args, "scenario", None),
+        getattr(args, "scenario_file", None),
+        label="сценарий прогноза",
+        env_name="STRAT_SCENARIO",
+    ) or ""
+    because = resolve_text(
+        getattr(args, "because", None),
+        getattr(args, "because_file", None),
+        label="обоснование прогноза",
+        env_name="STRAT_BECAUSE",
+    ) or ""
+    forecast_role = str(getattr(args, "forecast_role", "") or "").strip() or "initiative"
     if source_check.parse_quantity(value or "") is None:
-        die("В значении нет числа. Пример: 200, 400 тыс., 1,2 млн, 60%.")
+        die("В значении нет числа. Пример: 200, 400 тыс., 1,2 млн, 60%, 8 п.п.")
+    if indicators.gaming_note(note) or indicators.gaming_note(because):
+        die(
+            "В заметке нельзя писать, что число подогнано под проверку. "
+            "Исправьте смысл или расчёт. Единицу и формулировку ради прохождения check не меняют."
+        )
     assumptions, error = source_check.load_assumptions(project)
     if error:
         die(error)
@@ -1368,7 +1584,70 @@ def cmd_add_assumption(args: argparse.Namespace) -> int:
         "note": note.strip(),
         "status": "active",
     }
+    if indicator_name.strip():
+        if kind != "прогноз":
+            die("К показателю привязывают только прогноз. Допущение без показателя записывайте как раньше.")
+        if not forecast_scenario.strip():
+            die(
+                "У прогноза показателя нужен свой сценарий: название этого прогноза, "
+                "а не заголовок столбца брифа."
+            )
+        if forecast_role not in {"initiative", "alternate"}:
+            die("forecast-role: initiative или alternate.")
+        cells, cell_error = indicators.load_indicators(project)
+        if cell_error:
+            die(cell_error)
+        known = [
+            cell
+            for cell in indicators.active_indicators(cells)
+            if indicators._same(cell["indicator"], indicator_name)
+        ]
+        if not known:
+            die("Такого показателя нет в реестре. Сначала: python scripts/strat.py indicators add ...")
+        indicator_name = known[0]["indicator"]
+        record["indicator"] = indicator_name
+        record["scenario"] = forecast_scenario.strip()
+        record["forecast_role"] = forecast_role
+        if forecast_role == "initiative":
+            already = [
+                row
+                for row in assumptions.values()
+                if row.get("status", "active") == "active"
+                and indicators._same(str(row.get("indicator") or ""), indicator_name)
+                and row.get("forecast_role", "initiative") == "initiative"
+            ]
+            if already:
+                die(
+                    f"У «{indicator_name}» уже есть прогноз {already[0]['id']}. "
+                    "Второй запишите с --forecast-role alternate или не дублируйте показатель."
+                )
+    if because.strip():
+        record["because"] = because.strip()
     rows = list(assumptions.values())
+    probe = dict(record)
+    for other in rows:
+        if other.get("status", "active") != "active":
+            continue
+        same_pair = (
+            probe.get("indicator")
+            and probe.get("scenario")
+            and indicators._same(str(other.get("indicator") or ""), str(probe.get("indicator")))
+            and indicators._same(str(other.get("scenario") or ""), str(probe.get("scenario")))
+        )
+        if same_pair:
+            die(
+                f"Уже есть {other['id']} для этого показателя и сценария. "
+                "Вторую запись с другой единицей не создают."
+            )
+        left = indicators._meaning_key(probe)
+        right = indicators._meaning_key(other)
+        left_q = source_check.assumption_quantity(probe)
+        right_q = source_check.assumption_quantity(other)
+        if left and right and left == right and left_q is not None and right_q is not None and left_q.value == right_q.value:
+            die(
+                f"Уже есть {other['id']} с тем же значением и тем же смыслом. "
+                "Проценты и процентные пункты не повод заводить вторую запись."
+            )
     rows.append(record)
     save_jsonl(project / "assumptions.jsonl", rows)
     print(f"id: {assumption_id}")
@@ -1377,6 +1656,209 @@ def cmd_add_assumption(args: argparse.Namespace) -> int:
         f"В тексте ссылка [{assumption_id}], в том же предложении — слово «{kind}». "
         "Якорь анализа [A001.метрика] этой командой не создаётся."
     )
+    return 0
+
+
+def _source_contains_quantity(text: str, quantity: source_check.Quantity) -> bool:
+    present = {
+        item
+        for item, _token in source_check.iter_quantities(
+            source_check.expand_number_words(text),
+            keep_small=True,
+        )
+    }
+    return source_check._value_in(quantity, present)
+
+
+def _register_indicator_cell(
+    project: Path,
+    indicator_name: str,
+    scenario: str,
+    value: str,
+    unit: str,
+    direction_token: str,
+    role_token: str,
+    source_id: str,
+) -> None:
+    indicator_name = indicator_name.strip()
+    scenario = scenario.strip()
+    value = value.strip()
+    unit = unit.strip()
+    direction = indicators.canonical_direction(direction_token)
+    role = indicators.canonical_role(role_token)
+    if not indicator_name or not scenario or not value:
+        die("Нужны показатель, сценарий и значение.")
+    if direction is None:
+        die("direction: больше или меньше. больше — рост лучше, меньше — снижение лучше.")
+    if role is None:
+        die("role: база, цель или контекст. Это роль столбца, не его заголовок.")
+    source_id = source_id.strip()
+    if not re.fullmatch(r"S\d{3,}", source_id):
+        die("Укажите источник этой ячейки: source S001.")
+    sources, errors = load_jsonl(project / "sources.jsonl")
+    if errors:
+        die("sources.jsonl повреждён:\n" + "\n".join(errors))
+    source_row = next((row for row in sources if row.get("id") == source_id), None)
+    if source_row is None:
+        die(f"Источник {source_id} не найден в sources.jsonl этого проекта.")
+    path = source_check._source_path(project, source_row)
+    if path is None:
+        die(f"У {source_id} нет локального файла. Ячейку нельзя сверить.")
+    text, problem = source_check.source_text(path)
+    if not text:
+        die(problem or "текст источника не прочитан")
+    folded = re.sub(r"\s+", " ", text.casefold())
+    if re.sub(r"\s+", " ", indicator_name.casefold()) not in folded:
+        die("Названия показателя нет в источнике дословно. Берите его из таблицы, не из памяти.")
+    if re.sub(r"\s+", " ", scenario.casefold()) not in folded:
+        die("Такого столбца нет в источнике дословно. Сценарий — заголовок столбца как в источнике.")
+    quantity = source_check.assumption_quantity({"value": value, "unit": unit})
+    if quantity is None:
+        die("В значении нет числа.")
+    if not _source_contains_quantity(text, quantity):
+        die("Этого числа нет в тексте источника. Соседний столбец подставлять нельзя.")
+    cells, cell_error = indicators.load_indicators(project)
+    if cell_error:
+        die(cell_error)
+    active = indicators.active_indicators(cells)
+    for cell in active:
+        if indicators._same(cell["indicator"], indicator_name) and indicators._same(cell["scenario"], scenario):
+            die(
+                f"Ячейка уже есть: {cell['id']}. "
+                "Снимите её командой indicators retract, если значение было не тем."
+            )
+        if indicators._same(cell["indicator"], indicator_name) and cell["direction"] != direction:
+            die(
+                f"У «{cell['indicator']}» уже направление {cell['direction']}. "
+                "У показателя оно одно."
+            )
+        if indicators._same(cell["scenario"], scenario) and cell["role"] != role:
+            die(
+                f"Столбец «{cell['scenario']}» уже с ролью {cell['role']}. "
+                "У столбца одна роль во всех строках."
+            )
+    record = {
+        "id": next_serial(cells, "Q"),
+        "indicator": indicator_name.strip(),
+        "scenario": scenario.strip(),
+        "value": value.strip(),
+        "unit": unit.strip(),
+        "direction": direction,
+        "role": role,
+        "source": source_id,
+        "status": "active",
+    }
+    cells.append(record)
+    save_jsonl(project / "indicators.jsonl", cells)
+    print(f"id: {record['id']}")
+    print(
+        f"Ячейка {record['id']}: «{record['indicator']}», сценарий «{record['scenario']}», "
+        f"{source_check._assumption_label(record)}, {record['direction']}, роль {record['role']}, {source_id}."
+    )
+    print("Заголовок сценария записан как в источнике. Роль столбца подтверждает человек в брифе.")
+
+
+def cmd_indicators_add(args: argparse.Namespace) -> int:
+    """Register one source cell: indicator, verbatim scenario, value, direction, role."""
+    project, _tokens = take_project(list(args.rest or []), 0, write=True)
+    if getattr(args, "json", None):
+        payload = load_command_json(str(args.json), project)
+        rows = payload if isinstance(payload, list) else [payload]
+        if not isinstance(rows, list) or not rows:
+            die("JSON: объект ячейки или непустой список таких объектов.")
+        for row in rows:
+            if not isinstance(row, dict):
+                die("Каждая ячейка JSON — объект с полями indicator, scenario, value, direction, role, source.")
+            _register_indicator_cell(
+                project,
+                str(row.get("indicator") or ""),
+                str(row.get("scenario") or ""),
+                str(row.get("value") or ""),
+                str(row.get("unit") or ""),
+                str(row.get("direction") or ""),
+                str(row.get("role") or ""),
+                str(row.get("source") or ""),
+            )
+        return 0
+    indicator_name = resolve_text(
+        args.indicator,
+        args.indicator_file,
+        label="показатель",
+        env_name="STRAT_INDICATOR",
+        required=True,
+    )
+    scenario = resolve_text(
+        args.scenario,
+        args.scenario_file,
+        label="сценарий",
+        env_name="STRAT_SCENARIO",
+        required=True,
+    )
+    value = resolve_text(
+        args.value,
+        args.value_file,
+        label="значение",
+        env_name="STRAT_INDICATOR_VALUE",
+        required=True,
+    )
+    unit = resolve_text(
+        args.unit,
+        args.unit_file,
+        label="единица",
+        env_name="STRAT_INDICATOR_UNIT",
+    ) or ""
+    _register_indicator_cell(
+        project,
+        indicator_name or "",
+        scenario or "",
+        value or "",
+        unit,
+        str(args.direction or ""),
+        str(args.role or ""),
+        str(args.source or ""),
+    )
+    return 0
+
+
+def cmd_indicators_table(args: argparse.Namespace) -> int:
+    project, _tokens = take_project(list(args.rest or []), 0, write=bool(args.into))
+    cells, cell_error = indicators.load_indicators(project)
+    if cell_error:
+        die(cell_error)
+    if not indicators.active_indicators(cells):
+        die("Нет ячеек показателей. Сначала indicators add для каждой клетки таблицы.")
+    assumptions, assumption_error = source_check.load_assumptions(project)
+    if assumption_error:
+        die(assumption_error)
+    block = indicators.render_block(cells, list(assumptions.values()))
+    if not args.into:
+        print(block)
+        return 0
+    if args.into not in {"brief.md", "strategy.md", "deliverable.md"}:
+        die("into: brief.md, strategy.md или deliverable.md.")
+    path = project / args.into
+    current = path.read_text(encoding="utf-8") if path.is_file() else ""
+    write_utf8(path, indicators.place_block(current, block))
+    print(f"Таблица показателей записана в {args.into}.")
+    print(
+        "Блок между indicators:start и indicators:end руками не правят. "
+        "Слово «прогноз», «допущение» или «оценка» в заголовке столбца относится ко всем ячейкам этого столбца."
+    )
+    return 0
+
+
+def cmd_indicators_retract(args: argparse.Namespace) -> int:
+    project, tokens = take_project(list(args.rest or []), 1, write=True)
+    cell_id = tokens[0]
+    cells, cell_error = indicators.load_indicators(project)
+    if cell_error:
+        die(cell_error)
+    found = next((row for row in cells if row.get("id") == cell_id), None)
+    if found is None:
+        die(f"Ячейка не найдена: {cell_id}")
+    found["status"] = "retracted"
+    save_jsonl(project / "indicators.jsonl", cells)
+    print(f"Снята ячейка {cell_id}. Номер не переиспользуется.")
     return 0
 
 
@@ -2100,7 +2582,9 @@ def check_project(project: Path, state: dict | None = None, *, strict: bool = Fa
     grounding.review_strategy(project, texts.get("strategy.md"), sources, evidence, add)
     grounding.review_substantive_numbers(project, texts, sources, evidence, add)
     source_check.review(project, texts, sources, evidence, add)
+    indicators.review(project, texts, add)
     grounding.review_project_layout(project, add)
+    grounding.review_temp_files(project, add)
     grounding.review_privacy(project, add)
     dirty = uncommitted_tool_files()
     if dirty:
@@ -2345,19 +2829,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     entries = load_log(project)
     _by_stage, total = aggregate(entries)
     print(f"Затраты: {format_usage(entries, total)}")
-    revision = state.get("revision") or {}
-    if revision.get("status") == "pending":
-        current_choice = (state.get("checkpoints") or {}).get("options", {}).get("choice") or "—"
-        print(
-            f"Пересмотр: ожидает решения — {revision.get('decision')}, "
-            f"предложен {revision.get('proposed_option')} (в контрольной точке сейчас {current_choice})"
-        )
-    elif revision.get("status") == "accepted":
-        print(
-            f"Пересмотр: принят {revision.get('decision')}, выбор {revision.get('accepted_option')}"
-        )
-    else:
-        print("Пересмотр: нет")
+    print(revision_summary(state))
     options_body = read_text(project / "options.md") or ""
     if "<!-- preliminary -->" in options_body:
         print(f"Варианты: предварительные, свидетельств {len(active)}. Контрольная точка не закрыта.")
@@ -2431,9 +2903,10 @@ def cmd_resume(args: argparse.Namespace) -> int:
     revision = state.get("revision") or {}
     if revision.get("status") == "pending":
         nxt = (
-            f"Пересмотр {revision.get('decision')} ждёт человека: предложен {revision.get('proposed_option')}. "
-            "Не считай старый выбор контрольной точки окончательным. "
-            "После явного согласия: python scripts/strat.py accept-revision <проект> --choice <O#>."
+            revision_summary(state)
+            + " Не считай старый выбор контрольной точки окончательным. "
+            "После явной фразы человека: python scripts/strat.py accept-revision <проект>. "
+            "Отказ: python scripts/strat.py reject-revision <проект>."
         )
     elif state.get("stage_status") == "done" and stage == 8:
         nxt = "Сопровождение: дата пересмотра в decisions.md. Новые данные не подмешивайте молча — impact и навык revise-on-new-data."
@@ -2463,8 +2936,12 @@ def cmd_resume(args: argparse.Namespace) -> int:
         )
     elif revision.get("status") == "accepted":
         print(f"пересмотр: accepted {revision.get('decision')} -> {revision.get('accepted_option')}")
+    elif revision.get("status") == "rejected":
+        print(f"пересмотр: rejected {revision.get('decision')}")
     else:
         print("пересмотр: нет")
+    if revision.get("status"):
+        print(revision_summary(state))
     questions = read_text(project / "questions.md") or ""
     bullets = [] if is_template(questions) else section_bullets(questions, "Открытые вопросы")
     print("открытые вопросы:")
@@ -2577,48 +3054,179 @@ def cmd_confirm(args: argparse.Namespace) -> int:
     return 0
 
 
+REVISION_KIND_LABEL = {
+    "switch": "смена варианта",
+    "terms": "сохранение варианта, меняются условия",
+    "legacy": "старая запись без вида",
+}
+
+
+def revision_changes_from(args: argparse.Namespace) -> list[str]:
+    found: list[str] = []
+    raw = getattr(args, "changes", None)
+    if isinstance(raw, list):
+        found.extend(str(item).strip() for item in raw if str(item).strip())
+    path = getattr(args, "changes_file", None)
+    if path:
+        text = strip_one_trailing_newline(read_utf8_arg_file(path))
+        found.extend(line.strip() for line in text.splitlines() if line.strip())
+    return found
+
+
+def normalize_revision_kind(revision: dict) -> str:
+    """Old records have no kind. A different O… is a switch; the same O… is terms only with a list."""
+    kind = str(revision.get("kind") or "").strip()
+    if kind in {"switch", "terms"}:
+        return kind
+    proposed = str(revision.get("proposed_option") or "")
+    previous = revision.get("previous_option")
+    changes = [str(item).strip() for item in (revision.get("changes") or []) if str(item).strip()]
+    if previous and proposed and proposed == previous:
+        return "terms" if changes else "legacy"
+    return "switch"
+
+
+def revision_summary(state: dict) -> str:
+    revision = state.get("revision") or {}
+    if not isinstance(revision, dict) or not revision.get("status"):
+        return "Пересмотр: нет"
+    status = str(revision.get("status"))
+    kind = normalize_revision_kind(revision)
+    decision = revision.get("decision") or "—"
+    proposed = revision.get("proposed_option") or "—"
+    previous = revision.get("previous_option") or "—"
+    current = (state.get("checkpoints") or {}).get("options", {}).get("choice") or previous
+    changes = [str(item).strip() for item in (revision.get("changes") or []) if str(item).strip()]
+    change_text = "; ".join(changes) if changes else "не перечислены"
+    kind_text = REVISION_KIND_LABEL.get(kind, kind)
+    if status == "pending":
+        head = f"Пересмотр: ожидает решения — {decision}, вид: {kind_text}."
+    elif status == "accepted":
+        head = f"Пересмотр: принят {decision}, вид: {kind_text}."
+    elif status == "rejected":
+        head = f"Пересмотр: отклонён — {decision}, вид: {kind_text}."
+    else:
+        head = f"Пересмотр: {status} — {decision}, вид: {kind_text}."
+    if kind == "switch":
+        detail = f"Смена варианта: {previous} → {proposed}."
+        if changes:
+            detail += f" Также меняется: {change_text}."
+    elif kind == "terms":
+        detail = f"Вариант {proposed} сохраняется. Меняется: {change_text}."
+    else:
+        detail = (
+            f"Предложен {proposed} (в контрольной точке сейчас {current}). "
+            "Перечень изменений не задан."
+        )
+    if status == "accepted":
+        detail += f" Принятый выбор: {revision.get('accepted_option') or proposed}."
+    if status == "rejected":
+        detail += f" Выбор остаётся {current}."
+    return head + " " + detail
+
+
+def append_decision_revision(project: Path, title: str, bullets: list[str]) -> None:
+    path = project / "decisions.md"
+    existing = read_text(path) or "# Решения\n"
+    if existing and not existing.endswith("\n"):
+        existing += "\n"
+    body = title + "\n\n" + "\n".join(f"- {item}" for item in bullets) + "\n"
+    write_utf8(path, existing + "\n" + body)
+
+
 def cmd_propose_revision(args: argparse.Namespace) -> int:
     project, _tokens = take_project(args.rest, 0, write=True)
-    decision = args.decision
-    choice = args.choice
+    if getattr(args, "json", None):
+        payload = load_command_json(str(args.json), project)
+        if not isinstance(payload, dict):
+            die("JSON пересмотра — один объект: decision, choice, reason и, если вариант тот же, changes.")
+        decision = str(payload.get("decision") or "")
+        choice = str(payload.get("choice") or "")
+        reason = str(payload.get("reason") or "")
+        raw_changes = payload.get("changes") or []
+        if not isinstance(raw_changes, list):
+            die("changes — список строк: что именно меняется.")
+        changes = [str(item).strip() for item in raw_changes if str(item).strip()]
+        if not reason.strip():
+            die("В JSON нет reason.")
+    else:
+        decision = args.decision
+        choice = args.choice
+        reason = resolve_text(
+            args.reason, args.reason_file, label="причина пересмотра", env_name="STRAT_REASON", required=True
+        )
+        changes = revision_changes_from(args)
     if not re.fullmatch(r"D\d+", decision or "") or not re.fullmatch(r"O\d+", choice or ""):
-        die("Форма: propose-revision [проект] --decision D2 --choice O3 --reason \"...\"")
-    reason = resolve_text(
-        args.reason, args.reason_file, label="причина пересмотра", env_name="STRAT_REASON", required=True
-    )
+        die(
+            "Форма: propose-revision [проект] --decision D2 --choice O3 --reason-file причина.txt\n"
+            "Тот же вариант: добавьте --changes-file со строками, что меняется "
+            "(порог, срок, обязательство, revisit_if)."
+        )
     state = load_state(project)
     previous = (state.get("checkpoints") or {}).get("options", {}).get("choice")
+    if previous and choice == previous and not changes:
+        die(
+            f"Пересмотр на тот же вариант {choice} без изменений не записывается. "
+            "Либо укажите другой --choice (смена варианта), "
+            "либо сохраните этот вариант и перечислите, что меняется, в --changes-file "
+            "или в changes JSON: порог, срок, обязательство, revisit_if."
+        )
+    kind = "terms" if previous and choice == previous else "switch"
     state["revision"] = {
         "status": "pending",
+        "kind": kind,
         "decision": decision,
         "proposed_option": choice,
         "previous_option": previous,
+        "changes": changes,
         "reason": reason,
         "opened_at": now_iso(),
         "accepted_at": None,
         "accepted_option": None,
+        "rejected_at": None,
     }
-    append_log(
-        project,
-        int(state.get("stage") or 0),
-        f"Предложен пересмотр {decision}: выбор {choice} вместо {previous or '—'}",
-        grounds=reason,
-    )
+    if kind == "switch":
+        message = f"Предложен пересмотр {decision}: смена варианта {previous or '—'} → {choice}"
+    else:
+        message = f"Предложен пересмотр {decision}: вариант {choice} сохраняется, меняются условия"
+    append_log(project, int(state.get("stage") or 0), message, grounds=reason)
+    bullets = [
+        f"вид: {REVISION_KIND_LABEL[kind]}",
+        f"было: {previous or '—'}",
+        f"предложено: {choice}",
+        "меняется: " + ("; ".join(changes) if changes else "сам вариант"),
+        f"причина: {reason}",
+        "статус: ожидает человека",
+    ]
+    append_decision_revision(project, f"### Пересмотр {decision}: {REVISION_KIND_LABEL[kind]} (ожидает человека)", bullets)
     save_state(project, state)
-    print(f"Пересмотр ожидает человека: {decision}, предложен {choice}, сейчас в контрольной точке {previous or '—'}.")
-    print("После явного согласия: python scripts/strat.py accept-revision <проект> --choice " + choice)
+    print(revision_summary(state))
+    print("После явной фразы человека: python scripts/strat.py accept-revision <проект>")
+    print("Отказ: python scripts/strat.py reject-revision <проект>")
     return 0
+
+
+def _pending_revision(state: dict) -> dict:
+    revision = state.get("revision") or {}
+    if revision.get("status") != "pending":
+        die("Нет ожидающего пересмотра. Сначала propose-revision.")
+    return revision
 
 
 def cmd_accept_revision(args: argparse.Namespace) -> int:
     project, _tokens = take_project(args.rest, 0, write=True)
     state = load_state(project)
-    revision = state.get("revision") or {}
-    if revision.get("status") != "pending":
-        die("Нет ожидающего пересмотра. Сначала propose-revision.")
-    choice = args.choice or revision.get("proposed_option")
+    revision = _pending_revision(state)
+    kind = normalize_revision_kind(revision)
+    proposed = str(revision.get("proposed_option") or "")
+    choice = args.choice or proposed
     if not re.fullmatch(r"O\d+", choice or ""):
         die("Укажите --choice O3. Это выбор человека, не подстановка агента.")
+    if choice != proposed:
+        die(
+            f"Принятие фиксирует предложенное ({proposed}), а передано {choice}. "
+            "Другой вариант предлагают новым propose-revision. Отказ от этого пересмотра — reject-revision."
+        )
     note = resolve_text(args.note, args.note_file, label="заметка", env_name="STRAT_NOTE")
     checkpoint = state["checkpoints"]["options"]
     history = list(checkpoint.get("history") or [])
@@ -2634,8 +3242,13 @@ def cmd_accept_revision(args: argparse.Namespace) -> int:
     checkpoint["status"] = "confirmed"
     checkpoint["choice"] = choice
     checkpoint["at"] = now_iso()
-    checkpoint["note"] = note or revision.get("reason")
+    changes = [str(item).strip() for item in (revision.get("changes") or []) if str(item).strip()]
+    if kind == "terms":
+        checkpoint["note"] = note or ("Условия пересмотрены: " + "; ".join(changes))
+    else:
+        checkpoint["note"] = note or revision.get("reason")
     revision["status"] = "accepted"
+    revision["kind"] = kind if kind in {"switch", "terms"} else "switch"
     revision["accepted_option"] = choice
     revision["accepted_at"] = now_iso()
     state["revision"] = revision
@@ -2645,8 +3258,59 @@ def cmd_accept_revision(args: argparse.Namespace) -> int:
         f"Принят пересмотр {revision.get('decision')}: выбор {choice}",
         grounds=note or revision.get("reason"),
     )
+    bullets = [
+        f"вид: {REVISION_KIND_LABEL.get(kind, kind)}",
+        f"выбор: {choice}",
+        "меняется: " + ("; ".join(changes) if changes else "сам вариант"),
+        "статус: принят",
+    ]
+    append_decision_revision(
+        project,
+        f"### Пересмотр {revision.get('decision')} принят",
+        bullets,
+    )
     save_state(project, state)
-    print(f"Контрольная точка options обновлена: {choice}. Предыдущий выбор сохранён в history.")
+    print(revision_summary(state))
+    if kind == "terms":
+        print(f"Вариант {choice} сохранён. Условия записаны в decisions.md и в заметку контрольной точки.")
+    else:
+        print(f"Контрольная точка options обновлена: {choice}. Предыдущий выбор сохранён в history.")
+    return 0
+
+
+def cmd_reject_revision(args: argparse.Namespace) -> int:
+    project, _tokens = take_project(args.rest, 0, write=True)
+    state = load_state(project)
+    revision = _pending_revision(state)
+    kind = normalize_revision_kind(revision)
+    note = resolve_text(args.note, args.note_file, label="заметка", env_name="STRAT_NOTE")
+    current = (state.get("checkpoints") or {}).get("options", {}).get("choice")
+    revision["status"] = "rejected"
+    revision["kind"] = kind if kind in {"switch", "terms"} else revision.get("kind")
+    revision["rejected_at"] = now_iso()
+    revision["rejected_note"] = note
+    state["revision"] = revision
+    append_log(
+        project,
+        int(state.get("stage") or 0),
+        f"Отклонён пересмотр {revision.get('decision')}",
+        grounds=note or revision.get("reason"),
+    )
+    bullets = [
+        f"вид: {REVISION_KIND_LABEL.get(kind, kind)}",
+        f"выбор остаётся: {current or '—'}",
+        "статус: отклонён",
+    ]
+    if note:
+        bullets.append(f"заметка: {note}")
+    append_decision_revision(
+        project,
+        f"### Пересмотр {revision.get('decision')} отклонён",
+        bullets,
+    )
+    save_state(project, state)
+    print(revision_summary(state))
+    print("Контрольная точка options не изменена.")
     return 0
 
 
@@ -3377,20 +4041,16 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     )
     for line in classify.doctor_lines():
         print(line)
-    optional_packages = (
-        ("pypdf", "PDF: страницы в inspect и текст в read_material"),
-        ("docx", "DOCX через scripts/read_material.py"),
-        ("openpyxl", "XLSX в analyze и read_material"),
-        ("pandas", "запасной путь XLSX; метрики анализа считаются стандартной библиотекой"),
-        ("matplotlib", "PNG-график analyze, если в декларации есть chart"),
-        ("sentence_transformers", "семантический поиск базы знаний; без пакета остаётся BM25"),
-    )
-    for module, purpose in optional_packages:
-        try:
-            __import__(module)
-            print(f"Пакет {module}: установлен ({purpose})")
-        except ImportError:
-            print(f"Пакет {module}: нет ({purpose}). Ядро работает без него.")
+    for name in optional_packages.CATALOG:
+        if optional_packages.present(name):
+            installed = optional_packages.installed_version(name) or "версия не прочитана"
+            minimum = optional_packages.minima().get(name, "")
+            print(
+                f"Пакет {name}: установлен {installed}, это не ниже {minimum}. "
+                f"Без него {optional_packages.without(name)}."
+            )
+        else:
+            print("Пакет " + name + ": " + optional_packages.missing_message(name))
     projects = list_user_projects()
     if projects:
         print("Проекты: " + ", ".join(path.name for path in projects))
@@ -3607,7 +4267,7 @@ def cmd_kb_index(args: argparse.Namespace) -> int:
     if kb.semantic_available():
         print("Семантический поиск: пакет sentence_transformers установлен.")
     else:
-        print("Семантический поиск: нет пакета sentence_transformers. Рабочий метод — BM25.")
+        print(optional_packages.missing_message("sentence-transformers") + " Рабочий метод — BM25.")
     return 0
 
 
@@ -3990,6 +4650,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     fetch.set_defaults(func=cmd_fetch)
 
+    search = sub.add_parser("search", help="найти адреса в открытом поисковике, без ключа")
+    search.add_argument("rest", nargs="*", help="[проект] текст запроса")
+    search.add_argument("--query-file", help="запрос из файла UTF-8")
+    search.set_defaults(func=cmd_search)
+
+    install = sub.add_parser("install", help="поставить пакет из белого списка после «да» человека")
+    install.add_argument("rest", nargs="+", help="[проект] пакет из белого списка")
+    install.add_argument(
+        "--confirmed",
+        action="store_true",
+        help="только после явной фразы человека в этом ходе",
+    )
+    install.set_defaults(func=cmd_install)
+
     add_source = sub.add_parser("add-source", help="зарегистрировать источник")
     add_source.add_argument("rest", nargs="+", help="[проект] <url|файл>")
     add_source.add_argument("--kind", choices=sorted(SOURCE_KINDS))
@@ -4023,9 +4697,8 @@ def build_parser() -> argparse.ArgumentParser:
     add_assumption.add_argument("project", nargs="?")
     add_assumption.add_argument(
         "--kind",
-        required=True,
         choices=source_check.ASSUMPTION_KINDS,
-        help="допущение, прогноз или оценка",
+        help="допущение, прогноз или оценка; обязательно без --json",
     )
     add_assumption.add_argument("--value", help="число: 200, 400 тыс., 1,2 млн, 60%")
     add_assumption.add_argument("--value-file", help="значение из файла UTF-8")
@@ -4035,7 +4708,51 @@ def build_parser() -> argparse.ArgumentParser:
     add_assumption.add_argument("--unit-file", help="единица из файла UTF-8")
     add_assumption.add_argument("--note", help="зачем это допущение")
     add_assumption.add_argument("--note-file", help="заметка из файла UTF-8")
+    add_assumption.add_argument("--indicator", help="показатель из реестра, если это его прогноз")
+    add_assumption.add_argument("--indicator-file", help="название показателя из файла UTF-8")
+    add_assumption.add_argument("--scenario", help="название этого прогноза, не столбец брифа")
+    add_assumption.add_argument("--scenario-file", help="сценарий прогноза из файла UTF-8")
+    add_assumption.add_argument(
+        "--forecast-role",
+        choices=["initiative", "alternate"],
+        default="initiative",
+        help="initiative сравнивается с базой и целью; alternate — другой прогноз того же показателя",
+    )
+    add_assumption.add_argument("--because", help="почему прогноз хуже сценария без изменений, если так вышло")
+    add_assumption.add_argument("--because-file", help="обоснование из файла UTF-8")
+    add_assumption.add_argument(
+        "--json",
+        help="объект или список объектов UTF-8; «-» читает stdin. Не кладите этот файл в папку проекта",
+    )
     add_assumption.set_defaults(func=cmd_add_assumption)
+
+    indicators_cmd = sub.add_parser("indicators", help="ячейки таблицы показателей и снимок для документов")
+    indicators_sub = indicators_cmd.add_subparsers(dest="indicators_cmd", required=True)
+    indicators_add = indicators_sub.add_parser("add", help="одна ячейка: показатель, столбец как в источнике, значение")
+    indicators_add.add_argument("rest", nargs="*", help="необязательный проект")
+    indicators_add.add_argument("--indicator")
+    indicators_add.add_argument("--indicator-file")
+    indicators_add.add_argument("--scenario", help="заголовок столбца дословно из источника")
+    indicators_add.add_argument("--scenario-file")
+    indicators_add.add_argument("--value")
+    indicators_add.add_argument("--value-file")
+    indicators_add.add_argument("--unit")
+    indicators_add.add_argument("--unit-file")
+    indicators_add.add_argument("--direction", help="больше или меньше; обязательно без --json")
+    indicators_add.add_argument("--role", help="база, цель или контекст; обязательно без --json")
+    indicators_add.add_argument("--source", help="S001")
+    indicators_add.add_argument(
+        "--json",
+        help="объект ячейки или список; «-» читает stdin. Не кладите этот файл в папку проекта",
+    )
+    indicators_add.set_defaults(func=cmd_indicators_add)
+    indicators_table = indicators_sub.add_parser("table", help="таблица из реестра, не вручную")
+    indicators_table.add_argument("rest", nargs="*", help="необязательный проект")
+    indicators_table.add_argument("--into", help="brief.md, strategy.md или deliverable.md")
+    indicators_table.set_defaults(func=cmd_indicators_table)
+    indicators_retract = indicators_sub.add_parser("retract", help="снять ячейку, сохранив её номер")
+    indicators_retract.add_argument("rest", nargs="+", help="[проект] Q001")
+    indicators_retract.set_defaults(func=cmd_indicators_retract)
 
     confirm_date = sub.add_parser(
         "confirm-date",
@@ -4072,18 +4789,32 @@ def build_parser() -> argparse.ArgumentParser:
 
     propose = sub.add_parser("propose-revision", help="поставить решение на пересмотр, не меняя выбор")
     propose.add_argument("rest", nargs="*", help="необязательный проект")
-    propose.add_argument("--decision", required=True, help="D2")
-    propose.add_argument("--choice", required=True, help="предложенный вариант, например O3")
+    propose.add_argument("--decision", help="D2; обязательно без --json")
+    propose.add_argument("--choice", help="предложенный вариант, например O3")
     propose.add_argument("--reason")
     propose.add_argument("--reason-file")
+    propose.add_argument(
+        "--changes-file",
+        help="UTF-8, по строке на изменение условий, если вариант остаётся тем же",
+    )
+    propose.add_argument(
+        "--json",
+        help="объект decision, choice, reason, changes; «-» читает stdin",
+    )
     propose.set_defaults(func=cmd_propose_revision)
 
     accept = sub.add_parser("accept-revision", help="принять пересмотр и обновить выбор с историей")
     accept.add_argument("rest", nargs="*", help="необязательный проект")
-    accept.add_argument("--choice", help="если не задан, берётся предложенный вариант")
+    accept.add_argument("--choice", help="должен совпасть с предложенным; если не задан — берётся он")
     accept.add_argument("--note")
     accept.add_argument("--note-file")
     accept.set_defaults(func=cmd_accept_revision)
+
+    reject = sub.add_parser("reject-revision", help="отклонить пересмотр, не меняя выбор")
+    reject.add_argument("rest", nargs="*", help="необязательный проект")
+    reject.add_argument("--note")
+    reject.add_argument("--note-file")
+    reject.set_defaults(func=cmd_reject_revision)
 
     impact = sub.add_parser("impact", help="что зависит от источника или свидетельства")
     impact.add_argument("rest", nargs="+", help="[проект] <S001|E001>")

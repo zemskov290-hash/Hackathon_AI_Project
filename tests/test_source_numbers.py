@@ -77,6 +77,9 @@ class QuantityNormalizationTests(unittest.TestCase):
         points = source_check.assumption_quantity({"value": "2", "unit": "п.п."})
         self.assertEqual(points.value, 2)
         self.assertFalse(points.percent)
+        self.assertTrue(points.points)
+        self.assertNotEqual(source_check.quantities("8 п.п."), source_check.quantities("8 %"))
+        self.assertNotEqual(source_check.quantities("8 п.п."), source_check.quantities("8"))
         self.assertEqual(source_check.quantities("сто тысяч"), source_check.quantities("100000"))
         self.assertEqual(source_check.quantities("пять"), set())
         self.assertIn("60", source_check.expand_number_words("не ниже шестидесяти"))
@@ -603,8 +606,11 @@ class SourceNumberCheckTests(unittest.TestCase):
             import pypdf  # noqa: F401
         except ImportError:
             blob = messages(self.project, "number-not-in-source")
-            self.assertIn("PDF", blob)
-            self.assertIn("7777", blob)
+            self.assertNotIn("7777", blob)
+            tool = messages(self.project, "tooling")
+            self.assertIn("pypdf", tool)
+            self.assertIn("install", tool)
+            self.assertEqual(tool.count("Нет пакета"), 1)
             return
         blob = messages(self.project, "number-not-in-source")
         self.assertIn("7777", blob)
