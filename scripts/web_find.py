@@ -8,6 +8,7 @@ page, robots.txt and sitemap files named there. Nothing else is guessed.
 
 from __future__ import annotations
 
+import base64
 import os
 import re
 from html.parser import HTMLParser
@@ -15,7 +16,12 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote_plus, urljoin, urlparse, urlunparse
 from urllib.request import Request, urlopen
 
-USER_AGENT = "strat-factory/1.0 (open desk research)"
+# A library-style agent token gets HTTP 202 from DuckDuckGo: an anti-bot stub, not a result page.
+# A normal browser GET is what returns the HTML the parsers read.
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
 TIMEOUT = 15
 LIMIT_BYTES = 1_000_000
 UNTRUSTED = (
@@ -136,23 +142,89 @@ def parse_duckduckgo_html(html: str) -> list[dict[str, str]]:
     parser = _ResultParser({"result__a"}, {"result__snippet"})
     parser.feed(html)
     parser.close()
+    return _public_hits(parser.hits)
+
+
+def parse_duckduckgo_lite(html: str) -> list[dict[str, str]]:
+    parser = _ResultParser({"result-link"}, {"result-snippet"})
+    parser.feed(html)
+    parser.close()
+    return _public_hits(parser.hits)
+
+
+def unwrap_bing_url(href: str) -> str:
+    """Bing wraps the target as u=a1 + base64. A link that does not decode is dropped."""
+    token = parse_qs(urlparse(href).query).get("u", [""])[0]
+    if token.startswith("a1"):
+        token = token[2:]
+    if not token:
+        return ""
+    pad = "=" * ((4 - len(token) % 4) % 4)
+    try:
+        decoded = base64.b64decode(token + pad).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return ""
+    if decoded.startswith("http://") or decoded.startswith("https://"):
+        return decoded
+    return ""
+
+
+class _BingParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.hits: list[dict[str, str]] = []
+        self._mode: str | None = None
+        self._href = ""
+        self._buf: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        href = _attr(attrs, "href")
+        classes = _class_list(attrs)
+        if tag == "a" and "/ck/a" in href and "u=a1" in href:
+            self._mode = "title"
+            self._href = href
+            self._buf = []
+            return
+        if tag == "p" and "b_lineclamp2" in classes:
+            self._mode = "snippet"
+            self._buf = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if self._mode == "title" and tag == "a":
+            title = re.sub(r"\s+", " ", "".join(self._buf)).strip()
+            url = unwrap_bing_url(self._href)
+            if title and url.startswith("http"):
+                self.hits.append({"title": title, "url": url, "snippet": ""})
+            self._mode = None
+            self._buf = []
+            return
+        if self._mode == "snippet" and tag == "p":
+            snippet = re.sub(r"\s+", " ", "".join(self._buf)).strip()
+            if self.hits and snippet and not self.hits[-1]["snippet"]:
+                self.hits[-1]["snippet"] = snippet
+            self._mode = None
+            self._buf = []
+
+    def handle_data(self, data: str) -> None:
+        if self._mode:
+            self._buf.append(data)
+
+
+def parse_bing_html(html: str) -> list[dict[str, str]]:
+    parser = _BingParser()
+    parser.feed(html)
+    parser.close()
+    return parser.hits
+
+
+def _public_hits(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     hits = []
-    for row in parser.hits:
+    for row in rows:
         url = unwrap_result_url(row["url"])
         if not url.startswith("http"):
             continue
-        hits.append({"title": row["title"], "url": url, "snippet": row["snippet"]})
-    return hits
-
-
-def parse_mojeek_html(html: str) -> list[dict[str, str]]:
-    parser = _ResultParser({"title"}, {"s"})
-    parser.feed(html)
-    parser.close()
-    hits = []
-    for row in parser.hits:
-        url = unwrap_result_url(row["url"])
-        if not url.startswith("http"):
+        host = urlparse(url).netloc.casefold()
+        if host.endswith("duckduckgo.com") or host.endswith("bing.com"):
             continue
         hits.append({"title": row["title"], "url": url, "snippet": row["snippet"]})
     return hits
@@ -160,7 +232,8 @@ def parse_mojeek_html(html: str) -> list[dict[str, str]]:
 
 PARSERS = {
     "duckduckgo": parse_duckduckgo_html,
-    "mojeek": parse_mojeek_html,
+    "duckduckgo-lite": parse_duckduckgo_lite,
+    "bing": parse_bing_html,
 }
 
 
@@ -177,7 +250,8 @@ def engine_requests(query: str) -> list[tuple[str, str]]:
         return found
     return [
         ("duckduckgo", f"https://html.duckduckgo.com/html/?q={quoted}"),
-        ("mojeek", f"https://www.mojeek.com/search?q={quoted}"),
+        ("duckduckgo-lite", f"https://lite.duckduckgo.com/lite/?q={quoted}"),
+        ("bing", f"https://www.bing.com/search?q={quoted}"),
     ]
 
 
@@ -185,12 +259,16 @@ def search_query(query: str) -> tuple[str, list[dict[str, str]]]:
     """Try each engine until one returns hits. Does not invent addresses."""
     errors: list[str] = []
     for name, url in engine_requests(query):
-        parser = PARSERS.get(name, parse_duckduckgo_html)
+        parser = PARSERS.get(name)
+        if parser is None:
+            errors.append(f"{name}: нет разбора")
+            continue
         try:
             status, body = http_get(url)
         except WebError as exc:
             errors.append(f"{name}: {exc}")
             continue
+        # 202 is an anti-bot stub, not a result page. An empty 200 page is the same kind of miss.
         if status != 200 or not body.strip():
             errors.append(f"{name}: HTTP {status}")
             continue

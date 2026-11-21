@@ -106,16 +106,34 @@ FORBIDDEN_INSTALL_FLAGS = (
 )
 
 
-def pinned_versions() -> dict[str, str]:
+def _version_tuple(value: str) -> tuple[int, ...]:
+    core = re.split(r"[-+!]", value.strip(), maxsplit=1)[0]
+    parts: list[int] = []
+    for piece in core.split("."):
+        match = re.match(r"(\d+)", piece)
+        parts.append(int(match.group(1)) if match else 0)
+    return tuple(parts)
+
+
+def _at_least(installed: str, minimum: str) -> bool:
+    left = _version_tuple(installed)
+    right = _version_tuple(minimum)
+    width = max(len(left), len(right))
+    left = left + (0,) * (width - len(left))
+    right = right + (0,) * (width - len(right))
+    return left >= right
+
+
+def minimum_versions() -> dict[str, str]:
     path = ROOT / "requirements.txt"
     found: dict[str, str] = {}
     if not path.is_file():
         return found
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.split("#", 1)[0].strip()
-        if "==" not in line:
+        if ">=" not in line:
             continue
-        name, version = line.split("==", 1)
+        name, version = line.split(">=", 1)
         name = name.strip()
         version = version.strip()
         if name in ALLOWED_PACKAGES and version:
@@ -143,17 +161,18 @@ def _install_tail_reason(tail: str) -> str | None:
         spec = positionals[1]
     else:
         return INSTALL_DENY
-    if "==" in spec:
-        name, version = spec.split("==", 1)
+    requested: str | None = None
+    if "==" in spec or ">=" in spec:
+        separator = "==" if "==" in spec else ">="
+        name, requested = spec.split(separator, 1)
     else:
-        name, version = spec, None
+        name = spec
     canon = PACKAGE_ALIASES.get(name.casefold(), name)
-    pins = pinned_versions()
-    pinned = pins.get(canon)
-    if pinned is None:
+    minimum = minimum_versions().get(canon)
+    if minimum is None:
         return INSTALL_DENY + f" Пакет {name} вне списка."
-    if version is not None and version != pinned:
-        return INSTALL_DENY + f" Закреплено только {canon}=={pinned}."
+    if requested is not None and not _at_least(requested, minimum):
+        return INSTALL_DENY + f" Версия {requested} ниже минимума {minimum}."
     return None
 
 

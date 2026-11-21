@@ -1300,8 +1300,11 @@ def run_pip(argv: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(argv, text=True, capture_output=True)
 
 
-def cmd_install(args: argparse.Namespace, pip_runner=None) -> int:
-    """Install one pinned package from the closed list. Nothing happens without confirmation."""
+def cmd_install(args: argparse.Namespace, pip_runner=None, version_of=None) -> int:
+    """Install one whitelisted package. Nothing happens without confirmation.
+
+    A version already at or above the minimum is left as it is.
+    """
     tokens = list(args.rest or [])
     if not tokens:
         print("Укажите пакет из белого списка. Ничего не установлено.")
@@ -1315,30 +1318,37 @@ def cmd_install(args: argparse.Namespace, pip_runner=None) -> int:
     project, rest = take_project(tokens, 1, write=True)
     spec = rest[0]
     try:
-        name, version, argv = optional_packages.plan(spec)
+        name, minimum, requested, argv = optional_packages.plan(spec)
     except optional_packages.InstallRejected as exc:
         print(str(exc))
         return 1
+    lookup = version_of or optional_packages.installed_version
+    installed = lookup(name)
+    if optional_packages.request_met(installed, minimum, requested):
+        print(optional_packages.already_message(name, installed or "", minimum))
+        return 0
     if not args.confirmed:
-        print(optional_packages.ask_block(name, version, project.name))
+        print(optional_packages.ask_block(name, minimum, project.name, installed))
         return 2
     runner = pip_runner or run_pip
     result = runner(argv)
     if result.returncode != 0:
-        print(f"Установка {name}=={version} не выполнена.")
+        print(f"Установка {name}>={minimum} не выполнена.")
         detail = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part and part.strip())
         if detail:
             print(detail)
         return result.returncode or 1
+    seen = lookup(name)
+    shown = seen if seen and optional_packages.version_at_least(seen, minimum) else f"не ниже {minimum}"
     stage = int(load_state(project).get("stage") or 0)
     append_log(
         project,
         stage,
-        f"Установлен пакет {name}=={version}. Подтвердил: человек.",
+        f"Установлен пакет {name} {shown}. Минимум {minimum}. Подтвердил: человек.",
         grounds="явное «да» в этом ходе, флаг --confirmed",
         model="ide/subscription",
     )
-    print(f"Установлен пакет {name}=={version}. Подтвердил: человек. Журнал: {project.name}.")
+    print(f"Установлен пакет {name} {shown}. Минимум {minimum}. Подтвердил: человек. Журнал: {project.name}.")
     return 0
 
 
@@ -4033,7 +4043,12 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
         print(line)
     for name in optional_packages.CATALOG:
         if optional_packages.present(name):
-            print(f"Пакет {name}: установлен. Без него {optional_packages.without(name)}.")
+            installed = optional_packages.installed_version(name) or "версия не прочитана"
+            minimum = optional_packages.minima().get(name, "")
+            print(
+                f"Пакет {name}: установлен {installed}, это не ниже {minimum}. "
+                f"Без него {optional_packages.without(name)}."
+            )
         else:
             print("Пакет " + name + ": " + optional_packages.missing_message(name))
     projects = list_user_projects()

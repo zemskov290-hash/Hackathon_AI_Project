@@ -18,26 +18,16 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import web_find  # noqa: E402
 
 STRAT = ROOT / "scripts" / "strat.py"
+FIXTURES = ROOT / "tests" / "fixtures" / "search"
 
-DDG_HTML = """
-<html><body>
-<div class="result">
-  <a class="result__a" href="https://duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Ftariffs&amp;rut=1">Тарифы</a>
-  <a class="result__snippet" href="https://example.com/tariffs">Семейный пакет</a>
-</div>
-<div class="result">
-  <a class="result__a" href="https://news.example.com/review">Обзор</a>
-  <div class="result__snippet">Короткий обзор</div>
-</div>
-</body></html>
-"""
 
-MOJEEK_HTML = """
-<html><body>
-<h2 class="title"><a href="https://shop.example.com/plans">Планы</a></h2>
-<p class="s">Сравнение планов</p>
-</body></html>
-"""
+def fixture(name: str) -> str:
+    return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+DDG_HTML = fixture("duckduckgo-html.html")
+LITE_HTML = fixture("duckduckgo-lite.html")
+BING_HTML = fixture("bing.html")
 
 
 def stop_http_server(server, thread: threading.Thread) -> None:
@@ -48,18 +38,42 @@ def stop_http_server(server, thread: threading.Thread) -> None:
 
 class ParseTests(unittest.TestCase):
     def test_duckduckgo_unwraps_redirect_and_keeps_snippet(self) -> None:
-        hits = web_find.parse_duckduckgo_html(DDG_HTML)
+        hits = web_find.parse_duckduckgo_html(fixture("duckduckgo-html.html"))
         self.assertEqual(hits[0]["url"], "https://example.com/tariffs")
         self.assertEqual(hits[0]["title"], "Тарифы")
         self.assertIn("Семейный", hits[0]["snippet"])
         self.assertEqual(hits[1]["url"], "https://news.example.com/review")
         self.assertEqual(hits[1]["snippet"], "Короткий обзор")
 
-    def test_mojeek_reads_title_and_snippet(self) -> None:
-        hits = web_find.parse_mojeek_html(MOJEEK_HTML)
+    def test_duckduckgo_lite_unwraps_result_link(self) -> None:
+        hits = web_find.parse_duckduckgo_lite(fixture("duckduckgo-lite.html"))
         self.assertEqual(len(hits), 1)
         self.assertEqual(hits[0]["url"], "https://shop.example.com/plans")
+        self.assertEqual(hits[0]["title"], "Планы")
         self.assertEqual(hits[0]["snippet"], "Сравнение планов")
+
+    def test_bing_decodes_result_url(self) -> None:
+        hits = web_find.parse_bing_html(fixture("bing.html"))
+        self.assertEqual(hits[0]["url"], "https://example.com/tariffs")
+        self.assertEqual(hits[0]["title"], "Тарифы")
+        self.assertIn("Семейный", hits[0]["snippet"])
+        self.assertEqual(hits[1]["url"], "https://news.example.com/review")
+        self.assertEqual(hits[1]["snippet"], "Короткий обзор")
+
+    def test_default_chain_uses_a_browser_get(self) -> None:
+        previous = os.environ.pop("STRAT_SEARCH_BASES", None)
+        try:
+            requests = web_find.engine_requests("тарифы")
+        finally:
+            if previous is not None:
+                os.environ["STRAT_SEARCH_BASES"] = previous
+        names = [name for name, _url in requests]
+        self.assertEqual(names, ["duckduckgo", "duckduckgo-lite", "bing"])
+        self.assertTrue(requests[0][1].startswith("https://html.duckduckgo.com/html/?q="))
+        self.assertTrue(requests[1][1].startswith("https://lite.duckduckgo.com/lite/?q="))
+        self.assertTrue(requests[2][1].startswith("https://www.bing.com/search?q="))
+        self.assertIn("Mozilla", web_find.USER_AGENT)
+        self.assertNotIn("strat-factory", web_find.USER_AGENT)
 
     def test_path_words_ignore_short_and_extensions(self) -> None:
         words = web_find.path_words("https://host/no-such-tariffs/index.html")
@@ -82,11 +96,17 @@ class LocalServerTests(unittest.TestCase):
                 if path == "/ddg":
                     self._send(200, "text/html", DDG_HTML)
                     return
-                if path == "/mojeek-down":
-                    self._send(503, "text/plain", "down")
+                if path == "/challenge":
+                    self._send(202, "text/html", "<html>bot</html>")
                     return
-                if path == "/mojeek":
-                    self._send(200, "text/html", MOJEEK_HTML)
+                if path == "/empty":
+                    self._send(200, "text/html", "<html><body>нет ссылок</body></html>")
+                    return
+                if path == "/lite":
+                    self._send(200, "text/html", LITE_HTML)
+                    return
+                if path == "/bing":
+                    self._send(200, "text/html", BING_HTML)
                     return
                 if path in {"/", "/index.html"}:
                     html = (
@@ -141,7 +161,8 @@ class LocalServerTests(unittest.TestCase):
         self.env["STRAT_FETCH_BACKOFF_SECONDS"] = "0"
         self.env["STRAT_SEARCH_BASES"] = (
             f"duckduckgo|http://127.0.0.1:{self.port}/ddg,"
-            f"mojeek|http://127.0.0.1:{self.port}/mojeek"
+            f"duckduckgo-lite|http://127.0.0.1:{self.port}/lite,"
+            f"bing|http://127.0.0.1:{self.port}/bing"
         )
 
     def cli(self, *args: str, env: dict | None = None) -> subprocess.CompletedProcess[str]:
@@ -178,16 +199,17 @@ class LocalServerTests(unittest.TestCase):
 
     def test_search_falls_back_when_the_first_engine_fails(self) -> None:
         self.env["STRAT_SEARCH_BASES"] = (
-            f"duckduckgo|http://127.0.0.1:{self.port}/mojeek-down,"
-            f"mojeek|http://127.0.0.1:{self.port}/mojeek"
+            f"duckduckgo|http://127.0.0.1:{self.port}/challenge,"
+            f"duckduckgo-lite|http://127.0.0.1:{self.port}/empty,"
+            f"bing|http://127.0.0.1:{self.port}/bing"
         )
         created = self.cli("init", "fallback", "--title", "Запасной")
         self.assertEqual(created.returncode, 0, created.stdout + created.stderr)
         found = self.cli("search", "fallback", "планы")
         self.assertEqual(found.returncode, 0, found.stdout + found.stderr)
-        self.assertIn("mojeek", found.stdout)
-        self.assertIn("https://shop.example.com/plans", found.stdout)
-        self.assertNotIn("https://example.com/tariffs", found.stdout)
+        self.assertIn("bing", found.stdout)
+        self.assertIn("https://example.com/tariffs", found.stdout)
+        self.assertNotIn("https://shop.example.com/plans", found.stdout)
 
     def test_fetch_404_suggests_published_links_and_does_not_guess(self) -> None:
         created = self.cli("init", "miss", "--title", "Промах")
