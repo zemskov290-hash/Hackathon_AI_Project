@@ -87,8 +87,8 @@
     "strategy_sections": {
       "title": "Обязательные разделы стратегии",
       "better": "выше лучше",
-      "agent": 1.0,
-      "chat": 1.0,
+      "agent": 0.8571,
+      "chat": 0.8571,
       "chat_applicable": true,
       "agent_n": 1,
       "chat_n": 1
@@ -96,7 +96,7 @@
     "check_errors": {
       "title": "Ошибки strat check",
       "better": "ниже лучше",
-      "agent": 0.3333,
+      "agent": 0.8333,
       "chat": null,
       "chat_applicable": false,
       "agent_n": 6,
@@ -160,12 +160,12 @@
           "detail": "задача не про возобновление"
         },
         "strategy_sections": {
-          "value": 1.0,
+          "value": 0.8571,
           "detail": "доля непустых подразделов навыка 06"
         },
         "check_errors": {
-          "value": 0,
-          "detail": "ошибок 0, предупреждений 11"
+          "value": 2,
+          "detail": "ошибок 2, предупреждений 11"
         },
         "elapsed_seconds": {
           "value": 283.964,
@@ -219,8 +219,8 @@
           "detail": "задача не требует стратегии"
         },
         "check_errors": {
-          "value": 1,
-          "detail": "ошибок 1, предупреждений 2"
+          "value": 2,
+          "detail": "ошибок 2, предупреждений 2"
         },
         "elapsed_seconds": {
           "value": 270.785,
@@ -494,7 +494,7 @@
           "detail": "задача не про возобновление"
         },
         "strategy_sections": {
-          "value": 1.0,
+          "value": 0.8571,
           "detail": "доля непустых подразделов навыка 06"
         },
         "check_errors": {
@@ -803,7 +803,7 @@
       "scenario": "По мотивам прогона 2: новая заметка опровергает опору решения. Старое свидетельство надо заместить с причиной и поставить решение на пересмотр, не принимая его за человека.",
       "prompt_chars": {
         "agent": 813,
-        "chat": 5786
+        "chat": 6167
       }
     },
     {
@@ -862,8 +862,8 @@
         "status": "scored",
         "metrics": {
           "citation_rate": {
-            "value": 0.4088,
-            "detail": "74 из 181 предложений; в реестре с источником 18 из 18 активных"
+            "value": 0.4278,
+            "detail": "80 из 187 предложений; в реестре с источником 18 из 18 активных"
           },
           "unsourced_numbers": {
             "value": 3,
@@ -906,7 +906,7 @@
             "detail": "meta.json без elapsed_seconds"
           },
           "output_chars": {
-            "value": 26779,
+            "value": 27820,
             "detail": "символы ответа, не токены"
           }
         },

@@ -34,6 +34,7 @@ import indicators
 import optional_packages
 import evidence_honesty
 import derivation_check
+import plan_review
 import source_check
 import tls_fallback
 import usage_log
@@ -124,8 +125,10 @@ PRODUCT_SUBSECTIONS = (
     "Метрики",
     "Риски",
     "Что мы не делаем",
+    plan_review.ECONOMICS_HEADING,
 )
 COMM_SUBSECTIONS = (
+    plan_review.BARRIER_HEADING,
     "Аудитории",
     "Ключевые сообщения",
     "Каналы",
@@ -2589,6 +2592,14 @@ def check_project(project: Path, state: dict | None = None, *, strict: bool = Fa
                             "type",
                             f"{name}: в разделе «Факты» [{evidence_id}] имеет тип {row.get('type')}, это не факт",
                         )
+                cited_assumptions = sorted(set(ASSUMPTION_REF_RE.findall(unit)))
+                if cited_assumptions:
+                    add(
+                        "facts",
+                        f"{name}: в разделе «Факты» допущение {', '.join('[' + item + ']' for item in cited_assumptions)}: "
+                        f"{unit[:160]}. Допущение — не факт: перенесите фразу в план, гипотезы или прогнозы.",
+                        warning=True,
+                    )
 
     assumption_rows, _assumption_errors = load_jsonl(project / "assumptions.jsonl")
     retracted_assumptions = {
@@ -2677,6 +2688,13 @@ def check_project(project: Path, state: dict | None = None, *, strict: bool = Fa
                     continue
                 if product.group(1) not in visible:
                     add("product", f"{product.group(1)} указано в маркере, но не описано в тексте стратегии")
+            plan_review.review_barrier(strategy, add)
+    plan_review.review_economics(
+        texts,
+        state,
+        add,
+        strategy_required=bool(stage_required(state, 6) or promises),
+    )
 
     low_basis: set[str] = set()
     for name in RECOMMENDATION_FILES:
@@ -2748,6 +2766,8 @@ def check_project(project: Path, state: dict | None = None, *, strict: bool = Fa
     evidence_honesty.review(project, texts, sources, evidence, add)
     indicators.review(project, texts, add)
     derivation_check.review(project, texts, add)
+    plan_review.review_flag_markers(project, texts, add)
+    plan_review.review_placeholders(project, texts, add)
     grounding.review_project_layout(project, add)
     grounding.review_temp_files(project, add)
     grounding.review_privacy(project, add)
