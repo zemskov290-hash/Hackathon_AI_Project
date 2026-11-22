@@ -1914,6 +1914,87 @@ def cmd_retract(args: argparse.Namespace) -> int:
     return 0
 
 
+ASSUMPTION_REF_RE = re.compile(r"\[(U\d{3,})\]")
+# Words that say the line reports the withdrawal itself, not leans on the value.
+RETRACTION_WORDS_RE = re.compile(r"(?i)отклон|отозва|отзыв|снят|исключ|retract|withdrawn")
+
+
+def assumption_dependents(project: Path, assumption_id: str, rows: list[dict]) -> tuple[list[str], list[str]]:
+    """Other active assumptions that name this id, and text lines that cite it."""
+    word = re.compile(rf"\b{re.escape(assumption_id)}\b")
+    records = []
+    for row in rows:
+        if row.get("id") == assumption_id or row.get("status", "active") != "active":
+            continue
+        blob = " ".join(str(row.get(key) or "") for key in ("note", "because", "name"))
+        if word.search(blob):
+            records.append(f"{row.get('id')} ({row.get('name') or row.get('kind')}, {row.get('value')} {row.get('unit') or ''})".strip())
+    lines = []
+    for name in (*ARTIFACTS, "deliverable.md"):
+        text = read_text(project / name)
+        if not text:
+            continue
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if f"[{assumption_id}]" in line:
+                lines.append(f"{name}:{lineno}")
+    return records, lines
+
+
+def cmd_retract_assumption(args: argparse.Namespace) -> int:
+    project, tokens = take_project(args.rest, 1, write=True)
+    assumption_id = tokens[0]
+    if not re.fullmatch(r"U\d{3,}", assumption_id):
+        die(f"Нужен id допущения вида U001, а не {assumption_id}.")
+    rows, errors = load_jsonl(project / "assumptions.jsonl")
+    if errors:
+        die("assumptions.jsonl повреждён:\n" + "\n".join(errors))
+    found = next((row for row in rows if row.get("id") == assumption_id), None)
+    if found is None:
+        die(f"Допущение не найдено: {assumption_id}")
+    if found.get("status") == "retracted":
+        print(f"{assumption_id} уже отозвано: {found.get('retracted_reason') or 'причина не записана'}")
+        return 0
+    reason = resolve_text(
+        args.reason, args.reason_file, label="причина отзыва допущения", env_name="STRAT_REASON", required=True
+    )
+    found["status"] = "retracted"
+    found["retracted_reason"] = reason
+    found["retracted_at"] = now_iso()
+    by = str(getattr(args, "by", "") or "").strip()
+    if by:
+        if not any(row.get("id") == by and row.get("status", "active") == "active" for row in rows):
+            die(f"Замена {by} не найдена среди активных допущений. Сначала add-assumption.")
+        found["superseded_by"] = by
+    save_jsonl(project / "assumptions.jsonl", rows)
+    state = load_state(project)
+    label = f"{found.get('kind')} {found.get('value')} {found.get('unit') or ''}".strip()
+    append_log(
+        project,
+        int(state.get("stage") or 0),
+        f"Отозвано допущение {assumption_id} ({label})" + (f", замена {by}" if by else ""),
+        grounds=reason,
+    )
+    save_state(project, state)
+    records, lines = assumption_dependents(project, assumption_id, rows)
+    print(f"Отозвано допущение {assumption_id} ({label}): {reason}")
+    print("Запись осталась в assumptions.jsonl со статусом retracted, история не теряется.")
+    if records:
+        print("Допущения, в заметках которых упомянуто " + assumption_id + " (пересчитайте):")
+        for item in records:
+            print(f"- {item}")
+    if lines:
+        print("Строки, которые на него ссылаются (замените значение или пометьте как отозванное):")
+        for item in lines:
+            print(f"- {item}")
+    if not records and not lines:
+        print("Зависимых допущений и ссылок в текстах не найдено.")
+    print(
+        "Дальше: пересчитайте зависимые прогнозы через add-assumption, затем "
+        "python scripts/strat.py check — оставшиеся ссылки на отозванное допущение будут ошибкой."
+    )
+    return 0
+
+
 def cmd_supersede(args: argparse.Namespace) -> int:
     project, tokens = take_project(args.rest, 1, write=True)
     old_id = tokens[0]
@@ -2447,6 +2528,27 @@ def check_project(project: Path, state: dict | None = None, *, strict: bool = Fa
                             "type",
                             f"{name}: в разделе «Факты» [{evidence_id}] имеет тип {row.get('type')}, это не факт",
                         )
+
+    assumption_rows, _assumption_errors = load_jsonl(project / "assumptions.jsonl")
+    retracted_assumptions = {
+        str(row.get("id")): row for row in assumption_rows if row.get("status") == "retracted"
+    }
+    if retracted_assumptions:
+        for name in (*ARTIFACTS, "deliverable.md"):
+            body = texts.get(name) if name in texts else read_text(project / name)
+            if not body or is_template(body):
+                continue
+            for lineno, line in enumerate(body.splitlines(), 1):
+                for assumption_id in ASSUMPTION_REF_RE.findall(line):
+                    if assumption_id not in retracted_assumptions:
+                        continue
+                    if RETRACTION_WORDS_RE.search(line):
+                        continue
+                    add(
+                        "retracted",
+                        f"{name}:{lineno}: [{assumption_id}] отозвано ({retracted_assumptions[assumption_id].get('retracted_reason') or 'без причины'}). "
+                        "Пересчитайте вывод или прямо напишите в строке, что допущение отклонено.",
+                    )
 
     if stage_required(state, 4):
         situation = texts.get("situation.md")
@@ -4773,6 +4875,15 @@ def build_parser() -> argparse.ArgumentParser:
     supersede_option.add_argument("--reason", help="почему вариант снят; «-» читает stdin")
     supersede_option.add_argument("--reason-file")
     supersede_option.set_defaults(func=cmd_supersede_option)
+
+    retract_assumption = sub.add_parser(
+        "retract-assumption", help="отозвать допущение или прогноз [U…], сохранив историю"
+    )
+    retract_assumption.add_argument("rest", nargs="+", help="[проект] <U001>")
+    retract_assumption.add_argument("--reason", help="причина; «-» читает stdin")
+    retract_assumption.add_argument("--reason-file", help="причина из файла UTF-8")
+    retract_assumption.add_argument("--by", help="активное допущение-замена, например U018")
+    retract_assumption.set_defaults(func=cmd_retract_assumption)
 
     retract = sub.add_parser("retract", help="отозвать свидетельство")
     retract.add_argument("rest", nargs="+", help="[проект] <E001>")

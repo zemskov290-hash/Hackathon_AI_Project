@@ -744,6 +744,18 @@ def handle_retract(arguments: dict) -> dict:
     return finish(code, text, {"project": project.name, "id": evidence_id})
 
 
+def handle_retract_assumption(arguments: dict) -> dict:
+    project = confine_project(arguments["project"])
+    reason = reject_dash(arguments["reason"], "reason")
+    assumption_id = arguments["id"]
+    by = str(arguments.get("by") or "").strip() or None
+    code, text = invoke(
+        strat.cmd_retract_assumption,
+        ns(rest=[project.name, assumption_id], reason=reason, reason_file=None, by=by),
+    )
+    return finish(code, text, {"project": project.name, "id": assumption_id, "by": by})
+
+
 def handle_supersede(arguments: dict) -> dict:
     project = confine_project(arguments["project"])
     reason = reject_dash(arguments["reason"], "reason")
@@ -1612,6 +1624,27 @@ def build_tools() -> list[dict]:
             ),
             {**MUTATION, "title": "Отозвать свидетельство"},
             handle_retract,
+        ),
+        tool(
+            "strat_retract_assumption",
+            "Отозвать допущение, прогноз или оценку [U…], например когда руководитель его отклонил. "
+            "Запись остаётся в assumptions.jsonl со статусом retracted и причиной. Ответ перечисляет "
+            "зависимые допущения и строки текстов; strat_check считает ошибкой ссылку на отозванное "
+            "допущение, если строка не говорит, что оно отклонено. assumptions.jsonl вручную не правь.",
+            project_schema(
+                {
+                    "id": string_prop("Идентификатор допущения, например U013.", pattern=r"^U\d{3,}$", max_length=12),
+                    "reason": string_prop("Почему допущение больше не опора.", max_length=2_000),
+                    "by": string_prop(
+                        "Необязательно: уже записанное активное допущение-замена, например U018.",
+                        pattern=r"^U\d{3,}$",
+                        max_length=12,
+                    ),
+                },
+                ["id", "reason"],
+            ),
+            {**MUTATION, "title": "Отозвать допущение"},
+            handle_retract_assumption,
         ),
         tool(
             "strat_supersede",
