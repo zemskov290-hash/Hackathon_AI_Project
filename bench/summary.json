@@ -165,7 +165,7 @@
         },
         "check_errors": {
           "value": 0,
-          "detail": "ошибок 0, предупреждений 9"
+          "detail": "ошибок 0, предупреждений 11"
         },
         "elapsed_seconds": {
           "value": 283.964,
@@ -220,7 +220,7 @@
         },
         "check_errors": {
           "value": 1,
-          "detail": "ошибок 1, предупреждений 1"
+          "detail": "ошибок 1, предупреждений 2"
         },
         "elapsed_seconds": {
           "value": 270.785,

@@ -32,6 +32,7 @@ import interview
 import kb
 import indicators
 import optional_packages
+import evidence_honesty
 import source_check
 import usage_log
 import web_find
@@ -913,15 +914,24 @@ def cmd_add_source(args: argparse.Namespace) -> int:
     title = resolve_text(
         args.title, args.title_file, label="название источника", env_name="STRAT_SOURCE_TITLE"
     )
+    test_input = bool(getattr(args, "test", False))
+    reliability = args.reliability
+    if test_input:
+        if reliability == "high":
+            die("Тестовый источник не может иметь reliability=high: это репетиция новых данных, не наблюдение.")
+        reliability = reliability or "low"
     row, status = upsert_source(
         project,
         stored,
         digest,
         kind=args.kind,
         title=title,
-        reliability=args.reliability,
+        reliability=reliability,
+        extra={"test": True} if test_input else None,
     )
     print(f"id: {row['id']}")
+    if test_input:
+        print("Помечен как тестовый: свидетельства из него не выше confidence=med, в тексте — «тестовое».")
     if status == "existing":
         print(f"Уже зарегистрирован: {row['id']} {stored}")
     else:
@@ -1369,6 +1379,11 @@ def cmd_add_evidence(args: argparse.Namespace) -> int:
         die(f"Нет источника {args.source}. Сначала add-source.")
     if args.etype == "synthetic" and by_source[args.source].get("kind") != "synthetic":
         die("type=synthetic допустим только вместе с источником kind=synthetic.")
+    if evidence_honesty.is_test_source(by_source[args.source]) and args.confidence == "high":
+        die(
+            f"{args.source} — тестовый источник (add-source --test). "
+            "Тезис из него не может быть confidence=high: укажите med или low."
+        )
     claim = resolve_text(args.claim, args.claim_file, label="тезис", env_name="STRAT_CLAIM", required=True)
     quote = resolve_text(
         args.quote if args.quote else None,
@@ -2685,6 +2700,7 @@ def check_project(project: Path, state: dict | None = None, *, strict: bool = Fa
     grounding.review_strategy(project, texts.get("strategy.md"), sources, evidence, add)
     grounding.review_substantive_numbers(project, texts, sources, evidence, add)
     source_check.review(project, texts, sources, evidence, add)
+    evidence_honesty.review(project, texts, sources, evidence, add)
     indicators.review(project, texts, add)
     grounding.review_project_layout(project, add)
     grounding.review_temp_files(project, add)
@@ -4640,8 +4656,8 @@ def cmd_interview_accept(args: argparse.Namespace) -> int:
     for item in analysis["links"]:
         if synthetic:
             claim = (
-                f"Синтетическая реплика {item['relation']} гипотезу {item['hypothesis_id']}. "
-                "Это не реальное интервью."
+                f"Синтетическая реплика {interview.relation_text(item['relation'], synthetic=True)} "
+                f"{item['hypothesis_id']}. Это не реальное интервью."
             )
         else:
             claim = f"Реплика {item['relation']} гипотезу {item['hypothesis_id']}. Это один разговор, не сегмент."
@@ -4828,6 +4844,11 @@ def build_parser() -> argparse.ArgumentParser:
     add_source.add_argument("--title", help="название; «-» читает stdin")
     add_source.add_argument("--title-file", help="название из файла UTF-8")
     add_source.add_argument("--reliability", choices=sorted(RELIABILITY))
+    add_source.add_argument(
+        "--test",
+        action="store_true",
+        help="тестовое или подброшенное сведение для репетиции, не наблюдение",
+    )
     add_source.set_defaults(func=cmd_add_source)
 
     add_evidence = sub.add_parser("add-evidence", help="добавить свидетельство")

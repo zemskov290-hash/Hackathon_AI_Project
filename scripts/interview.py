@@ -186,6 +186,17 @@ def relate(quote: str, claim: str) -> str:
     return "опровергает" if negated else "подтверждает"
 
 
+# A synthetic reply cannot confirm or refute anything about real people: it only echoes the claim.
+SYNTHETIC_RELATION = {"подтверждает": "созвучна гипотезе, но не подтверждает", "опровергает": "расходится с гипотезой, но не опровергает"}
+
+
+def relation_text(relation: str, *, synthetic: bool) -> str:
+    """Verb for the link between a reply and a hypothesis; synthetic replies never «confirm»."""
+    if synthetic:
+        return SYNTHETIC_RELATION.get(relation, relation)
+    return relation
+
+
 def build_guide(hypotheses: list[dict], questions_text: str) -> str:
     lines = [
         "# Гайд интервью",
@@ -290,10 +301,16 @@ def analyse(transcript: str, hypotheses: list[dict], *, synthetic: bool) -> dict
     if not links:
         lines.append("Ни одна реплика не подтверждает и не опровергает гипотезу из реестра.")
     for item in links:
-        lines.append(
-            f"- {item['hypothesis_id']}: реплика {item['relation']} гипотезу. "
-            f"«{item['quote']}»"
-        )
+        if synthetic:
+            lines.append(
+                f"- {item['hypothesis_id']}: синтетическая реплика {relation_text(item['relation'], synthetic=True)}. "
+                f"«{item['quote']}»"
+            )
+        else:
+            lines.append(
+                f"- {item['hypothesis_id']}: реплика {item['relation']} гипотезу. "
+                f"«{item['quote']}»"
+            )
     lines.append("")
     return {"quotes": key, "pains": pains[:3], "links": links, "markdown": "\n".join(lines)}
 

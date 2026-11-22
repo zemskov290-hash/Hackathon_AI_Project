@@ -504,6 +504,7 @@ def handle_add_source(arguments: dict) -> dict:
             title=title or None,
             title_file=None,
             reliability=arguments.get("reliability"),
+            test=arguments.get("test") is True,
         ),
     )
     data: dict = {"project": project.name, "target": target}
@@ -1390,6 +1391,7 @@ def build_tools() -> list[dict]:
                     "kind": {"type": "string", "enum": kinds, "description": "Вид источника. Для URL по умолчанию web, для файла doc."},
                     "title": string_prop("Название. Если опустить, берётся имя файла или адрес.", max_length=500),
                     "reliability": {"type": "string", "enum": reliability, "description": "Надёжность источника, не уверенность тезиса."},
+                    "test": {"type": "boolean", "description": "true — тестовое или подброшенное сведение для репетиции, не наблюдение."},
                 },
                 ["target"],
             ),
