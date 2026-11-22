@@ -474,7 +474,9 @@ class CursorRouteTests(ProjectCase):
         self.assertIn("strong / claude-sonnet-5-thinking-high", split)
 
     def test_agent_missing_keeps_manual(self) -> None:
-        with mock.patch.object(self.cr.classify, "agent_spec", return_value=None):
+        with mock.patch.object(self.cr.classify, "agent_spec", return_value=None), mock.patch.object(
+            self.cr.shutil, "which", return_value=None
+        ):
             code, out = run(strat.cmd_complete, complete_ns("lv"))
         self.assertEqual(code, 0)
         self.assertIn("MODE: manual", out)
@@ -484,6 +486,75 @@ class CursorRouteTests(ProjectCase):
             outcome = self.cr.call("ping", "cheap")
         self.assertFalse(outcome["ok"])
         self.assertIn("не запустился", outcome["error"])
+
+
+class OtherBackendTests(ProjectCase):
+    def setUp(self) -> None:
+        super().setUp()
+        for key in ("STRAT_LLM_API_KEY", "OPENROUTER_API_KEY", "STRAT_CLAUDE_CMD", "STRAT_CODEX_CMD"):
+            os.environ.pop(key, None)
+        os.environ["STRAT_CURSOR_ROUTE"] = "1"
+        import cursor_route
+
+        self.cr = cursor_route
+
+    def test_order_cursor_then_claude_then_codex(self) -> None:
+        which = lambda name: f"/bin/{name}" if name in {"claude", "codex"} else None  # noqa: E731
+        with mock.patch.object(self.cr, "enabled", return_value=True):
+            self.assertEqual(self.cr.pick_backend(which), "cursor-agent")
+        with mock.patch.object(self.cr, "enabled", return_value=False):
+            self.assertEqual(self.cr.pick_backend(which), "claude")
+            self.assertEqual(self.cr.pick_backend(lambda n: "/bin/codex" if n == "codex" else None), "codex")
+            self.assertIsNone(self.cr.pick_backend(lambda n: None))
+        os.environ["STRAT_CURSOR_ROUTE"] = "0"
+        self.assertIsNone(self.cr.pick_backend(which))
+
+    def test_claude_call_parsed(self) -> None:
+        seen = []
+
+        def runner(argv, cwd, timeout):
+            seen.append(argv)
+            payload = {"type": "result", "result": "Рим", "is_error": False, "duration_ms": 1800,
+                       "usage": {"input_tokens": 40, "output_tokens": 2}, "modelUsage": {"claude-sonnet-x": {}}}
+            return 0, json.dumps(payload), "", 1.9
+
+        out = self.cr.call_other("claude", "Столица Италии?", "strong", runner=runner, which=lambda n: "/bin/claude")
+        self.assertTrue(out["ok"], out)
+        self.assertEqual((out["content"], out["model"], out["seconds"]), ("Рим", "claude-sonnet-x", 1.8))
+        self.assertIn("--model", seen[0])
+        self.assertIn("sonnet", seen[0])
+
+    def test_codex_call_reads_last_message(self) -> None:
+        def runner(argv, cwd, timeout):
+            last = Path(argv[argv.index("-o") + 1])
+            last.write_text("Париж", encoding="utf-8")
+            events = [{"type": "thread.started"}, {"type": "turn.completed", "usage": {"input_tokens": 30, "output_tokens": 3}}]
+            return 0, "\n".join(json.dumps(e) for e in events), "", 2.0
+
+        out = self.cr.call_other("codex", "Столица Франции?", "cheap", runner=runner, which=lambda n: "/bin/codex")
+        self.assertTrue(out["ok"], out)
+        self.assertEqual(out["content"], "Париж")
+        self.assertEqual(out["input_tokens"], 30)
+        self.assertEqual(out["model"], "codex/default")
+
+    def test_failures_degrade(self) -> None:
+        def boom(argv, cwd, timeout):
+            raise TimeoutError("долго")
+
+        out = self.cr.call_other("claude", "x", "cheap", runner=boom, which=lambda n: "/bin/claude")
+        self.assertFalse(out["ok"])
+        out = self.cr.call_other("codex", "x", "cheap", runner=lambda a, c, t: (0, "", "", 0.1), which=lambda n: "/bin/codex")
+        self.assertFalse(out["ok"])
+
+    def test_complete_uses_claude_when_cursor_absent(self) -> None:
+        fake = {"ok": True, "error": None, "requested": "haiku", "model": "claude-haiku", "seconds": 1.0,
+                "content": "Ответ без меток по делу.", "input_tokens": 10, "output_tokens": 3}
+        with mock.patch.object(self.cr, "pick_backend", return_value="claude"), mock.patch.object(self.cr, "call_other", return_value=fake):
+            code, out = run(strat.cmd_complete, complete_ns("lv"))
+        self.assertEqual(code, 0, out)
+        self.assertIn("MODE: claude", out)
+        rows = [json.loads(l) for l in (self.project / "log.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+        self.assertIn(("cheap", "claude-haiku"), [(r.get("tier"), r.get("model")) for r in rows])
 
 
 if __name__ == "__main__":

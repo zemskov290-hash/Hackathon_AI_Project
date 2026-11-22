@@ -3910,21 +3910,26 @@ def cmd_complete(args: argparse.Namespace) -> int:
     return code
 
 
-def _complete_cursor(args: argparse.Namespace, tier: str, prompt: str, project) -> tuple[int, str, str]:
-    """No API key: the tier goes to cursor-agent with the model from config/routing.json."""
-    outcome = cursor_route.call(prompt, tier)
-    model = str(outcome.get("model") or "cursor/default")
-    print("MODE: cursor-agent")
+def _complete_cursor(
+    args: argparse.Namespace, tier: str, prompt: str, project, backend: str = "cursor-agent"
+) -> tuple[int, str, str]:
+    """No API key: the tier goes to an agent CLI (cursor-agent, claude, codex) with the model from config/routing.json."""
+    if backend == "cursor-agent":
+        outcome = cursor_route.call(prompt, tier)
+    else:
+        outcome = cursor_route.call_other(backend, prompt, tier)
+    model = str(outcome.get("model") or f"{backend}/default")
+    print(f"MODE: {backend}")
     print(f"TIER: {tier}")
     print(f"MODEL: {model}" + (f" (запрошена {outcome['requested']})" if outcome.get("requested") and outcome["requested"] != model else ""))
     tokens = None
     if outcome.get("input_tokens") or outcome.get("output_tokens"):
         tokens = int(outcome.get("input_tokens") or 0) + int(outcome.get("output_tokens") or 0)
     if not outcome["ok"]:
-        print(outcome.get("error") or "cursor-agent не ответил")
+        print(outcome.get("error") or f"{backend} не ответил")
         log_completion(
             project, stage=args.stage, tier=tier, model=model, mode="error", prompt=prompt, content="",
-            tokens=None, cost=None, grounds=str(outcome.get("error") or "cursor-agent не ответил"),
+            tokens=None, cost=None, grounds=str(outcome.get("error") or f"{backend} не ответил"),
             minutes=round(float(outcome.get("seconds") or 0) / 60.0, 3),
         )
         return 1, "error", ""
@@ -3937,7 +3942,7 @@ def _complete_cursor(args: argparse.Namespace, tier: str, prompt: str, project) 
     log_completion(
         project, stage=args.stage, tier=tier, model=model, mode="api", prompt=prompt, content=content,
         tokens=tokens, cost=None,
-        grounds=f"cursor-agent без ключа API: уровень {tier}, модель из system.init {model}, {outcome.get('seconds')} с.",
+        grounds=f"{backend} без ключа API: уровень {tier}, модель {model}, {outcome.get('seconds')} с.",
         minutes=round(float(outcome.get("seconds") or 0) / 60.0, 3),
     )
     return 0, "api", content
@@ -3946,8 +3951,9 @@ def _complete_cursor(args: argparse.Namespace, tier: str, prompt: str, project) 
 def _complete_tier(args: argparse.Namespace, tier: str, prompt: str, project) -> tuple[int, str, str]:
     """One model call on one tier. Returns (exit code, mode, answer)."""
     key = os.environ.get("STRAT_LLM_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
-    if tier != "ide" and not key and cursor_route.enabled():
-        return _complete_cursor(args, tier, prompt, project)
+    backend = cursor_route.pick_backend() if tier != "ide" and not key else None
+    if backend:
+        return _complete_cursor(args, tier, prompt, project, backend)
     if tier == "ide" or not key:
         print("MODE: manual")
         print(f"TIER: {tier}")

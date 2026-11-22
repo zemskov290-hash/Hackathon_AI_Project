@@ -57,5 +57,10 @@
         ]
       }
     }
+  },
+  "complete": {
+    "backends": ["cursor-agent", "claude", "codex"],
+    "claude": {"cheap_model": "haiku", "strong_model": "sonnet"},
+    "codex": {"cheap_model": "", "strong_model": ""}
   }
 }
