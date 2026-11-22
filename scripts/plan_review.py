@@ -87,9 +87,35 @@ def economics_gaps(body: str) -> list[str]:
         missing.append("затраты (capex/opex)")
     if not EFFECT_RE.search(visible):
         missing.append("эффект на прибыль")
-    if not no_cost and not COMPARE_RE.search(visible) and not FORMULA_RE.search(visible):
-        missing.append("сравнение: окупаемость, ROI или формула «эффект − затраты»")
+    if not no_cost and not FORMULA_RE.search(visible):
+        if not COMPARE_RE.search(visible):
+            missing.append("сравнение: окупаемость, ROI или формула «эффект − затраты»")
+        elif cost_has_number(visible) and not numeric_comparison(visible):
+            missing.append(
+                "сравнение числом: срок окупаемости, ROI или формула «эффект − затраты», "
+                "а не «окупается дольше года» словами"
+            )
     return missing
+
+
+MONEY_RE = re.compile(r"\d[\d\s,.]*\s*(?:млрд|млн|тыс|руб|₽|\$|usd|eur|€)", re.IGNORECASE)
+CITATION_RE = re.compile(r"\[[A-ZА-Я]{1,2}\d+\]")
+
+
+def _clauses(text: str, pattern: re.Pattern[str]) -> list[str]:
+    plain = CITATION_RE.sub(" ", text)
+    return [re.split(r";|\.\s|\n", plain[match.start() : match.end() + 80])[0] for match in pattern.finditer(plain)]
+
+
+def cost_has_number(text: str) -> bool:
+    """Costs are given as a sum. With no sum yet a break-even condition in words is honest."""
+    return any(MONEY_RE.search(clause) for clause in _clauses(text, COST_RE))
+
+
+def numeric_comparison(text: str) -> bool:
+    """Payback or ROI carries a number of its own, not only the words «окупается дольше»."""
+    # The number belongs to the same clause: «окупаемость 5 лет», «ROI 40%».
+    return any(re.search(r"\d", clause) for clause in _clauses(text, COMPARE_RE))
 
 
 def option_blocks(options_text: str) -> list[tuple[str, str, str]]:

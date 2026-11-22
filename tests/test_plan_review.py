@@ -112,6 +112,20 @@ class EconomicsTests(unittest.TestCase):
         found = self.review("Экономика: capex 8 млн, эффект на прибыль 3 млн в год.\n")
         self.assertTrue(any("сравнение" in m for m in found.errors("economics")))
 
+    def test_payback_in_words_only_is_an_error(self) -> None:
+        found = self.review(
+            "Экономика: затраты — capex 12 млн [U004], opex 2 млн в год [U006]; эффект на прибыль 3 млн "
+            "в год [U005]; окупаемость дольше одного планового года.\n"
+        )
+        self.assertTrue(any("числом" in m for m in found.errors("economics")))
+
+    def test_payback_with_years_passes(self) -> None:
+        found = self.review(
+            "Экономика: затраты — capex 12 млн [U004], opex 2 млн в год [U006]; эффект на прибыль 3 млн "
+            "в год [U005]; окупаемость 12 лет при чистом эффекте 1 млн в год.\n"
+        )
+        self.assertEqual(found.items, [])
+
     def test_full_economics_line_passes(self) -> None:
         found = self.review(
             "Экономика: затраты — capex 9 млн и opex 1,2 млн в год; эффект на прибыль 3 млн в год; "
