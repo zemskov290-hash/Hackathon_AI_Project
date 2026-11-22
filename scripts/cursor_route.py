@@ -26,7 +26,7 @@ DEFAULT_ORDER = ["cursor-agent", "claude", "codex"]
 # Defaults for other agent CLIs. Not verified live in this repository: set your
 # own in config/routing.json -> complete.<backend>.cheap_model / strong_model.
 DEFAULT_MODELS = {
-    "claude": {"cheap_model": "haiku", "strong_model": "sonnet"},
+    "claude": {"cheap_model": "haiku", "strong_model": "opus"},
     "codex": {"cheap_model": "", "strong_model": ""},
 }
 

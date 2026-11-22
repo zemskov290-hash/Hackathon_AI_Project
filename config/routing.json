@@ -26,7 +26,7 @@
     "confidence_threshold": 0.75,
     "cursor_agent": {
       "cheap_model": "composer-2.5-fast",
-      "strong_model": "claude-sonnet-5-thinking-high",
+      "strong_model": "grok-4.7-high",
       "timeout_seconds": 180
     },
     "specialized": {
@@ -60,7 +60,7 @@
   },
   "complete": {
     "backends": ["cursor-agent", "claude", "codex"],
-    "claude": {"cheap_model": "haiku", "strong_model": "sonnet"},
+    "claude": {"cheap_model": "haiku", "strong_model": "opus"},
     "codex": {"cheap_model": "", "strong_model": ""}
   }
 }

@@ -451,7 +451,7 @@ class CursorRouteTests(ProjectCase):
         self.assertEqual((parsed["input_tokens"], parsed["output_tokens"], parsed["duration_ms"]), (120, 8, 2500))
 
     def test_no_key_uses_cursor_agent_and_escalates_on_defect(self) -> None:
-        calls, runner = self.fake_agent([stream("composer-2.5-fast", "TODO"), stream("claude-sonnet-5-thinking-high", "Нормальный ответ по делу.")])
+        calls, runner = self.fake_agent([stream("composer-2.5-fast", "TODO"), stream("grok-4.7-high", "Нормальный ответ по делу.")])
         real_call = self.cr.call
         with mock.patch.object(self.cr, "enabled", return_value=True), mock.patch.object(
             self.cr.classify, "cursor_launch", return_value=(["agent"], {})
@@ -466,12 +466,12 @@ class CursorRouteTests(ProjectCase):
         rows = [json.loads(l) for l in (self.project / "log.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
         models = [(r.get("tier"), r.get("model")) for r in rows if r.get("tier")]
         self.assertIn(("cheap", "composer-2.5-fast"), models)
-        self.assertIn(("strong", "claude-sonnet-5-thinking-high"), models)
+        self.assertIn(("strong", "grok-4.7-high"), models)
         self.assertIn("маркер низкого качества", self.state()["routing_escalations"][0]["reason"])
         entries = strat.load_log(self.project)
         split = "\n".join(strat.format_model_split(entries))
         self.assertIn("cheap / composer-2.5-fast: вызовов 1", split)
-        self.assertIn("strong / claude-sonnet-5-thinking-high", split)
+        self.assertIn("strong / grok-4.7-high", split)
 
     def test_agent_missing_keeps_manual(self) -> None:
         with mock.patch.object(self.cr.classify, "agent_spec", return_value=None), mock.patch.object(
@@ -515,14 +515,14 @@ class OtherBackendTests(ProjectCase):
         def runner(argv, cwd, timeout):
             seen.append(argv)
             payload = {"type": "result", "result": "Рим", "is_error": False, "duration_ms": 1800,
-                       "usage": {"input_tokens": 40, "output_tokens": 2}, "modelUsage": {"claude-sonnet-x": {}}}
+                       "usage": {"input_tokens": 40, "output_tokens": 2}, "modelUsage": {"claude-opus-x": {}}}
             return 0, json.dumps(payload), "", 1.9
 
         out = self.cr.call_other("claude", "Столица Италии?", "strong", runner=runner, which=lambda n: "/bin/claude")
         self.assertTrue(out["ok"], out)
-        self.assertEqual((out["content"], out["model"], out["seconds"]), ("Рим", "claude-sonnet-x", 1.8))
+        self.assertEqual((out["content"], out["model"], out["seconds"]), ("Рим", "claude-opus-x", 1.8))
         self.assertIn("--model", seen[0])
-        self.assertIn("sonnet", seen[0])
+        self.assertIn("opus", seen[0])
 
     def test_codex_call_reads_last_message(self) -> None:
         def runner(argv, cwd, timeout):
