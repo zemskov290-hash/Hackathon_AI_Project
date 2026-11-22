@@ -1,0 +1,10 @@
+--- start turn1 2026-11-22T20:33:58 model=composer-2.5-fast
+turn1 rc=0 168s model=composer-2.5-fast
+turn2 rc=0 802s model=composer-2.5-fast
+turn3 rc=0 466s model=composer-2.5-fast
+turn4 rc=0 930s model=composer-2.5-fast
+turn5 rc=0 319s model=composer-2.5-fast
+turn6 rc=0 122s model=composer-2.5-fast
+turn7 rc=0 184s model=composer-2.5-fast
+turn8 rc=0 106s model=composer-2.5-fast
+turn9 rc=0 47s model=composer-2.5-fast

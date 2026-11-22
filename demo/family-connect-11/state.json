@@ -1,0 +1,379 @@
+{
+  "schema_version": 1,
+  "id": "family-connect-11",
+  "title": "Связь для близких и собственных устройств (хакатон МегаФон, учебный)",
+  "example": false,
+  "stage": 8,
+  "stage_status": "in_progress",
+  "completed_stages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "checkpoints": {
+    "brief": {
+      "status": "confirmed",
+      "at": "2026-11-22T17:37:12Z",
+      "note": "Согласованы переформулировка, роли столбцов показателей, получатели (руководитель Q1, финкоманда Q2), только бриф+открытые источники, команда/сроки/бюджет как в PDF.",
+      "choice": null
+    },
+    "options": {
+      "status": "confirmed",
+      "at": "2026-11-22T18:24:31Z",
+      "note": "Руководитель принял пересмотр условий по тестовому сведению E018: выбор O2 сохраняем, ужесточаем условия пилота и честность коммуникации.",
+      "choice": "O2",
+      "history": [
+        {
+          "choice": "O2",
+          "at": "2026-11-22T17:58:48Z",
+          "note": null,
+          "until": "2026-11-22T18:24:31Z"
+        }
+      ]
+    },
+    "validation": {
+      "status": "confirmed",
+      "at": "2026-11-22T18:12:58Z",
+      "note": "Руководитель принял план проверки по явной фразе в переписке",
+      "choice": null
+    }
+  },
+  "option_registry": [
+    {
+      "id": "O1",
+      "title": "Оставить как есть",
+      "status": "active"
+    },
+    {
+      "id": "O2",
+      "title": "Пилот: активация и ранние сигналы для семейных групп",
+      "status": "active"
+    },
+    {
+      "id": "O3",
+      "title": "Пилот: проактивный кабинет для нескольких своих номеров",
+      "status": "active"
+    },
+    {
+      "id": "O4",
+      "title": "Закрыть направление",
+      "status": "active"
+    }
+  ],
+  "created_at": "2026-11-22T17:34:15Z",
+  "updated_at": "2026-11-22T18:25:27Z",
+  "steps": {
+    "search:6f63ac6ae9090812": {
+      "status": "done",
+      "inputs_hash": "6f63ac6ae9090812f1797f5e2169ff970db5a384260ccf80d1a2dad7b252c458",
+      "updated_at": "2026-11-22T17:37:53Z",
+      "detail": "duckduckgo:10"
+    },
+    "search:007a9559e7cf15ad": {
+      "status": "done",
+      "inputs_hash": "007a9559e7cf15adf94c4f5b006323677c14c2a03b267f29390598ddb1851967",
+      "updated_at": "2026-11-22T17:37:57Z",
+      "detail": "duckduckgo-post:10"
+    },
+    "search:2207d1493049081a": {
+      "status": "done",
+      "inputs_hash": "2207d1493049081aec96ee17fbbdadf3d1b1f6c2af6fa8eebf5f569b079622cd",
+      "updated_at": "2026-11-22T17:38:05Z",
+      "detail": "bing:31"
+    },
+    "search:8efbda022afa714a": {
+      "status": "done",
+      "inputs_hash": "8efbda022afa714a7127802525e1cf090a53167349d4f1215c12ff685d523f14",
+      "updated_at": "2026-11-22T17:38:13Z",
+      "detail": "bing:23"
+    },
+    "search:c5ae94a86ba2ad97": {
+      "status": "done",
+      "inputs_hash": "c5ae94a86ba2ad9729dce5471302485c285c31e0919cd8278c756f4de94f3f66",
+      "updated_at": "2026-11-22T17:38:21Z",
+      "detail": "bing:22"
+    },
+    "search:9cb072b6307418ae": {
+      "status": "done",
+      "inputs_hash": "9cb072b6307418ae67e6bbbdb7ebc34c532cfe1f5d0e3c76fd6dae72399852fd",
+      "updated_at": "2026-11-22T17:38:32Z",
+      "detail": "bing:21"
+    },
+    "search:0c57d07a34890490": {
+      "status": "done",
+      "inputs_hash": "0c57d07a34890490d4a0f1cabf9f95080b1ed0eb683ea988774fadc17fc69237",
+      "updated_at": "2026-11-22T17:38:40Z",
+      "detail": "bing:22"
+    },
+    "search:fce8634aff6d1c77": {
+      "status": "done",
+      "inputs_hash": "fce8634aff6d1c7752a387cf91e405a70a679d63a610d1aca77fb5ee6a2d5d88",
+      "updated_at": "2026-11-22T17:38:48Z",
+      "detail": "bing:30"
+    },
+    "fetch:https://moscow.megafon.ru/services/family/megasemiya/": {
+      "status": "failed",
+      "inputs_hash": "ff5812f8045e76dbc93ac90c1ecdf0da72baab0adb513132461b02d4390a104a",
+      "updated_at": "2026-11-22T17:41:47Z",
+      "detail": "Сеть недоступна или адрес не открылся: https://moscow.megafon.ru/services/family/megasemiya/. _ssl.c:1001: The handshake operation timed out Попыток: 3."
+    },
+    "fetch:https://moskva.mts.ru/personal/servisy/semejnaya-gruppa": {
+      "status": "done",
+      "inputs_hash": "43ba2b66a815216aa1b1bd35e9a400d0c0eca8b7f4d5baee4f1e504846b4ef86",
+      "updated_at": "2026-11-22T17:40:35Z",
+      "detail": "S002"
+    },
+    "fetch:https://mtsru.ru/uslugi/gruppa-semya": {
+      "status": "failed",
+      "inputs_hash": "874340ebbe0f7fc08f1d8e190c17dba513fa545296650cbf87201bb9ad012b62",
+      "updated_at": "2026-11-22T17:40:37Z",
+      "detail": "Страница не открылась: HTTP 502 для https://mtsru.ru/uslugi/gruppa-semya. Попыток: 3."
+    },
+    "search:4a57afb398b50d9a": {
+      "status": "done",
+      "inputs_hash": "4a57afb398b50d9aff93f2ba11b9ec6d37630838a6c8b3d9a030bb2b29bbda62",
+      "updated_at": "2026-11-22T17:40:55Z",
+      "detail": "bing:24"
+    },
+    "search:b0d9bf3ac94c3536": {
+      "status": "done",
+      "inputs_hash": "b0d9bf3ac94c35369bf437570ad6ba9e10d2f9e4b59c48d5f64ea053b145a4ed",
+      "updated_at": "2026-11-22T17:40:52Z",
+      "detail": "bing:28"
+    },
+    "search:f37b7b10a355d248": {
+      "status": "done",
+      "inputs_hash": "f37b7b10a355d2480ce47f69147e3b5b8b04e3a4f6529890f5b81ee4f14d8188",
+      "updated_at": "2026-11-22T17:40:53Z",
+      "detail": "bing:32"
+    },
+    "fetch:https://www.megafon-com.ru/services/megasemiya/": {
+      "status": "done",
+      "inputs_hash": "28762b3ed485a9c64bf3dad767c298230e0e2b2698553ebf644724f0e03b8b26",
+      "updated_at": "2026-11-22T17:42:37Z",
+      "detail": "S003"
+    },
+    "fetch:https://media.mts.ru/internet/201298-semejnye-podpiski-i-tarify-mts": {
+      "status": "failed",
+      "inputs_hash": "6f23502d9d3446de037083ded2f4eebe70e0771c585b86f276707005a931f808",
+      "updated_at": "2026-11-22T17:43:38Z",
+      "detail": "Сеть недоступна или адрес не открылся: https://media.mts.ru/internet/201298-semejnye-podpiski-i-tarify-mts. _ssl.c:1001: The handshake operation timed out Попыток: 3."
+    },
+    "search:954db368247ffc89": {
+      "status": "done",
+      "inputs_hash": "954db368247ffc891313e15c159d39bcd9248187b981ece35e195b8b5e26ec7c",
+      "updated_at": "2026-11-22T17:44:26Z",
+      "detail": "bing:22"
+    },
+    "search:b160425e0ac53e3f": {
+      "status": "done",
+      "inputs_hash": "b160425e0ac53e3f45266c89c49d34f1d0d8e44318c216091950fbfe76a5cc9f",
+      "updated_at": "2026-11-22T17:44:28Z",
+      "detail": "bing:33"
+    },
+    "search:203b2217f978aa6f": {
+      "status": "done",
+      "inputs_hash": "203b2217f978aa6fdec7bc6df891c9ef559276119d7dd30cdb63e0425a53b2c8",
+      "updated_at": "2026-11-22T17:44:36Z",
+      "detail": "bing:32"
+    },
+    "fetch:https://www.megafon.ru/download/~federal/lp/mega_semiya/fam/oferta_megasemiya.pdf": {
+      "status": "failed",
+      "inputs_hash": "61908e7adba142837615cf626cbd620b7bb841386a843b014c899209037cb05f",
+      "updated_at": "2026-11-22T17:45:36Z",
+      "detail": "Сеть недоступна или адрес не открылся: https://www.megafon.ru/download/~federal/lp/mega_semiya/fam/oferta_megasemiya.pdf. _ssl.c:1001: The handshake operation timed out Попыток: 3."
+    },
+    "search:fa6753297b5e083b": {
+      "status": "done",
+      "inputs_hash": "fa6753297b5e083b713273561dfe0ae0be77848f89692e5a74fe8afb46f7a206",
+      "updated_at": "2026-11-22T17:44:39Z",
+      "detail": "bing:23"
+    },
+    "fetch:https://corp.megafon.ru/services/family/megasemiya/": {
+      "status": "failed",
+      "inputs_hash": "dc31ac726695d2264e90e4035bdfdde3af535dc796358299e895020c4c6cfac6",
+      "updated_at": "2026-11-22T17:47:29Z",
+      "detail": "Сеть недоступна или адрес не открылся: https://corp.megafon.ru/services/family/megasemiya/. _ssl.c:1001: The handshake operation timed out Попыток: 3."
+    },
+    "search:8421617aee72bc90": {
+      "status": "done",
+      "inputs_hash": "8421617aee72bc90d1146b7928432b00b55c689d5f2332d255d6ff108f26e354",
+      "updated_at": "2026-11-22T17:46:39Z",
+      "detail": "bing:21"
+    },
+    "search:79fdb339f83654ee": {
+      "status": "done",
+      "inputs_hash": "79fdb339f83654ee591116ef9b02de0ad7df7284f29b06102a2cfd1817cd41b9",
+      "updated_at": "2026-11-22T17:48:23Z",
+      "detail": "bing:34"
+    },
+    "fetch:https://tarifgid.ru/mobilnaya-svyaz/katalog/semeynie-tarify/operator/mts": {
+      "status": "done",
+      "inputs_hash": "161663409df2961ab2cbc0dd07c4624413536cdc3a70d642af1176862bb0a7b8",
+      "updated_at": "2026-11-22T17:48:25Z",
+      "detail": "S004"
+    },
+    "fetch:https://tarifgid.ru/mobilnaya-svyaz/katalog/semeynie-tarify/operator/megafon": {
+      "status": "done",
+      "inputs_hash": "81c65cec4eb6c92c7130c48be679e3af7f261f81fe5c960b88b2cf22924c12d0",
+      "updated_at": "2026-11-22T17:48:26Z",
+      "detail": "S005"
+    },
+    "search:bfd207017b771bfc": {
+      "status": "done",
+      "inputs_hash": "bfd207017b771bfc7a0b7986d5fe93a886c4ce9ed66bc2eed9ff11d6206fbc86",
+      "updated_at": "2026-11-22T17:49:20Z",
+      "detail": "bing:9"
+    },
+    "evidence:809c783c92528dbd": {
+      "status": "done",
+      "inputs_hash": "809c783c92528dbdd6a34d9170dde4b1f27b27fbfba559569bcbb80dadb78fe9",
+      "updated_at": "2026-11-22T17:49:25Z",
+      "detail": "E001"
+    },
+    "evidence:f85b73d60a615f28": {
+      "status": "done",
+      "inputs_hash": "f85b73d60a615f28db2b45f99fb58107c50794c7ec5d3c31abe084d1f069cf61",
+      "updated_at": "2026-11-22T17:49:26Z",
+      "detail": "E002"
+    },
+    "evidence:04d039a8f16d5584": {
+      "status": "done",
+      "inputs_hash": "04d039a8f16d5584602eb5b77031420fefee0b0c43c0141674771a4a8d328051",
+      "updated_at": "2026-11-22T17:49:26Z",
+      "detail": "E003"
+    },
+    "evidence:8e95b86e0189c65b": {
+      "status": "done",
+      "inputs_hash": "8e95b86e0189c65b4d16359fd0a1824b83933ce5338ab9afaa20a73fd0a0672d",
+      "updated_at": "2026-11-22T17:49:26Z",
+      "detail": "E004"
+    },
+    "evidence:3489d0f97eeea7aa": {
+      "status": "done",
+      "inputs_hash": "3489d0f97eeea7aa3326c793484a9ce731e7ce55b757d6685704035717cb1085",
+      "updated_at": "2026-11-22T17:49:27Z",
+      "detail": "E005"
+    },
+    "evidence:d49e3a22d88c8701": {
+      "status": "done",
+      "inputs_hash": "d49e3a22d88c8701f4273ecea6ed30b84d356e7c7e5cf7f677f31034dde6ab28",
+      "updated_at": "2026-11-22T17:49:32Z",
+      "detail": "E006"
+    },
+    "evidence:269561584a9aa33f": {
+      "status": "done",
+      "inputs_hash": "269561584a9aa33fbd9521ff7689630c25da24771fc1d4722d076f0e892ec17c",
+      "updated_at": "2026-11-22T17:49:32Z",
+      "detail": "E007"
+    },
+    "search:2fa017fc5bc2c147": {
+      "status": "done",
+      "inputs_hash": "2fa017fc5bc2c147d524ead4360732aa0b7dc53ae9b583594f4eae7b9c0ce92b",
+      "updated_at": "2026-11-22T17:51:39Z",
+      "detail": "bing:24"
+    },
+    "search:00c1222b6107459d": {
+      "status": "done",
+      "inputs_hash": "00c1222b6107459de680076b04d1eb62a7cd554602d9ef60dee5a3ef9361f9d5",
+      "updated_at": "2026-11-22T17:52:29Z",
+      "detail": "bing:22"
+    },
+    "evidence:86d854a585fd1257": {
+      "status": "done",
+      "inputs_hash": "86d854a585fd1257463c4b9ea59d0c426d14b8e66fe069b2609462d207e10111",
+      "updated_at": "2026-11-22T17:52:51Z",
+      "detail": "E008"
+    },
+    "evidence:40855da5dd1725b2": {
+      "status": "done",
+      "inputs_hash": "40855da5dd1725b274ecc2f0418f47e869667556658b03fa49e6fbff0f02cab5",
+      "updated_at": "2026-11-22T17:52:51Z",
+      "detail": "E009"
+    },
+    "evidence:7d3795c9882b340c": {
+      "status": "done",
+      "inputs_hash": "7d3795c9882b340c692c041f1f84f482747d1257c5acc2d9a511ee67cf7c79f1",
+      "updated_at": "2026-11-22T17:53:11Z",
+      "detail": "E010"
+    },
+    "evidence:77852ebaac528c9e": {
+      "status": "done",
+      "inputs_hash": "77852ebaac528c9e573d1cf8c684f4f7f0696ea1d4436d664835f49f63909c9d",
+      "updated_at": "2026-11-22T18:20:06Z",
+      "detail": "E011"
+    },
+    "evidence:7839457233ac8d9d": {
+      "status": "done",
+      "inputs_hash": "7839457233ac8d9d6ecbe905c5f068aa33d851b037d4e59eae09fb3dcc76ea04",
+      "updated_at": "2026-11-22T18:20:06Z",
+      "detail": "E012"
+    },
+    "evidence:19931920a66b864f": {
+      "status": "done",
+      "inputs_hash": "19931920a66b864fbd1482cb843448da1ec921a4f7f57b65c066f21a31b8964d",
+      "updated_at": "2026-11-22T18:20:06Z",
+      "detail": "E013"
+    },
+    "evidence:3614efbf340d47ec": {
+      "status": "done",
+      "inputs_hash": "3614efbf340d47ec8eaf587fcdf442774e6106a302c9e5d26fede8002cba785d",
+      "updated_at": "2026-11-22T18:20:06Z",
+      "detail": "E014"
+    },
+    "evidence:f68b83f01ec13b36": {
+      "status": "done",
+      "inputs_hash": "f68b83f01ec13b36f62e4864351d06b462158a860d33709c25ae53ad66583404",
+      "updated_at": "2026-11-22T18:20:06Z",
+      "detail": "E015"
+    },
+    "evidence:c90050ca80deee70": {
+      "status": "done",
+      "inputs_hash": "c90050ca80deee70583f72a5c2000aa7057916d29a17ec1751007ad3e02004fa",
+      "updated_at": "2026-11-22T18:20:06Z",
+      "detail": "E016"
+    },
+    "evidence:f29fd1d1302abba4": {
+      "status": "done",
+      "inputs_hash": "f29fd1d1302abba48e9e128312911ff44651c8b0185b3d7270930c369a0f2cf0",
+      "updated_at": "2026-11-22T18:20:07Z",
+      "detail": "E017"
+    },
+    "evidence:cec94f823bd1238c": {
+      "status": "done",
+      "inputs_hash": "cec94f823bd1238cd44a6b0fcdffb9914aa62c46cc2e8e27691b80ed18c8e8b9",
+      "updated_at": "2026-11-22T18:22:25Z",
+      "detail": "E018"
+    }
+  },
+  "fetch_stats": {
+    "ok": 4,
+    "failed": 6
+  },
+  "confirmed_dates": [
+    "2027-03-31",
+    "2027-06-30"
+  ],
+  "revision": {
+    "status": "accepted",
+    "kind": "terms",
+    "decision": "D1",
+    "proposed_option": "O2",
+    "previous_option": "O2",
+    "changes": [
+      "revisit_if: дополнить — пересмотр MVP и масштабирования, если тестовое сведение [E018] подтвердится на пилоте (лаг обновления остатков на уровне из [E018])",
+      "strategy.md PP2 и коммуникация: по тестовому сведению [E018] — явная метка актуальности данных и пересборка порогов push, иначе формулировка «ранний сигнал» вводит в заблуждение",
+      "validation.md нежелательные эффекты: по тестовому сведению [E018] — устаревший остаток на экране и ложный «низкий пакет» из-за лага биллинга",
+      "situation.md: разрыв «проактивность O2 зависит от свежести биллинга» как открытый риск по тестовому сведению [E018], не как факт рынка"
+    ],
+    "reason": "Тестовое сведение [E018] о том, что остатки пакета у участников семейной группы обновляются с задержкой до 30 минут, а не мгновенно, ставит под вопрос обещание «раннего» проактивного сигнала по данным биллинга (PP2, deliverable, validation); выбор O2 сохраняем, но ужесточаем условия пилота и честность коммуникации.",
+    "opened_at": "2026-11-22T18:23:12Z",
+    "accepted_at": "2026-11-22T18:24:31Z",
+    "accepted_option": "O2",
+    "rejected_at": null
+  }
+}

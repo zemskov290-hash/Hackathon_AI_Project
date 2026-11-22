@@ -1,0 +1,20 @@
+{"id":"Q001","indicator":"Валовая прибыль за год, млн руб.","scenario":"План","value":"282","unit":"млн руб.","direction":"higher","role":"context","source":"S001","status":"active"}
+{"id":"Q002","indicator":"Валовая прибыль за год, млн руб.","scenario":"Оценка","value":"275","unit":"млн руб.","direction":"higher","role":"context","source":"S001","status":"active"}
+{"id":"Q003","indicator":"Валовая прибыль за год, млн руб.","scenario":"Без изменений","value":"279","unit":"млн руб.","direction":"higher","role":"baseline","source":"S001","status":"active"}
+{"id":"Q004","indicator":"Валовая прибыль за год, млн руб.","scenario":"Цель, не ниже","value":"285","unit":"млн руб.","direction":"higher","role":"goal","source":"S001","status":"active"}
+{"id":"Q005","indicator":"Активные семейные группы за последний месяц года","scenario":"План","value":"5000","unit":"шт.","direction":"higher","role":"context","source":"S001","status":"active"}
+{"id":"Q006","indicator":"Активные семейные группы за последний месяц года","scenario":"Оценка","value":"4000","unit":"шт.","direction":"higher","role":"context","source":"S001","status":"active"}
+{"id":"Q007","indicator":"Активные семейные группы за последний месяц года","scenario":"Без изменений","value":"5000","unit":"шт.","direction":"higher","role":"baseline","source":"S001","status":"active"}
+{"id":"Q008","indicator":"Активные семейные группы за последний месяц года","scenario":"Цель, не ниже","value":"8000","unit":"шт.","direction":"higher","role":"goal","source":"S001","status":"active"}
+{"id":"Q009","indicator":"Подключённые семейные группы на конец года","scenario":"План","value":"7500","unit":"шт.","direction":"higher","role":"context","source":"S001","status":"active"}
+{"id":"Q010","indicator":"Подключённые семейные группы на конец года","scenario":"Оценка","value":"6500","unit":"шт.","direction":"higher","role":"context","source":"S001","status":"active"}
+{"id":"Q011","indicator":"Подключённые семейные группы на конец года","scenario":"Без изменений","value":"8000","unit":"шт.","direction":"higher","role":"baseline","source":"S001","status":"active"}
+{"id":"Q012","indicator":"Подключённые семейные группы на конец года","scenario":"Цель, не ниже","value":"12000","unit":"шт.","direction":"higher","role":"goal","source":"S001","status":"active"}
+{"id":"Q013","indicator":"Подключённые владельцы нескольких номеров на конец года","scenario":"План","value":"1000","unit":"шт.","direction":"higher","role":"context","source":"S001","status":"active"}
+{"id":"Q014","indicator":"Подключённые владельцы нескольких номеров на конец года","scenario":"Оценка","value":"800","unit":"шт.","direction":"higher","role":"context","source":"S001","status":"active"}
+{"id":"Q015","indicator":"Подключённые владельцы нескольких номеров на конец года","scenario":"Без изменений","value":"1000","unit":"шт.","direction":"higher","role":"baseline","source":"S001","status":"active"}
+{"id":"Q016","indicator":"Подключённые владельцы нескольких номеров на конец года","scenario":"Цель, не ниже","value":"2 000","unit":"шт.","direction":"higher","role":"goal","source":"S001","status":"active"}
+{"id":"Q017","indicator":"Группы, активированные за 14 дней, среди созданных в последнем квартале","scenario":"План","value":"50","unit":"%","direction":"higher","role":"context","source":"S001","status":"active"}
+{"id":"Q018","indicator":"Группы, активированные за 14 дней, среди созданных в последнем квартале","scenario":"Оценка","value":"42","unit":"%","direction":"higher","role":"context","source":"S001","status":"active"}
+{"id":"Q019","indicator":"Группы, активированные за 14 дней, среди созданных в последнем квартале","scenario":"Без изменений","value":"45","unit":"%","direction":"higher","role":"baseline","source":"S001","status":"active"}
+{"id":"Q020","indicator":"Группы, активированные за 14 дней, среди созданных в последнем квартале","scenario":"Цель, не ниже","value":"60","unit":"%","direction":"higher","role":"goal","source":"S001","status":"active"}

@@ -1,0 +1,1804 @@
+
+<!DOCTYPE html>
+<html class="no-js" data-mts-theme="light">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, interactive-widget=resizes-content">
+    <meta name="format-detection" content="telephone=no">
+    <meta http-equiv="x-rim-auto-match" content="none">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <link rel="preconnect" href="https://static.mts.ru" crossorigin>
+    <link rel="dns-prefetch" href="https://static.mts.ru">
+    <link rel="preconnect" href="https://identitystatic.mts.ru" crossorigin>
+    <link rel="dns-prefetch" href="https://identitystatic.mts.ru">
+    <link rel="dns-prefetch" href="https://sb.mts.ru">
+    <script src="https://static.mts.ru/mts_rf/images/sdk-f6.js"></script>
+    
+
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="//static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Regular.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="//static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Medium.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Bold.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Medium.woff2" />
+
+<style>
+@font-face {font-family: "MTS Compact";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Regular.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Regular.ttf") format('truetype');font-weight: 400;font-style: normal;font-display: swap;}@font-face {font-family: "MTS Compact";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Medium.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Medium.ttf") format('truetype');font-weight: 500;font-style: normal;font-display: swap;}@font-face {font-family: "MTS Wide";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Bold.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Bold.ttf") format('truetype');font-weight: 700;font-style: normal;font-display: swap;}@font-face {font-family: "MTS Wide";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Medium.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Medium.ttf") format('truetype');font-weight: 500;font-style: normal;font-display: swap;}@font-face {font-family: "MTS Wide";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Light.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Light.ttf") format('truetype');font-weight: 300;font-style: normal;font-display: swap;}@font-face {font-family: "MTS Wide";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Regular.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Regular.ttf") format('truetype');font-weight: 400;font-style: normal;font-display: swap;}@font-face {font-family: "MTS Wide";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Black.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Black.ttf") format('truetype');font-weight: 900;font-style: normal;font-display: swap;}@font-face {font-family: "MTS Compact";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Bold.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Bold.ttf") format('truetype');font-weight: 700;font-style: normal;font-display: swap;}@font-face {font-family: "MTS Compact";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Black.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Black.ttf") format('truetype');font-weight: 900;font-style: normal;font-display: swap;}@font-face {font-family: "MTS Text";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSText/MTSText-Regular.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSText/MTSText-Regular.ttf") format('truetype');font-weight: 400;font-style: normal;font-display: swap;}@font-face {font-family: "MTS Text";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSText/MTSText-Medium.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSText/MTSText-Medium.ttf") format('truetype');font-weight: 500;font-style: normal;font-display: swap;}@font-face {font-family: "MTSCompact";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Regular.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Regular.ttf") format('truetype');font-weight: 400;font-style: normal;font-display: swap;}@font-face {font-family: "MTSCompact";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Medium.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Medium.ttf") format('truetype');font-weight: 500;font-style: normal;font-display: swap;}@font-face {font-family: "MTSCompact";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Bold.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Bold.ttf") format('truetype');font-weight: 700;font-style: normal;font-display: swap;}@font-face {font-family: "MTSCompact";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Black.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Black.ttf") format('truetype');font-weight: 900;font-style: normal;font-display: swap;}@font-face {font-family: "MTSWide";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Light.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Light.ttf") format('truetype');font-weight: 300;font-style: normal;font-display: swap;}@font-face {font-family: "MTSWide";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Regular.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Regular.ttf") format('truetype');font-weight: 400;font-style: normal;font-display: swap;}@font-face {font-family: "MTSWide";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Medium.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Medium.ttf") format('truetype');font-weight: 500;font-style: normal;font-display: swap;}@font-face {font-family: "MTSWide";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Bold.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Bold.ttf") format('truetype');font-weight: 700;font-style: normal;font-display: swap;}@font-face {font-family: "MTSWide";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Black.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Black.ttf") format('truetype');font-weight: 900;font-style: normal;font-display: swap;}@font-face {font-family: "MTSText";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSText/MTSText-Regular.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSText/MTSText-Regular.ttf") format('truetype');font-weight: 400;font-style: normal;font-display: swap;}@font-face {font-family: "MTSText";src: url("//static.mts.ru/mts_rf/images/fonts/v1/MTSText/MTSText-Medium.woff2") format('woff2'), url("//static.mts.ru/mts_rf/images/fonts/v1/MTSText/MTSText-Medium.ttf") format('truetype');font-weight: 500;font-style: normal;font-display: swap;}</style>
+    <style type="text/css">:root{--color-icons-secondary:#969fa8;--text-headline:#000000;--text-main-heading:#3e3e3e;--text-primary:#1d2023;--text-secondary:#626c77;--text-tertiary:#969fa8;--text-inverted:#ffffff;--text-positive:#12b23f;--text-negative:#eb4a13;--text-primary-link:#007cff;--text-dark-primary-link:#007cff;--text-secondary-link:#969fa8;--background-lower:#f2f3f7;--background-primary:#ffffff;--background-primary-elevated:#ffffff;--background-modal:#ffffff;--background-stroke:rgba(188, 195, 208, 0.5);--background-secondary:#f2f3f7;--background-secondary-elevated:#ffffff;--background-secondary-inverted:#f2f3f7;--background-secondary-autofill:#f2f3f7;--background-inverted:#1d2023;--background-overlay:rgba(29, 32, 35, 0.4);--background-overlay-alternative:rgba(29, 32, 35, 0.4);--background-hover:rgba(188, 195, 208, 0.25);--background-ghost-hover:rgba(188, 195, 208, 0.25);--background-navbar-ios:rgba(255, 255, 255, 0.92);--icons-primary:#1D2023;--icons-secondary:#969fa8;--icons-tertiary:#bbc1c7;--icons-filter-primary:brightness(0) saturate(100%) invert(0%) sepia(90%) saturate(7500%) hue-rotate(59deg) brightness(105%) contrast(111%);--icons-filter-bg-primary:brightness(0) saturate(100%) invert(100%) sepia(60%) saturate(74%) hue-rotate(228deg) brightness(113%) contrast(100%);--icons-filter-primary-link:brightness(0) saturate(100%) invert(47%) sepia(65%) saturate(6818%) hue-rotate(199deg) brightness(102%) contrast(110%);--icons-filter-brand-red:brightness(0) saturate(100%) invert(11%) sepia(98%) saturate(6437%) hue-rotate(354deg) brightness(89%) contrast(101%);--icons-filter-secondary:brightness(0) saturate(100%) invert(66%) sepia(19%) saturate(166%) hue-rotate(169deg) brightness(94%) contrast(83%);--icons-filter-tertiary:brightness(0) saturate(100%) invert(96%) sepia(2%) saturate(1331%) hue-rotate(180deg) brightness(87%) contrast(77%);--icons-filter-tertiary-active:brightness(0) saturate(100%) invert(97%) sepia(4%) saturate(158%) hue-rotate(191deg) brightness(98%) contrast(98%);--icons-filter-greyscale-0:brightness(0) saturate(100%) invert(100%) sepia(8%) saturate(31%) hue-rotate(262deg) brightness(107%) contrast(110%);--icons-filter-stroke:brightness(0) saturate(100%) invert(40%) sepia(10%) saturate(282%) hue-rotate(177deg) brightness(91%) contrast(89%);--icons-filter-inactive:brightness(0) saturate(100%) invert(96%) sepia(5%) saturate(221%) hue-rotate(176deg) brightness(95%) contrast(90%);--icons-filter-none-to-primary:none;--icons-filter-inverted:brightness(0) saturate(100%) invert(6%) sepia(3%) saturate(2892%) hue-rotate(169deg) brightness(101%) contrast(86%);--icons-filter-none-to-primary:none;--controls-primary-active:#ff0032;--controls-primary-active-hover:#ff0032;--controls-secondary-active:#1d2023;--controls-tertiary-active:#f2f3f7;--controls-tertiary-active-hover:#e2e5eb;--controls-inactive:rgba(188, 195, 208, 0.5);--controls-alternative:#ffffff;--controls-blur: rgba(255, 255, 255, 0.08);--controls-active-tabbar:#ff0032;--controls-inactive-tabbar:#8D969F;--controls-stroke:#8D969F;--accent-active:#007cff;--accent-positive:#26cd58;--accent-warning:#fac031;--accent-negative:#f95721;--brand-mts-red:#ff0032;--constant-main-dark:#e2e2e2;--controls-temporary:#fff;--constant-greyscale-900:#000000;--constant-greyscale-800:#1d2023;--constant-greyscale-700:#2c3135;--constant-greyscale-600:#434a51;--constant-greyscale-500:#626c77;--constant-greyscale-400:#969fa8;--constant-greyscale-300:#bbc1c7;--constant-greyscale-200:#e2e5eb;--constant-greyscale-100:#f2f3f7;--constant-greyscale-0:#ffffff;--constant-darkest-blackberry:#002094;--constant-dark-blackberry:#003db7;--constant-normal-blackberry:#014fce;--constant-light-blackberry:#6384e0;--constant-lightest-blackberry:#e7eafa;--constant-darkest-blueberry:#0048aa;--constant-dark-blueberry:#007cff;--constant-normal-blueberry:#0097fd;--constant-light-blueberry:#45b6fc;--constant-lightest-blueberry:#e1f3fe;--constant-darkest-mint:#00724d;--constant-dark-mint:#03a17b;--constant-normal-mint:#00c19b;--constant-light-mint:#00d9bc;--constant-lightest-mint:#dff9f5;--constant-darkest-apple:#027722;--constant-dark-apple:#04aa42;--constant-normal-apple:#26cd58;--constant-light-apple:#74df8b;--constant-lightest-apple:#e8faeb;--constant-darkest-lime:#808201;--constant-dark-lime:#a6c100;--constant-normal-lime:#c1eb1d;--constant-light-lime:#d3f36b;--constant-lightest-lime:#f8fee7;--constant-darkest-banana:#f37f19;--constant-dark-banana:#fac031;--constant-normal-banana:#fbe739;--constant-light-banana:#fdf177;--constant-lightest-banana:#fffde8;--constant-darkest-orange:#ba360a;--constant-dark-orange:#e04a17;--constant-normal-orange:#f95721;--constant-light-orange:#ffa080;--constant-lightest-orange:#fbe9e7;--constant-darkest-raspberry:#8e003f;--constant-dark-raspberry:#c51345;--constant-normal-raspberry:#ea1f49;--constant-light-raspberry:#f55f7e;--constant-lightest-raspberry:#ffe4e9;--constant-darkest-cranberry:#7f3363;--constant-dark-cranberry:#bb4079;--constant-normal-cranberry:#e54887;--constant-light-cranberry:#e677ad;--constant-lightest-cranberry:#f9e7f0;--constant-darkest-plum:#471c61;--constant-dark-plum:#6d2d79;--constant-normal-plum:#883888;--constant-light-plum:#a86ea7;--constant-lightest-plum:#f0e7f0;--primary-control-hover-color:#ff0032;--archive-service-grayscale:#e2e5eb; --color-premium:linear-gradient(48deg, #9BD5FF 6.25%, #9B93FF 44.27%, #9A8DFF 58.33%, #7C86FE 84.9%); --color-control-blur:rgba(255, 255, 255, 0.08); --color-control-hover-alternative:rgba(242, 243, 247, 0.12); --color-control-hover-primary:rgba(188, 195, 208, 0.4); --blend-background-hover:multiply; --blend-control-hover-primary:multiply}html[data-theme=dark],.dark-design,.mts-theme-dark{--text-headline:#ffffff;--text-main-heading:#e2e2e2;--text-primary:#fafafa;--color-text-primary:#fafafa;--text-secondary:#969fa8;--text-tertiary:#626c77;--text-inverted:#000000;--text-positive:#74df8b;--text-negative:#ffa080;--text-primary-link:#45b6fc;--text-dark-primary-link:#0070e5;--text-secondary-link:#626c77;--background-lower:#000000;--background-primary:#000000;--background-primary-elevated:#1d2023;--background-modal:#2c3135;--background-stroke:rgba(127, 140, 153, 0.35);--background-secondary:rgba(98, 108, 119, 0.25);--background-secondary-elevated:rgba(98, 108, 119, 0.25);--background-secondary-inverted:#000000;--background-secondary-autofill:#2c3135;--background-inverted:#ffffff;--background-overlay:rgba(29, 32, 35, 0.6);--background-overlay-alternative:rgba(0, 0, 0, 0.64);--background-hover:rgba(242, 243, 247, 0.2);--background-ghost-hover:transparent;--background-navbar-ios:rgba(0, 0, 0, 0.92);--icons-primary:#FAFAFA;--icons-tertiary:#626c77;--icons-filter-primary:brightness(0) saturate(100%) invert(100%) sepia(60%) saturate(74%) hue-rotate(228deg) brightness(113%) contrast(100%);--icons-filter-bg-primary:brightness(0) saturate(100%) invert(0%) sepia(90%) saturate(7500%) hue-rotate(59deg) brightness(105%) contrast(111%);--icons-filter-tertiary:brightness(0) saturate(100%) invert(40%) sepia(17%) saturate(333%) hue-rotate(171deg) brightness(97%) contrast(86%);--icons-filter-tertiary-active:brightness(0) saturate(100%) invert(95%) sepia(10%) saturate(101%) hue-rotate(166deg) brightness(90%) contrast(91%);--icons-filter-stroke:brightness(0) saturate(100%) invert(97%) sepia(3%) saturate(496%) hue-rotate(183deg) brightness(94%) contrast(92%);--icons-filter-primary-link:brightness(0) saturate(100%) invert(53%) sepia(75%) saturate(667%) hue-rotate(178deg) brightness(106%) contrast(98%);--icons-filter-inactive:brightness(0) saturate(100%) invert(96%) sepia(8%) saturate(167%) hue-rotate(179deg) brightness(89%) contrast(93%);--icons-filter-none-to-primary:brightness(0) saturate(100%) invert(100%) sepia(60%) saturate(74%) hue-rotate(228deg) brightness(113%) contrast(100%);--icons-filter-inverted:brightness(0) saturate(100%) invert(100%) sepia(60%) saturate(74%) hue-rotate(228deg) brightness(113%) contrast(100%);--icons-filter-none-to-primary:brightness(0) saturate(100%) invert(100%) sepia(60%) saturate(74%) hue-rotate(228deg) brightness(113%) contrast(100%);--controls-secondary-active:#ffffff;--controls-tertiary-active:rgba(127, 140, 153, 0.35);--controls-tertiary-active-hover:#54575c;--controls-inactive:rgba(127, 140, 153, 0.35);--controls-alternative:rgba(127, 140, 153, 0.35);--controls-active-tabbar:#ffffff;--controls-inactive-tabbar:rgba(255, 255, 255, 0.46);--controls-temporary:#434a51;--controls-stroke:#636B72;--accent-active:#45b6fc;--accent-positive:#74df8b;--accent-warning:#fad67d;--accent-negative:#fa8a64;--archive-service-grayscale:#2c3135;--color-premium:linear-gradient(48deg, #9BD5FF 6.25%, #9B93FF 44.27%, #9A8DFF 58.33%, #7C86FE 84.9%); --color-control-blur:rgba(255, 255, 255, 0.08); --color-control-hover-alternative:rgba(188, 195, 208, 0.4); --color-control-hover-primary:rgba(188, 195, 208, 0.4); --blend-control-hover-primary:multiply;}</style>
+<link href="//static.mts.ru/mts_rf/static/1.0.0.14633/Styles/core/cssTokens.css" rel="stylesheet" type="text/css" />
+
+
+            <meta name="description" content="✅Подключить услугу Семейная группа от МТС в Москве. Ведущий 📱 оператор связи в России. ⭐Тарифы, услуги, интернет, телевидение. Лучшие предложения и выгодные условия. Узнайте больше на официальном сайте МТС!" />
+    <title>➤Семейная группа – подключить услугу от МТС в Москве</title>
+
+    
+        <script type="text/javascript">
+    var isDOMContentLoaded = false;
+
+    addEventListener('DOMContentLoaded', function () {
+        isDOMContentLoaded = true;
+    }, true);
+
+    function callOnReady(callback) {
+        if (isDOMContentLoaded) callback();
+        else document.addEventListener('DOMContentLoaded', callback);
+    }
+
+    function $(argument) {
+        if (typeof argument === 'function') callOnReady(argument);
+
+        return {
+            ready: callOnReady,
+            load: function (callback) {
+                window.addEventListener('load', callback);
+            },
+        };
+    }
+
+    var jQuery = $;
+</script>
+
+
+
+    
+
+    
+        <link href="//static.mts.ru/mts_rf/static/1.0.0.14633/Styles/Promo/bundles/base.css" rel="stylesheet" type="text/css" />
+        <noscript><link href='//static.mts.ru/mts_rf/static/1.0.0.14633/Styles/Promo/bundles/project/shared_async.css' rel='stylesheet' type='text/css' /></noscript><link href="//static.mts.ru/mts_rf/static/1.0.0.14633/Styles/Promo/bundles/project/shared_async.css" rel="stylesheet" type="text/css" media="print" onload="this.media=&#x27;all&#x27;" />
+        <link href="//static.mts.ru/mts_rf/static/1.0.0.14633/Styles/Promo/bundles/project/shared_full.css" rel="stylesheet" type="text/css" />
+        <link href="//static.mts.ru/mts_rf/static/1.0.0.14633/Styles/Promo/bundles/project/shared_static.css" rel="stylesheet" type="text/css" />
+    <link rel="stylesheet" href="/bundles/angular/layout.css">
+        <link href="//static.mts.ru/mts_rf/static/1.0.0.14633/Styles/Promo/bundles/project/cover-slider.css" rel="stylesheet" type="text/css" />
+    
+    <link href="//static.mts.ru/mts_rf/static/1.0.0.14633/Styles/Promo/bundles/project/universalPage.css" rel="stylesheet" type="text/css" />
+    <link rel="stylesheet" href="/bundles/angular/universalPage.css">
+
+    
+    
+    <script>
+        window.globalSettings = {"defaultDomain":".mts.ru","currentSegment":"PrivateClients","staticsPath":"//static.mts.ru/mts_rf/static/1.0.0.14633","shopCookieLifeTime":365,"layout":{"isWebView":false,"webView":""},"gtm":{"sectionId":1460098,"region":"msk","regionName":"Москва","regionId":78043,"isb2c":true,"pageType":"infopage"},"parentsTree":{"contentId":1460098},"auth":{"loginUrlEmbedded":"/json/auth/login","logoutUrl":"/json/auth/logout","addSlaveUrl":"https://united-auth.ssl.mts.ru/account/slave?xClientId=MTS&goto=","addGosuslugiUrl":"https://login.mts.ru/amserver/UI/Login?org=%2Fb2c%2Fidp%2Fru&ForceAuth=true&login_hint=&goto=","authSwitchToSlaveUrl":"https://united-auth.ssl.mts.ru/account/switch/{0}?xClientId=MTS&goto={1}","authSwitchToMasterUrl":"https://united-auth.ssl.mts.ru/account/switch?xClientId=MTS&goto=","authDeleteSlaveUrl":"https://united-auth.ssl.mts.ru/account/slave/{0}?xClientId=MTS"},"disableRegionalRedirect":false,"showRegionInWebView":false};
+            window.globalSettings.baseUrl =  '/personal/servisy/semejnaya-gruppa' ;
+    </script>
+    <script>
+    var QA = QA || {}; QA.MTS = QA.MTS || {}; var dataLayer = [];
+    dataLayer.push({ originalLocation: document.location.protocol + '//' + document.location.hostname + document.location.pathname + document.location.search });
+    (function(gs) {
+        if (!gs.baseUrl) gs.baseUrl = '/' + window.location.href.replace(/^http[s]?:\/\/[^\/]+(\/[^\?]*)(?:\?.*)?$/i, '$1').replace(/^\/+|\/+$/g, '');
+    })(window.globalSettings);
+</script>
+
+    
+        <script id="headsection-script" src="/bundles/headsection.js?v=0oBtYTcJvavlEV28Tfm7jVvX0U49UOi_sWpCHsHH0s0" type="module" fetchpriority="high"></script>
+<script>
+    function handleScriptCompletion(n,t,i){var r=document.querySelector("#"+n);r&&(t&&r.addEventListener("load",t),i&&r.addEventListener("error",i))}handleScriptCompletion("headsection-script",function(){$.holdReady(!0)});
+    document.addEventListener("DOMContentLoaded",(function(){$.holdReady(!1)}));
+</script>
+
+
+    <script src="/bundles/polyfills.js?v=0pk0pBnIouiPPv-0YIU7mBgoRHH1GLElUGnYiKIBMX4" type="module" fetchpriority="high"></script>
+    <script src="/bundles/zone.js?v=a5NrUe8pVfpORx0Qq1ogQlV2iSr4m8DpwV2E3573NDI" type="module" fetchpriority="high"></script>
+    <script src="/bundles/globals.js?v=KdDGo085rWhF0zgiSKg8OM6VM8HkxpmtlaRKkeGQKVY" type="module" fetchpriority="high"></script>
+    
+        <script id="profile-widget-script" src="https://identitystatic.mts.ru/eco-header/profile-widget-b2c/current/profile-widget.bundle.js" async fetchpriority="high"></script>
+    <script>
+        (function(settings) {
+            window.isProfileWidgetLoaded = new Promise(function (resolve) {
+                var scriptElement = document.querySelector("#" + 'profile-widget-script');
+                if (scriptElement) {
+                    if (resolve.bind(null, true)) {
+                        scriptElement.addEventListener("load", resolve.bind(null, true));
+                    }
+                    if (resolve.bind(null, false)) {
+                        scriptElement.addEventListener("error", resolve.bind(null, false));
+                    }
+                }
+            });
+            if (settings) settings.profileWidget = {"supportLink":"https://support.mts.ru/?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=podderzhka&utm_content=shorka_profile&utm_term=button_tap","serviceManageEndpoint":"https://lk.mts.ru","serviceManageTitle":"Личный кабинет","loginEndpoint":"https://united-auth.ssl.mts.ru/account/login?xClientId=MTS&goto=","webSsoUrl":"https://login.mts.ru","profileEnvParameter":"prod"};
+        })(window.globalSettings)
+    </script>
+
+
+    
+        <script src="//static.mts.ru/mts_rf/static/1.0.0.14633/Scripts/Promo/bundles/moduleCreator.js" type="module" fetchpriority="high"></script>
+        <script src="//static.mts.ru/mts_rf/static/1.0.0.14633/Scripts/Promo/bundles/base.js" type="module" fetchpriority="high"></script>
+
+    <script src="//static.mts.ru/mts_rf/static/1.0.0.14633/bundles/base.js" type="module" fetchpriority="high"></script>
+    
+    
+    <script src="/bundles/qaScripts.js?v=QGTV7rcCs-nvdH5uNvxKtX_3GBwx53D8dAc7mwII0iE" type="module" fetchpriority="high"></script>
+    <script src="/bundles/angular/layout.js?v=bHMKJthDLCjITLsis8X03V7065tvexQy3AhDETklS1U" defer="" type="module" fetchpriority="high"></script>
+
+    
+<script type="text/javascript">
+(function (w, d, s, l, u) {
+w[l] = w[l] || [];
+w[l].push(
+{ 'mtm.start': new Date().getTime(), event: 'mtm.js' }
+);
+var f = d.getElementsByTagName(s)[0],
+j = d.createElement(s),
+dl = l != 'dataLayer' ? '?l=' + l : '';
+j.async = true;
+j.src = 'https://tag.a.mts.ru/container/' + u + '/tag.js' + dl;
+f.parentNode.insertBefore(j, f);
+})(window, document, 'script', 'dataLayer', '3fbf1822-d661-4b05-880c-aa113dcfaa12');
+</script>
+    
+<meta name="yandex-verification" content="31e9d3b333924dd9" />
+<meta name="google-site-verification" content="1Qzwc9V32dWiOPa7RHeKnLwTMLujzTI0RQQP9FILS-k" /><meta name="google-site-verification" content="ksl1G0t9X8RBji-KMpUJVZI3WTeuCAN55VvJjGZMYGw" />
+<link href="//static.mts.ru/mts_rf/images/favicon-eco/favicon.svg" rel="icon" type="image/svg+xml" />
+<link href="//static.mts.ru/mts_rf/images/favicon-eco/apple-touch-icon.png" rel="apple-touch-icon" sizes="180x180" />
+<link href="//static.mts.ru/mts_rf/images/favicon-eco/favicon-16x16.png" rel="icon" sizes="16x16" type="image/png" />
+<link href="//static.mts.ru/mts_rf/images/favicon-eco/favicon-32x32.png" rel="icon" sizes="32x32" type="image/png" />
+<link href="//static.mts.ru/mts_rf/images/favicon-eco-test/site.webmanifest" rel="manifest" />
+<link color="#e30613" href="//static.mts.ru/mts_rf/images/favicon-eco/safari-pinned-tab.svg" rel="mask-icon" /><meta name="apple-mobile-web-app-title" content="MTS"><meta name="application-name" content="MTS"><meta name="msapplication-TileColor" content="#da532c"><script src="/bundles/sentryBrowser.js?v=f_pM01LwBHG-h7PISngTwWM4WzlGAMvWirDEtaA6qvw" type="module" fetchpriority="high"></script>
+    
+</head>
+<body>
+    
+
+    <div class="js-connect-service-popup-container"></div>
+
+    <div class="g-page-wrapper">
+        <div class="mts16-footer__to-bottom-wrap">
+            <div class="mts16-footer__to-bottom-content">
+                
+                
+
+                
+<!--noindex-->
+
+<mts-header>
+    <header class="header noindex">
+        <div class="header__top">
+            <div class="support-old-browsers">
+                <img alt="Иконка уведомления" title="Иконка уведомления" class="support-old-browsers__icon" src="//static.mts.ru/mts_rf/images/header/warning.svg" />
+                <p class="support-old-browsers__text">
+                    Перестаём поддерживать Internet Explorer. <br />Другие браузеры работают стабильнее.
+                </p>
+            </div>
+
+            <script>var e; (-1 !== (e = window.navigator.userAgent).toLowerCase().indexOf("trident") || -1 !== e.toLowerCase().indexOf("msie")) && document.querySelector(".support-old-browsers").classList.add("show");</script>
+
+            
+                <div class="top-menu">
+                    <div class="top-menu__wrap">
+                        <div class="top-menu__inner">
+                            <div class="top-menu__nav">
+                                
+                                    
+
+<script type="text/javascript">
+        (function(layout) {
+            layout.menu = layout.menu || {};
+            layout.menu.sites = [{"id":424919,"title":"Частным лицам","href":"/personal","alias":"personal","isActiveNode":true},{"id":424921,"title":"Малому и среднему бизнесу","href":"/business","alias":"business","blank":true},{"id":1515275,"title":"Крупному бизнесу","href":"https://business.mts.ru/corptech","alias":"krupnomu-biznesu","blank":true},{"id":424923,"title":"О компании","href":"/about","alias":"about"},{"id":990124,"title":"Госзаказчикам","href":"/gos","alias":"gos"},{"id":1356108,"title":"Партнёрам","href":"https://partners.mts.ru/","alias":"partneram"},{"id":1155812,"title":"Инвесторам","href":"https://ir.mts.ru","alias":"investor-relations"}];
+        })(window.globalSettings.layout)
+</script>
+<div class="header-top-links__inner no-mobile">
+   
+    <div class="header-top-links g-no-device">
+        <a class="header-top-links__link is-active"
+           
+           href="/personal">Частным лицам</a>
+        <a class="header-top-links__link g-only-wide"
+           
+           href="/business">Малому и среднему бизнесу</a>
+        <a class="header-top-links__link g-only-wide"
+           
+           href="https://business.mts.ru/corptech">Крупному бизнесу</a>
+    </div>
+
+    <div class="header-top-links__link">
+        <div class="header-drop header__top-item header__top-item_more header-top-links">
+            <div class="header__top-item_more header__top-item header__top-item_title">
+                <span class="g-no-device">Еще</span>
+                <span class="g-only-device">Частным лицам</span>
+            </div>
+                <div class="header-drop__drop">
+                    <div class="header-drop__arrow"></div>
+                    <div class="header__more-list">
+                            <a href="/business"
+                               class="header__more-item g-only-narrow">Малому и среднему бизнесу</a>
+                            <a href="https://business.mts.ru/corptech"
+                               class="header__more-item g-only-narrow">Крупному бизнесу</a>
+                            <a href="/about"
+                               class="header__more-item ">О компании</a>
+                            <a href="/gos"
+                               class="header__more-item ">Госзаказчикам</a>
+                            <a href="https://partners.mts.ru/"
+                               class="header__more-item ">Партнёрам</a>
+                            <a href="https://ir.mts.ru"
+                               class="header__more-item ">Инвесторам</a>
+                    </div>
+                </div>
+            </div>
+    </div>
+</div>
+                                
+                            </div>
+                            <div class="top-menu__right">
+                                <div class="header__top-links header-button-location g-no-device">
+                                    <div class="header__top-item" style="display: none">
+                                        <div class="header__top-icon header__top-icon_navigation"></div>
+                                        <div class="header__top-text">&nbsp;</div>
+                                    </div>
+                                </div>
+                                    <div id="payment-widget-btn" class="header__top-item button-payment no-mobile">
+                                        <div class="header__top-icon header__top-icon_purse"></div>
+                                        <div class="header__top-text">Пополнение и оплата</div>
+                                    </div>
+                                    <a href="https://support.mts.ru/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=support&amp;utm_content=main_footer&amp;utm_term=link_tap" class="header__top-item button-support__link">
+                                        <div class="header__top-icon header__top-icon_help"></div>
+                                        <div class="header__top-text">Поддержка</div>
+                                    </a>
+                                <div class="header__top-links header-button-location g-only-device">
+                                    <div class="header__top-item" style="display: none">
+                                        <div class="header__top-icon header__top-icon_navigation"></div>
+                                        <div class="header__top-text">&nbsp;</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            
+
+            
+        </div>
+
+        <div class="header__body">
+            <div class="middle-menu">
+                <div class="middle-menu__wrap">
+                    <div class="middle-menu__inner">
+                        <a class="header__logo-wrapper" href="/personal">
+                            <img class="header__logo" alt="МТС" src="//static.mts.ru/mts_rf/images/logo-eco.svg">
+                            <img class="header__logo header__logo-image dark" alt="Логотип МТС" src="//static.mts.ru/mts_rf/images/logo-eco.svg">
+                        </a>
+                        <div class="header__content">
+                            
+                                
+<script type="text/javascript">
+    window.globalSettings.layout.menu = window.globalSettings.layout.menu || {};
+    (function(layout) {
+        layout.menu = layout.menu || {};
+        layout.menu.data = {"menuItems":[{"id":1382578,"order":110,"customTitle":"Мобильная связь","blocks":[{"id":1392421,"blockType":"horizontalCard","order":10,"articles":[{"id":1392423,"title":"Тарифы","linkTarget":"_self","linkType":"primary","order":10,"link":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mobile"}],"image":"https://static.mts.ru/mts_rf/contents/10907/menu_icon_mob_tarif.jpg","imageMobile":"https://static.mts.ru/mts_rf/contents/10907/menu_icon_mob_tarif.jpg","isVisibleMobileDescription":true},{"id":1390176,"blockType":"horizontalCard","order":20,"articles":[{"id":1500108,"title":"Перенести номер</br>в&nbsp;МТС","linkTarget":"_self","linkType":"primary","order":10,"link":"/personal/pereyti-v-mts"}],"image":"https://static.mts.ru/mts_rf/contents/10907/menu_icon_mob_mnp.jpg","imageMobile":"https://static.mts.ru/mts_rf/contents/10907/menu_icon_mob_mnp.jpg","isVisibleMobileDescription":true},{"id":1385725,"blockType":"listWithHeader","order":30,"articles":[{"id":1385714,"title":"Оформить eSIM","linkTarget":"_self","linkType":"primary","order":10,"link":"/personal/esim"},{"id":1385720,"title":"Заказать SIM-карту","linkTarget":"_blank","linkType":"primary","order":20,"link":"/personal/vybrat-nomer#/"},{"id":1385715,"title":"Красивый номер","linkTarget":"_self","linkType":"primary","order":30,"link":"/personal/krasivyj-nomer-mts"},{"id":1500372,"title":"Чистый номер","linkTarget":"_blank","linkType":"primary","order":40,"link":"/personal/chistyj-nomer"},{"id":1500438,"title":"SIM-карта для иностранцев","linkTarget":"_blank","linkType":"primary","order":50,"link":"/personal/servisy/sim-for-foreigners"}],"isVisibleMobileDescription":true,"listHeader":"Стать абонентом"},{"id":1514258,"blockType":"listWithHeader","order":40,"articles":[{"id":1385709,"title":"Роуминг","linkTarget":"_self","linkType":"primary","order":10,"link":"/personal/mobilnaya-svyaz/rouming-i-mezhgorod"},{"id":1514261,"title":"Пакеты&nbsp;ГБ, минут и&nbsp;SMS","linkTarget":"_self","linkType":"primary","order":20,"link":"/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz/add-pack"},{"id":1501539,"title":"Перейти на eSIM","linkTarget":"_blank","linkType":"primary","order":30,"link":"/personal/sim-to-esim-page"},{"id":1403443,"title":"Заменить SIM-карту","linkTarget":"_blank","linkType":"primary","order":40,"link":"/personal/sim-order"},{"id":1385713,"title":"Семейная группа","linkTarget":"_self","linkType":"primary","order":50,"link":"/personal/servisy/semejnaya-gruppa"},{"id":1514264,"title":"При нуле","linkTarget":"_self","linkType":"primary","order":60,"link":"/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz/limit_na_svyaz"},{"id":1385722,"title":"Скидки и&nbsp;акции","linkTarget":"_self","linkType":"primary","order":70,"link":"/personal/vse-akcii"},{"id":1385708,"title":"Все услуги","linkTarget":"_self","linkType":"primary","order":80,"link":"/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz"}],"isVisibleMobileDescription":true,"listHeader":"Популярное"},{"id":1488667,"blockType":"banner","order":255,"articles":[{"id":1488666,"title":"Скорость нового поколения","linkTarget":"_self","linkType":"primary","order":255,"link":"/personal/5-g"},{"id":1514348,"title":"Подробнее","linkTarget":"_self","linkType":"button","order":255,"link":"/personal/5-g"}],"image":"https://static.mts.ru/mts_rf/contents/10907/main_popup_menu_5g_banner_new_background.png","imageMobile":"https://static.mts.ru/mts_rf/contents/10907/main_popup_menu_5g_banner_new_background.png","smallImage":"https://static.mts.ru/mts_rf/contents/10907/main_popup_menu_5g_banner_new_keyvisual.png","smallImageMobile":"https://static.mts.ru/mts_rf/contents/10907/main_popup_menu_5g_banner_new_keyvisual.png","description":"5G&nbsp;от&nbsp;МТС&nbsp;&mdash; инновация для комфортной и&nbsp;быстрой онлайн-жизни","isVisibleMobileDescription":true}],"clickableTitles":[],"designType":"expandable"},{"id":1514351,"order":120,"customTitle":"Для дома","blocks":[{"id":1455172,"blockType":"horizontalCard","order":10,"articles":[{"id":1455173,"title":"Тарифы","linkTarget":"_self","linkType":"primary","order":10,"link":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mobile-tv-inet"}],"image":"https://static.mts.ru/mts_rf/contents/10907/menu_icon_home_tarif.jpg","imageMobile":"https://static.mts.ru/mts_rf/contents/10907/menu_icon_home_tarif.jpg","isVisibleMobileDescription":true},{"id":1455178,"blockType":"horizontalCard","order":20,"articles":[{"id":1455183,"title":"Услуги","linkTarget":"_self","linkType":"primary","icon":"https://static.mts.ru/mts_rf/contents/10908/Services.svg","order":20,"link":"/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/home-inet"}],"image":"https://static.mts.ru/mts_rf/contents/10907/menu_icon_home_services.jpg","imageMobile":"https://static.mts.ru/mts_rf/contents/10907/menu_icon_home_services.jpg","isVisibleMobileDescription":true},{"id":1385740,"blockType":"listWithHeader","order":40,"articles":[{"id":1455190,"title":"Домашний интернет","linkTarget":"_self","linkType":"primary","order":10,"link":"/personal/dom/home-allmts"},{"id":1385730,"title":"Домашнее ТВ","linkTarget":"_self","linkType":"primary","order":20,"link":"/personal/dom/home-tv"},{"id":1449159,"title":"Спутниковое ТВ","linkTarget":"_self","linkType":"primary","order":30,"link":"/personal/dom/home-satellite"},{"id":1449162,"title":"Домашний телефон","linkTarget":"_self","linkType":"primary","order":40,"link":"/personal/dom/home-telefon"}],"isVisibleMobileDescription":true,"listHeader":"Стать клиентом"},{"id":1514265,"blockType":"listWithHeader","order":50,"articles":[{"id":1514266,"title":"Для домашнего интернета","linkTarget":"_self","linkType":"primary","order":10,"link":"/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/home-inet"},{"id":1514269,"title":"Для ТВ&nbsp;и&nbsp;кино","linkTarget":"_self","linkType":"primary","order":20,"link":"/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/home-tv-i-kino"},{"id":1514272,"title":"Для телефона","linkTarget":"_self","linkType":"primary","order":40,"link":"/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/home-phone"},{"id":1514275,"title":"Безопасность","linkTarget":"_self","linkType":"primary","order":50,"link":"/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/internet-safety"},{"id":1455187,"title":"Скидки и&nbsp;акции","linkTarget":"_self","linkType":"primary","order":60,"link":"/personal/vse-akcii/domashniy-internet"}],"isVisibleMobileDescription":true,"listHeader":"Услуги"},{"id":1513083,"blockType":"banner","order":255,"articles":[{"id":1512344,"title":"Видеонаблюдение для&nbsp;дома","linkTarget":"_self","linkType":"primary","order":255,"link":"/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/umnaya-kamera"},{"id":1514354,"title":"Подробнее","linkType":"button","order":255,"link":"/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/umnaya-kamera"}],"image":"https://static.mts.ru/mts_rf/contents/10907/smart_camera_dropdown_menu_bg.png","imageMobile":"https://static.mts.ru/mts_rf/contents/10907/smart_camera_dropdown_menu_bg.png","smallImage":"https://static.mts.ru/mts_rf/contents/10907/smart_camera_dropdown_menu_kv.png","smallImageMobile":"https://static.mts.ru/mts_rf/contents/10907/smart_camera_dropdown_menu_kv.png","imageDescription":"290&nbsp;&#8381;/мес","description":"290&nbsp;&#8381;/мес","isVisibleMobileDescription":true}],"clickableTitles":[],"designType":"expandable"},{"id":1386046,"order":130,"customTitle":"Оплата и финансы","blocks":[{"id":1386041,"blockType":"listWithHeader","order":10,"articles":[{"id":1386024,"title":"Пополнить баланс МТС","linkTarget":"_blank","linkType":"primary","order":10,"link":"https://pay.mts.ru/pages/refill?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=popolnit_balans_mts&utm_content=menu_oplata_i_finansy"},{"id":1386026,"title":"Оплатить интернет и&nbsp;ТВ","linkTarget":"_blank","linkType":"primary","order":20,"link":"https://payment.mts.ru/spa/categories/internet_and_tv?region=MOW&utm_source=inhouse&utm_medium=mts_ru&utm_campaign=oplatit_internet_i_tv&utm_content=menu_oplata_i_finansy"},{"id":1386028,"title":"Настроить автоплатёж","linkTarget":"_self","linkType":"primary","order":30,"link":"/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz/avtoplatezh"},{"id":1514280,"title":"Дебетовая карта с&nbsp;кешбэком до&nbsp;30%","linkTarget":"_self","linkType":"primary","order":40,"link":"https://mtsdengi.ru/karti/debet-mts-dengi?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=debetovaya_karta_s_keshbekom_do_30&utm_content=menu_oplata_i_finansy"}],"isVisibleMobileDescription":true,"listHeader":"Пополнение счёта"},{"id":1514281,"blockType":"listWithHeader","order":20,"articles":[{"id":1514285,"title":"Перевести деньги","linkTarget":"_self","linkType":"primary","order":10,"link":"https://payment.mts.ru/spa/categories?tab=payments&utm_source=inhouse&utm_medium=mts_ru&utm_campaign=pereversti_dengi&utm_content=menu_oplata_i_finansy"},{"id":1514288,"title":"Оплатить с&nbsp;баланса телефона","linkTarget":"_self","linkType":"primary","order":20,"link":"/personal/servisy/platite_s_balansa_telefona"},{"id":1514291,"title":"Перевести с&nbsp;телефона на&nbsp;карту","linkType":"primary","order":30,"link":"https://payment.mts.ru/lightpay/card/?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=pereversti_s_telefona_na_kartu&utm_content=menu_oplata_i_finansy"},{"id":1514294,"title":"Пополнить номер другого оператора","linkType":"primary","order":40,"link":"https://payment.mts.ru/spa/pay/phone?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=popolnit_nomer_drugogo_operatora&utm_content=menu_oplata_i_finansy"},{"id":1514297,"title":"Оплата по&nbsp;QR-коду за&nbsp;границей","linkTarget":"_self","linkType":"primary","order":50,"link":"/personal/servisy/oplata-zagranicej-po-qr-kodu"}],"isVisibleMobileDescription":true,"listHeader":"Платежи"},{"id":1514282,"blockType":"listWithHeader","order":30,"articles":[{"id":1514300,"title":"МТС Pay","linkTarget":"_self","linkType":"primary","order":10,"link":"/personal/servisy/mts_pay"},{"id":1514301,"title":"МТС Накопления","linkType":"primary","order":20,"link":"/personal/servisy/mts-nakopleniya"},{"id":1514302,"title":"МТС Инвестиции","linkTarget":"_self","linkType":"primary","order":30,"link":"https://mts.investments?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=mts_investicii&utm_content=menu_oplata_i_finansy"},{"id":1514305,"title":"МТС Все Страховки","linkType":"primary","order":40,"link":"https://insurance.mts.ru?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=mts_vse_strahovki&utm_content=menu_oplata_i_finansy"},{"id":1396782,"title":"Условия пополнения","linkTarget":"_self","linkType":"primary","order":50,"link":"/personal/podderzhka/mobilnaya-svyaz/obsluzhivanie-abonentov/usloviya-popolneniya-schyota"}],"isVisibleMobileDescription":true,"listHeader":"Услуги"},{"id":1386888,"blockType":"banner","order":255,"articles":[{"id":1386887,"title":"Скидка на&nbsp;связь","linkTarget":"_blank","linkType":"primary","order":255,"link":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mobile"},{"id":1514357,"title":"Подробнее","linkType":"button","order":255,"link":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mobile"}],"image":"https://static.mts.ru/mts_rf/contents/10907/skidka_na_svyaz_dropdown_menu_bg.png","imageMobile":"https://static.mts.ru/mts_rf/contents/10907/skidka_na_svyaz_dropdown_menu_bg.png","smallImage":"https://static.mts.ru/mts_rf/contents/10907/skidka_na_svyaz_dropdown_menu_kv.png","smallImageMobile":"https://static.mts.ru/mts_rf/contents/10907/skidka_na_svyaz_dropdown_menu_kv.png","imageDescription":"Тарифы RED, РИИЛ и&nbsp;МТС&nbsp;Супер дешевле при&nbsp;оплате с&nbsp;карты МТС&nbsp;Деньги","description":"Тарифы RED, РИИЛ и&nbsp;МТС&nbsp;Супер дешевле при&nbsp;оплате с&nbsp;карты МТС&nbsp;Деньги","isVisibleMobileDescription":true}],"clickableTitles":[],"designType":"expandable"},{"id":1386047,"order":140,"customTitle":"Интернет-магазин","blocks":[{"id":1386043,"blockType":"listWithHeader","order":10,"articles":[{"id":1514922,"title":"Смартфон по подписке","linkTarget":"_blank","linkType":"primary","order":5,"link":"/personal/vse-akcii/smartfon-po-podpiske"},{"id":1386031,"title":"Смартфоны","linkTarget":"_blank","linkType":"primary","order":10,"link":"https://shop.mts.ru/catalog/smartfony?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=smartfony&utm_content=menu_internet_magazin"},{"id":1514310,"title":"Чехлы, кабели, павербанки","linkTarget":"_self","linkType":"primary","order":20,"link":"https://shop.mts.ru/promo/aksessuary?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=chehly_kabeli_pauerbanki&utm_content=menu_internet_magazin"},{"id":1514313,"title":"Smart&nbsp;TV","linkType":"primary","order":30,"link":"https://shop.mts.ru/promo/tv-i-aksessuary/?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=smart_tv&utm_content=menu_internet_magazin"},{"id":1393831,"title":"Умный дом","linkTarget":"_blank","linkType":"primary","order":40,"link":"https://shop.mts.ru/promo/umnyj-dom/?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=umnyj_dom&utm_content=menu_internet_magazin"},{"id":1514316,"title":"Кнопочные телефоны","linkType":"primary","order":50,"link":"https://shop.mts.ru/catalog/knopochnye-telefony/?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=knopochnye_telefony&utm_content=menu_internet_magazin"},{"id":1514319,"title":"Ноутбуки, мониторы, роутеры","linkType":"primary","order":60,"link":"https://shop.mts.ru/promo/kompyuternaya-tekhnika/?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=noutbuki_monitory_routery&utm_content=menu_internet_magazin"}],"isVisibleMobileDescription":true,"listHeader":"Каталог"},{"id":1514307,"blockType":"listWithHeader","order":20,"articles":[{"id":1386033,"title":"Наушники и колонки","linkTarget":"_blank","linkType":"primary","order":70,"link":"https://shop.mts.ru/promo/naushniki-i-kolonki/?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=naushniki_i_kolonki&utm_content=menu_internet_magazin"},{"id":1386032,"title":"Умные часы и&nbsp;фитнес-браслеты","linkTarget":"_blank","linkType":"primary","order":80,"link":"https://shop.mts.ru/promo/umnye-chasy-i-fitnes-braslety/?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=umnye_chasy_i_fitnes_braslety&utm_content=menu_internet_magazin"},{"id":1386035,"title":"Планшеты","linkTarget":"_blank","linkType":"primary","order":90,"link":"https://shop.mts.ru/promo/planshety/?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=planshety&utm_content=menu_internet_magazin"},{"id":1386036,"title":"Все товары","linkTarget":"_blank","linkType":"primary","order":100,"link":"https://shop.mts.ru/?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=vse_tovary&utm_content=menu_internet_magazin"}],"isVisibleMobileDescription":true},{"id":1514306,"blockType":"listWithHeader","order":30,"articles":[{"id":1386034,"title":"Скидки и&nbsp;акции","linkTarget":"_blank","linkType":"primary","order":10,"link":"https://shop.mts.ru/actions/?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=skidki_i_akcii&utm_content=menu_internet_magazin"},{"id":1514322,"title":"Обзоры техники","linkTarget":"_self","linkType":"primary","order":20,"link":"https://shop.mts.ru/reviews/?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=obzory_tehniki&utm_content=menu_internet_magazin"}],"isVisibleMobileDescription":true,"listHeader":"Полезное"},{"id":1386890,"blockType":"banner","order":255,"articles":[{"id":1386889,"title":"Подробнее","linkTarget":"_blank","linkType":"button","order":255,"link":"https://shop.mts.ru/promo/skidki-na-smartfony-do-40/?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=skidki_na_smartfony_do40&utm_content=menu&utm_term=banner"},{"id":1514358,"title":"Скидки до&nbsp;40%<br>на&nbsp;смартфоны","linkTarget":"_blank","linkType":"primary","order":255,"link":"https://shop.mts.ru/promo/skidki-na-smartfony-do-40/?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=skidki_na_smartfony_do40&utm_content=menu&utm_term=banner"}],"image":"https://static.mts.ru/mts_rf/contents/10907/inernet_magazin_dropdown_menu_bg.png","imageMobile":"https://static.mts.ru/mts_rf/contents/10907/inernet_magazin_dropdown_menu_bg.png","smallImage":"https://static.mts.ru/mts_rf/contents/10907/discountsfall_kv.png","smallImageMobile":"https://static.mts.ru/mts_rf/contents/10907/discountsfall_kv.png","imageDescription":"при покупке со&nbsp;связью МТС","description":"при покупке со&nbsp;связью МТС","isVisibleMobileDescription":true}],"clickableTitles":[],"designType":"expandable"},{"id":1386045,"order":150,"customTitle":"Сервисы","blocks":[{"id":1386038,"blockType":"horizontalCard","order":10,"articles":[{"id":1386020,"title":"МТС Premium","linkTarget":"_blank","linkType":"primary","order":10,"link":"https://premium.mts.ru/?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=mts_premium&utm_content=menu_servisy"}],"image":"https://static.mts.ru/mts_rf/contents/10907/menu_icon_premium.jpg","imageMobile":"https://static.mts.ru/mts_rf/contents/10907/menu_icon_premium.jpg","isVisibleMobileDescription":true},{"id":1461209,"blockType":"horizontalCard","order":20,"articles":[{"id":1461212,"title":"Семейная группа","linkTarget":"_blank","linkType":"primary","order":10,"link":"/personal/servisy/semejnaya-gruppa"}],"image":"https://static.mts.ru/mts_rf/contents/10907/menu_icon_family.jpg","imageMobile":"https://static.mts.ru/mts_rf/contents/10907/menu_icon_family.jpg","isVisibleMobileDescription":true},{"id":1514323,"blockType":"listWithHeader","order":30,"articles":[{"id":1514326,"title":"Онлайн-кинотеатр КИОН","linkTarget":"_self","linkType":"primary","order":10,"link":"/personal/servisy/kion"},{"id":1514329,"title":"КИОН Музыка","linkType":"primary","order":20,"link":"/personal/servisy/mts-music"},{"id":1514332,"title":"Юрент","linkTarget":"_self","linkType":"primary","order":30,"link":"/personal/servisy/urent"},{"id":1514335,"title":"Женский календарь Clatch","linkType":"primary","order":40,"link":"/personal/servisy/clatch"},{"id":1514338,"title":"МТС Нас касается","linkTarget":"_self","linkType":"primary","order":50,"link":"/personal/servisy/mts-nas-kasaetsya"},{"id":1514341,"title":"Игры «Мир танков» и&nbsp;«Мир&nbsp;кораблей»","linkTarget":"_self","linkType":"primary","order":60,"link":"/personal/servisy/mir-tankov-i-mir-korablei"}],"isVisibleMobileDescription":true,"listHeader":"Популярное"},{"id":1386880,"blockType":"listWithHeader","order":40,"articles":[{"id":1386873,"title":"Развлечения","linkTarget":"_self","linkType":"primary","order":10,"link":"/personal/servisy/razvlecheniya"},{"id":1473432,"title":"Финансы","linkTarget":"_self","linkType":"primary","order":20,"link":"/personal/servisy/finansi"},{"id":1473436,"title":"Забота и&nbsp;помощь","linkTarget":"_self","linkType":"primary","order":30,"link":"/personal/servisy/zabota_i_pomoshch"},{"id":1401602,"title":"Скидки и&nbsp;акции","linkTarget":"_self","linkType":"primary","order":40,"link":"/personal/vse-akcii"}],"isVisibleMobileDescription":true,"listHeader":"Сервисы"},{"id":1514786,"blockType":"banner","order":255,"articles":[{"id":1514789,"title":"Смартфон по&nbsp;подписке","linkTarget":"_self","linkType":"primary","order":255,"link":"/personal/vse-akcii/smartfon-po-podpiske"},{"id":1514792,"title":"Подробнее","linkTarget":"_self","linkType":"button","order":255,"link":"/personal/vse-akcii/smartfon-po-podpiske"}],"image":"https://static.mts.ru/mts_rf/contents/10907/301026_menu_services_pns_bg.jpg","imageMobile":"https://static.mts.ru/mts_rf/contents/10907/301026_menu_services_pns_bg.jpg","smallImage":"https://static.mts.ru/mts_rf/contents/10907/301026_menu_services_pns_kv.png","smallImageMobile":"https://static.mts.ru/mts_rf/contents/10907/301026_menu_services_pns_kv.png","imageDescription":"Пользуйтесь топовым смартфоном и&nbsp;меняйте на&nbsp;новый через год","description":"Пользуйтесь топовым смартфоном и&nbsp;меняйте на&nbsp;новый через год","isVisibleMobileDescription":true}],"clickableTitles":[],"designType":"expandable"},{"id":1514251,"order":160,"hideInDesktop":true,"blocks":[{"id":1514252,"blockType":"centralButton","order":10,"articles":[{"id":1514253,"title":"Поддержка","linkTarget":"_blank","linkType":"primary","icon":"https://static.mts.ru/mts_rf/contents/10908/Icon-help.svg","iconDark":"https://static.mts.ru/mts_rf/contents/10908/Icon-help.svg","iconDescription":"Поддержка","order":255,"link":"https://support.mts.ru/?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=support&utm_content=mobile_support"}],"isVisibleMobileDescription":true}],"clickableTitles":[],"designType":"default"},{"id":1514254,"order":170,"hideInDesktop":true,"blocks":[{"id":1514226,"blockType":"universalWidgetSection","order":20,"articles":[],"isVisibleMobileDescription":true,"zoneName":"RecursiveMenuWidgets"}],"clickableTitles":[],"designType":"default"}]};
+    })(window.globalSettings.layout);
+</script>
+
+<div class="header__menu">
+    <div class="prerender main-menu">
+        <div class="main-menu__inner">
+            <div class="prerender main-menu__list">
+                    <a class="header__top-item gtm-event-click "
+                       data-event="sectionClick" data-label="Мобильная связь">Мобильная связь</a>
+                    <a class="header__top-item gtm-event-click "
+                       data-event="sectionClick" data-label="Для дома">Для дома</a>
+                    <a class="header__top-item gtm-event-click "
+                       data-event="sectionClick" data-label="Оплата и финансы">Оплата и финансы</a>
+                    <a class="header__top-item gtm-event-click "
+                       data-event="sectionClick" data-label="Интернет-магазин">Интернет-магазин</a>
+                    <a class="header__top-item gtm-event-click "
+                       data-event="sectionClick" data-label="Сервисы">Сервисы</a>
+                    <a class="header__top-item gtm-event-click prerender header__top-item_hidden"
+                       data-event="sectionClick" data-label=""></a>
+                    <a class="header__top-item gtm-event-click prerender header__top-item_hidden"
+                       data-event="sectionClick" data-label=""></a>
+            </div>
+            
+<div class="prerender menu-content__container menu-content__container_sidebar">
+		<a class="header__top-item gtm-event-click" data-event="sectionClick" data-label="Мобильная связь">
+			Мобильная связь
+		</a>
+					<a class="card-list__link"
+						href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mobile">
+						Тарифы
+					</a>
+					<img class="card-list__img" src="https://static.mts.ru/mts_rf/contents/10907/menu_icon_mob_tarif.jpg" loading="lazy" decoding="async">
+					<a class="card-list__link"
+						href="/personal/pereyti-v-mts">
+						Перенести номер</br>в&nbsp;МТС
+					</a>
+					<img class="card-list__img" src="https://static.mts.ru/mts_rf/contents/10907/menu_icon_mob_mnp.jpg" loading="lazy" decoding="async">
+					<a class="card-list__link"
+						href="/personal/esim">
+						Оформить eSIM
+					</a>
+					<a class="card-list__link"
+						href="/personal/vybrat-nomer#/">
+						Заказать SIM-карту
+					</a>
+					<a class="card-list__link"
+						href="/personal/krasivyj-nomer-mts">
+						Красивый номер
+					</a>
+					<a class="card-list__link"
+						href="/personal/chistyj-nomer">
+						Чистый номер
+					</a>
+					<a class="card-list__link"
+						href="/personal/servisy/sim-for-foreigners">
+						SIM-карта для иностранцев
+					</a>
+					<a class="card-list__link"
+						href="/personal/mobilnaya-svyaz/rouming-i-mezhgorod">
+						Роуминг
+					</a>
+					<a class="card-list__link"
+						href="/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz/add-pack">
+						Пакеты&nbsp;ГБ, минут и&nbsp;SMS
+					</a>
+					<a class="card-list__link"
+						href="/personal/sim-to-esim-page">
+						Перейти на eSIM
+					</a>
+					<a class="card-list__link"
+						href="/personal/sim-order">
+						Заменить SIM-карту
+					</a>
+					<a class="card-list__link"
+						href="/personal/servisy/semejnaya-gruppa">
+						Семейная группа
+					</a>
+					<a class="card-list__link"
+						href="/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz/limit_na_svyaz">
+						При нуле
+					</a>
+					<a class="card-list__link"
+						href="/personal/vse-akcii">
+						Скидки и&nbsp;акции
+					</a>
+					<a class="card-list__link"
+						href="/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz">
+						Все услуги
+					</a>
+		<a class="header__top-item gtm-event-click" data-event="sectionClick" data-label="Для дома">
+			Для дома
+		</a>
+					<a class="card-list__link"
+						href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mobile-tv-inet">
+						Тарифы
+					</a>
+					<img class="card-list__img" src="https://static.mts.ru/mts_rf/contents/10907/menu_icon_home_tarif.jpg" loading="lazy" decoding="async">
+					<a class="card-list__link"
+						href="/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/home-inet">
+						Услуги
+							<img class="card-list__icon" src="https://static.mts.ru/mts_rf/contents/10908/Services.svg" loading="lazy" decoding="async">
+					</a>
+					<img class="card-list__img" src="https://static.mts.ru/mts_rf/contents/10907/menu_icon_home_services.jpg" loading="lazy" decoding="async">
+					<a class="card-list__link"
+						href="/personal/dom/home-allmts">
+						Домашний интернет
+					</a>
+					<a class="card-list__link"
+						href="/personal/dom/home-tv">
+						Домашнее ТВ
+					</a>
+					<a class="card-list__link"
+						href="/personal/dom/home-satellite">
+						Спутниковое ТВ
+					</a>
+					<a class="card-list__link"
+						href="/personal/dom/home-telefon">
+						Домашний телефон
+					</a>
+					<a class="card-list__link"
+						href="/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/home-inet">
+						Для домашнего интернета
+					</a>
+					<a class="card-list__link"
+						href="/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/home-tv-i-kino">
+						Для ТВ&nbsp;и&nbsp;кино
+					</a>
+					<a class="card-list__link"
+						href="/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/home-phone">
+						Для телефона
+					</a>
+					<a class="card-list__link"
+						href="/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/internet-safety">
+						Безопасность
+					</a>
+					<a class="card-list__link"
+						href="/personal/vse-akcii/domashniy-internet">
+						Скидки и&nbsp;акции
+					</a>
+		<a class="header__top-item gtm-event-click" data-event="sectionClick" data-label="Оплата и финансы">
+			Оплата и финансы
+		</a>
+					<a class="card-list__link"
+						href="https://pay.mts.ru/pages/refill?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=popolnit_balans_mts&amp;utm_content=menu_oplata_i_finansy">
+						Пополнить баланс МТС
+					</a>
+					<a class="card-list__link"
+						href="https://payment.mts.ru/spa/categories/internet_and_tv?region=MOW&amp;utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=oplatit_internet_i_tv&amp;utm_content=menu_oplata_i_finansy">
+						Оплатить интернет и&nbsp;ТВ
+					</a>
+					<a class="card-list__link"
+						href="/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz/avtoplatezh">
+						Настроить автоплатёж
+					</a>
+					<a class="card-list__link"
+						href="https://mtsdengi.ru/karti/debet-mts-dengi?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=debetovaya_karta_s_keshbekom_do_30&amp;utm_content=menu_oplata_i_finansy">
+						Дебетовая карта с&nbsp;кешбэком до&nbsp;30%
+					</a>
+					<a class="card-list__link"
+						href="https://payment.mts.ru/spa/categories?tab=payments&amp;utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=pereversti_dengi&amp;utm_content=menu_oplata_i_finansy">
+						Перевести деньги
+					</a>
+					<a class="card-list__link"
+						href="/personal/servisy/platite_s_balansa_telefona">
+						Оплатить с&nbsp;баланса телефона
+					</a>
+					<a class="card-list__link"
+						href="https://payment.mts.ru/lightpay/card/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=pereversti_s_telefona_na_kartu&amp;utm_content=menu_oplata_i_finansy">
+						Перевести с&nbsp;телефона на&nbsp;карту
+					</a>
+					<a class="card-list__link"
+						href="https://payment.mts.ru/spa/pay/phone?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=popolnit_nomer_drugogo_operatora&amp;utm_content=menu_oplata_i_finansy">
+						Пополнить номер другого оператора
+					</a>
+					<a class="card-list__link"
+						href="/personal/servisy/oplata-zagranicej-po-qr-kodu">
+						Оплата по&nbsp;QR-коду за&nbsp;границей
+					</a>
+					<a class="card-list__link"
+						href="/personal/servisy/mts_pay">
+						МТС Pay
+					</a>
+					<a class="card-list__link"
+						href="/personal/servisy/mts-nakopleniya">
+						МТС Накопления
+					</a>
+					<a class="card-list__link"
+						href="https://mts.investments?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=mts_investicii&amp;utm_content=menu_oplata_i_finansy">
+						МТС Инвестиции
+					</a>
+					<a class="card-list__link"
+						href="https://insurance.mts.ru?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=mts_vse_strahovki&amp;utm_content=menu_oplata_i_finansy">
+						МТС Все Страховки
+					</a>
+					<a class="card-list__link"
+						href="/personal/podderzhka/mobilnaya-svyaz/obsluzhivanie-abonentov/usloviya-popolneniya-schyota">
+						Условия пополнения
+					</a>
+		<a class="header__top-item gtm-event-click" data-event="sectionClick" data-label="Интернет-магазин">
+			Интернет-магазин
+		</a>
+					<a class="card-list__link"
+						href="/personal/vse-akcii/smartfon-po-podpiske">
+						Смартфон по подписке
+					</a>
+					<a class="card-list__link"
+						href="https://shop.mts.ru/catalog/smartfony?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=smartfony&amp;utm_content=menu_internet_magazin">
+						Смартфоны
+					</a>
+					<a class="card-list__link"
+						href="https://shop.mts.ru/promo/aksessuary?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=chehly_kabeli_pauerbanki&amp;utm_content=menu_internet_magazin">
+						Чехлы, кабели, павербанки
+					</a>
+					<a class="card-list__link"
+						href="https://shop.mts.ru/promo/tv-i-aksessuary/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=smart_tv&amp;utm_content=menu_internet_magazin">
+						Smart&nbsp;TV
+					</a>
+					<a class="card-list__link"
+						href="https://shop.mts.ru/promo/umnyj-dom/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=umnyj_dom&amp;utm_content=menu_internet_magazin">
+						Умный дом
+					</a>
+					<a class="card-list__link"
+						href="https://shop.mts.ru/catalog/knopochnye-telefony/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=knopochnye_telefony&amp;utm_content=menu_internet_magazin">
+						Кнопочные телефоны
+					</a>
+					<a class="card-list__link"
+						href="https://shop.mts.ru/promo/kompyuternaya-tekhnika/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=noutbuki_monitory_routery&amp;utm_content=menu_internet_magazin">
+						Ноутбуки, мониторы, роутеры
+					</a>
+					<a class="card-list__link"
+						href="https://shop.mts.ru/promo/naushniki-i-kolonki/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=naushniki_i_kolonki&amp;utm_content=menu_internet_magazin">
+						Наушники и колонки
+					</a>
+					<a class="card-list__link"
+						href="https://shop.mts.ru/promo/umnye-chasy-i-fitnes-braslety/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=umnye_chasy_i_fitnes_braslety&amp;utm_content=menu_internet_magazin">
+						Умные часы и&nbsp;фитнес-браслеты
+					</a>
+					<a class="card-list__link"
+						href="https://shop.mts.ru/promo/planshety/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=planshety&amp;utm_content=menu_internet_magazin">
+						Планшеты
+					</a>
+					<a class="card-list__link"
+						href="https://shop.mts.ru/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=vse_tovary&amp;utm_content=menu_internet_magazin">
+						Все товары
+					</a>
+					<a class="card-list__link"
+						href="https://shop.mts.ru/actions/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=skidki_i_akcii&amp;utm_content=menu_internet_magazin">
+						Скидки и&nbsp;акции
+					</a>
+					<a class="card-list__link"
+						href="https://shop.mts.ru/reviews/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=obzory_tehniki&amp;utm_content=menu_internet_magazin">
+						Обзоры техники
+					</a>
+		<a class="header__top-item gtm-event-click" data-event="sectionClick" data-label="Сервисы">
+			Сервисы
+		</a>
+					<a class="card-list__link"
+						href="https://premium.mts.ru/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=mts_premium&amp;utm_content=menu_servisy">
+						МТС Premium
+					</a>
+					<img class="card-list__img" src="https://static.mts.ru/mts_rf/contents/10907/menu_icon_premium.jpg" loading="lazy" decoding="async">
+					<a class="card-list__link"
+						href="/personal/servisy/semejnaya-gruppa">
+						Семейная группа
+					</a>
+					<img class="card-list__img" src="https://static.mts.ru/mts_rf/contents/10907/menu_icon_family.jpg" loading="lazy" decoding="async">
+					<a class="card-list__link"
+						href="/personal/servisy/kion">
+						Онлайн-кинотеатр КИОН
+					</a>
+					<a class="card-list__link"
+						href="/personal/servisy/mts-music">
+						КИОН Музыка
+					</a>
+					<a class="card-list__link"
+						href="/personal/servisy/urent">
+						Юрент
+					</a>
+					<a class="card-list__link"
+						href="/personal/servisy/clatch">
+						Женский календарь Clatch
+					</a>
+					<a class="card-list__link"
+						href="/personal/servisy/mts-nas-kasaetsya">
+						МТС Нас касается
+					</a>
+					<a class="card-list__link"
+						href="/personal/servisy/mir-tankov-i-mir-korablei">
+						Игры «Мир танков» и&nbsp;«Мир&nbsp;кораблей»
+					</a>
+					<a class="card-list__link"
+						href="/personal/servisy/razvlecheniya">
+						Развлечения
+					</a>
+					<a class="card-list__link"
+						href="/personal/servisy/finansi">
+						Финансы
+					</a>
+					<a class="card-list__link"
+						href="/personal/servisy/zabota_i_pomoshch">
+						Забота и&nbsp;помощь
+					</a>
+					<a class="card-list__link"
+						href="/personal/vse-akcii">
+						Скидки и&nbsp;акции
+					</a>
+		<a class="header__top-item gtm-event-click" data-event="sectionClick" data-label="">
+			
+		</a>
+					<a class="card-list__link"
+						href="https://support.mts.ru/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=support&amp;utm_content=mobile_support">
+						Поддержка
+							<img alt="Поддержка" class="card-list__icon" src="https://static.mts.ru/mts_rf/contents/10908/Icon-help.svg" loading="lazy" decoding="async">
+					</a>
+		<a class="header__top-item gtm-event-click" data-event="sectionClick" data-label="">
+			
+		</a>
+</div>
+
+            
+<div class="prerender menu-content__container menu-content__container_dropdown">
+                        <a class="card-list__link gtm-event-click" data-event="sectionClick" data-label="Тарифы"
+                           href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mobile">
+                            Тарифы
+                            <img class="card-list__icon" loading="lazy"
+                                 decoding="async">
+                        </a>
+                        <img class="card-list__img" src="https://static.mts.ru/mts_rf/contents/10907/menu_icon_mob_tarif.jpg" loading="lazy" decoding="async">
+                        <a class="card-list__link gtm-event-click" data-event="sectionClick" data-label="Перенести номер</br>в&nbsp;МТС"
+                           href="/personal/pereyti-v-mts">
+                            Перенести номер</br>в&nbsp;МТС
+                            <img class="card-list__icon" loading="lazy"
+                                 decoding="async">
+                        </a>
+                        <img class="card-list__img" src="https://static.mts.ru/mts_rf/contents/10907/menu_icon_mob_mnp.jpg" loading="lazy" decoding="async">
+                        <a gtm
+                        eventId="vntMenuElementMenuClickEvent"
+                        eventLabel="Скорость нового поколения"
+                        class="main-menu-banner"
+                        href="/personal/5-g"
+                        target="_self">
+                                <img class="main-menu-banner__cover-image" src="https://static.mts.ru/mts_rf/contents/10907/main_popup_menu_5g_banner_new_background.png" loading="lazy" decoding="async" />
+                            <div class="main-menu-banner__overlay">
+                                <h4 class="main-menu-banner__heading">Скорость нового поколения</h4>
+                                <div class="main-menu-banner__bottom-wrapper">
+                                    <div class="main-menu-banner__description">5G&nbsp;от&nbsp;МТС&nbsp;&mdash; инновация для комфортной и&nbsp;быстрой онлайн-жизни</div>
+                                    <span class="main-menu-banner__arrow-link">
+                                        <img src="//static.mts.ru/mts_rf/images/arrow-right.svg" loading="lazy" decoding="async">
+                                    </span>
+                                </div>
+                            </div>
+                        </a>
+                        <a class="card-list__link gtm-event-click" data-event="sectionClick" data-label="Тарифы"
+                           href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mobile-tv-inet">
+                            Тарифы
+                            <img class="card-list__icon" loading="lazy"
+                                 decoding="async">
+                        </a>
+                        <img class="card-list__img" src="https://static.mts.ru/mts_rf/contents/10907/menu_icon_home_tarif.jpg" loading="lazy" decoding="async">
+                        <a class="card-list__link gtm-event-click" data-event="sectionClick" data-label="Услуги"
+                           href="/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/home-inet">
+                            Услуги
+                            <img class="card-list__icon" src="https://static.mts.ru/mts_rf/contents/10908/Services.svg" loading="lazy"
+                                 decoding="async">
+                        </a>
+                        <img class="card-list__img" src="https://static.mts.ru/mts_rf/contents/10907/menu_icon_home_services.jpg" loading="lazy" decoding="async">
+                        <a gtm
+                        eventId="vntMenuElementMenuClickEvent"
+                        eventLabel="Видеонаблюдение для&amp;nbsp;дома"
+                        class="main-menu-banner"
+                        href="/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/umnaya-kamera"
+                        target="_self"
+                        alt="290&amp;nbsp;&amp;#8381;/мес">
+                                <img class="main-menu-banner__cover-image" src="https://static.mts.ru/mts_rf/contents/10907/smart_camera_dropdown_menu_bg.png" loading="lazy" decoding="async" />
+                            <div class="main-menu-banner__overlay">
+                                <h4 class="main-menu-banner__heading">Видеонаблюдение для&nbsp;дома</h4>
+                                <div class="main-menu-banner__bottom-wrapper">
+                                    <div class="main-menu-banner__description">290&nbsp;&#8381;/мес</div>
+                                    <span class="main-menu-banner__arrow-link">
+                                        <img src="//static.mts.ru/mts_rf/images/arrow-right.svg" alt="290&amp;nbsp;&amp;#8381;/мес" loading="lazy" decoding="async">
+                                    </span>
+                                </div>
+                            </div>
+                        </a>
+                        <a gtm
+                        eventId="vntMenuElementMenuClickEvent"
+                        eventLabel="Скидка на&amp;nbsp;связь"
+                        class="main-menu-banner"
+                        href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mobile"
+                        target="_blank"
+                        alt="Тарифы RED, РИИЛ и&amp;nbsp;МТС&amp;nbsp;Супер дешевле при&amp;nbsp;оплате с&amp;nbsp;карты МТС&amp;nbsp;Деньги">
+                                <img class="main-menu-banner__cover-image" src="https://static.mts.ru/mts_rf/contents/10907/skidka_na_svyaz_dropdown_menu_bg.png" loading="lazy" decoding="async" />
+                            <div class="main-menu-banner__overlay">
+                                <h4 class="main-menu-banner__heading">Скидка на&nbsp;связь</h4>
+                                <div class="main-menu-banner__bottom-wrapper">
+                                    <div class="main-menu-banner__description">Тарифы RED, РИИЛ и&nbsp;МТС&nbsp;Супер дешевле при&nbsp;оплате с&nbsp;карты МТС&nbsp;Деньги</div>
+                                    <span class="main-menu-banner__arrow-link">
+                                        <img src="//static.mts.ru/mts_rf/images/arrow-right.svg" alt="Тарифы RED, РИИЛ и&amp;nbsp;МТС&amp;nbsp;Супер дешевле при&amp;nbsp;оплате с&amp;nbsp;карты МТС&amp;nbsp;Деньги" loading="lazy" decoding="async">
+                                    </span>
+                                </div>
+                            </div>
+                        </a>
+                        <a gtm
+                        eventId="vntMenuElementMenuClickEvent"
+                        eventLabel="Подробнее"
+                        class="main-menu-banner"
+                        href="https://shop.mts.ru/promo/skidki-na-smartfony-do-40/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=skidki_na_smartfony_do40&amp;utm_content=menu&amp;utm_term=banner"
+                        target="_blank"
+                        alt="при покупке со&amp;nbsp;связью МТС">
+                                <img class="main-menu-banner__cover-image" src="https://static.mts.ru/mts_rf/contents/10907/inernet_magazin_dropdown_menu_bg.png" loading="lazy" decoding="async" />
+                            <div class="main-menu-banner__overlay">
+                                <h4 class="main-menu-banner__heading">Подробнее</h4>
+                                <div class="main-menu-banner__bottom-wrapper">
+                                    <div class="main-menu-banner__description">при покупке со&nbsp;связью МТС</div>
+                                    <span class="main-menu-banner__arrow-link">
+                                        <img src="//static.mts.ru/mts_rf/images/arrow-right.svg" alt="при покупке со&amp;nbsp;связью МТС" loading="lazy" decoding="async">
+                                    </span>
+                                </div>
+                            </div>
+                        </a>
+                        <a class="card-list__link gtm-event-click" data-event="sectionClick" data-label="МТС Premium"
+                           href="https://premium.mts.ru/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=mts_premium&amp;utm_content=menu_servisy">
+                            МТС Premium
+                            <img class="card-list__icon" loading="lazy"
+                                 decoding="async">
+                        </a>
+                        <img class="card-list__img" src="https://static.mts.ru/mts_rf/contents/10907/menu_icon_premium.jpg" loading="lazy" decoding="async">
+                        <a class="card-list__link gtm-event-click" data-event="sectionClick" data-label="Семейная группа"
+                           href="/personal/servisy/semejnaya-gruppa">
+                            Семейная группа
+                            <img class="card-list__icon" loading="lazy"
+                                 decoding="async">
+                        </a>
+                        <img class="card-list__img" src="https://static.mts.ru/mts_rf/contents/10907/menu_icon_family.jpg" loading="lazy" decoding="async">
+                        <a gtm
+                        eventId="vntMenuElementMenuClickEvent"
+                        eventLabel="Смартфон по&amp;nbsp;подписке"
+                        class="main-menu-banner"
+                        href="/personal/vse-akcii/smartfon-po-podpiske"
+                        target="_self"
+                        alt="Пользуйтесь топовым смартфоном и&amp;nbsp;меняйте на&amp;nbsp;новый через год">
+                                <img class="main-menu-banner__cover-image" src="https://static.mts.ru/mts_rf/contents/10907/301026_menu_services_pns_bg.jpg" loading="lazy" decoding="async" />
+                            <div class="main-menu-banner__overlay">
+                                <h4 class="main-menu-banner__heading">Смартфон по&nbsp;подписке</h4>
+                                <div class="main-menu-banner__bottom-wrapper">
+                                    <div class="main-menu-banner__description">Пользуйтесь топовым смартфоном и&nbsp;меняйте на&nbsp;новый через год</div>
+                                    <span class="main-menu-banner__arrow-link">
+                                        <img src="//static.mts.ru/mts_rf/images/arrow-right.svg" alt="Пользуйтесь топовым смартфоном и&amp;nbsp;меняйте на&amp;nbsp;новый через год" loading="lazy" decoding="async">
+                                    </span>
+                                </div>
+                            </div>
+                        </a>
+</div>
+
+        </div>
+    </div>    
+</div>
+
+                                <script type="text/javascript">
+                                    window.globalSettings.layout.menu = window.globalSettings.layout.menu || {};
+                                    window.globalSettings.layout.menu.menuPromoBanner = {"title":"Уже 5G","link":"/personal/5-g","backgroundImage":"https://static.mts.ru/mts_rf/contents/10924/main_header_banner_5g_ad.mp4","linkTarget":"_self"}
+                                    window.globalSettings.layout.menu.menuSettings = {"isB2C":true,"basketLink":"https://shop.mts.ru/personal/basket?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=shop_basket&utm_content=main_page&utm_term=header","supportPageLink":"https://support.mts.ru/?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=support&utm_content=main_footer&utm_term=link_tap","supportPageTitle":"Поддержка","logoLink":"/personal","logoImage":"//static.mts.ru/mts_rf/images/logo-eco.svg","logoImageDark":"//static.mts.ru/mts_rf/images/logo-eco.svg","officesPageLink":"//mts.ru/personal/podderzhka/zoni-obsluzhivaniya/offices/","iconDefault":"//static.mts.ru/dpc_upload/contents/627/Icon_3.svg"}
+                                    window.globalSettings.layout.menu.siteSections = [{"id":79561,"basketLink":"https://shop.mts.ru/personal/basket?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=shop_basket&utm_content=main_page&utm_term=header","supportPageLink":"https://support.mts.ru/?utm_source=inhouse&utm_medium=mts_ru&utm_campaign=support&utm_content=main_footer&utm_term=link_tap","supportPageTitle":"Поддержка","officesPageLink":"//mts.ru/personal/podderzhka/zoni-obsluzhivaniya/offices/","iconDefault":"//static.mts.ru/dpc_upload/contents/627/Icon_3.svg","logoImage":"//static.mts.ru/mts_rf/images/logo-eco.svg","logoImageDark":"//static.mts.ru/mts_rf/images/logo-eco.svg","startPageId":424919,"topMenuViewType":"optimized"}]
+                                </script>
+                            
+                            <script>
+    window.globalSettings.layout.menu = window.globalSettings.layout.menu || {};
+    window.globalSettings.layout.menu.searchUrl = "/personal/search";
+</script>
+<form class="header-search" method="get" action="/personal/search">
+    <div class="header-search__btn">
+        <img class="header-search__icon"
+            src="//static.mts.ru/mts_rf/images/icons/search-desktop.svg" decoding="async" loading="lazy">
+        <div class="header-search__text">Поиск</div>
+    </div>
+    <div class="header-search__input-wrapper">
+        <input name="q" type="text" class="header-search__input" />
+    </div>
+    <div class="header-search__btn header-search__close"></div>
+</form>
+                        </div>
+                        <div class="header__auth">
+                            <div class="header__elements">
+                                <a href="https://shop.mts.ru/personal/basket?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=shop_basket&amp;utm_content=main_page&amp;utm_term=header" class="header__element header__element_icon header__element_cart" style="display: none">
+                                    <div class="header__cart-counter" style="display: none"></div>
+                                </a>
+                                <div id="profile-widget-app" class="header__element"></div>
+
+                                <div class="middle-menu__catalog-btn tablet-or-desktop">
+                                    
+
+
+    <div class="mm-web-button-host">
+        <div class="mm-web-button prerender">
+            <div class="mm-web-button-container mm-web-button-container_type_secondary  mm-web-button-container_size_m  ">
+                <div class="mm-web-button-container__content">
+                    
+
+    <button class="mm-web-action-button" type="button" style=" ">
+            
+
+    
+
+<div class="mm-web-button-icon mm-web-button-icon_type_secondary ">
+    <div class="mm-web-icon"
+         role="img"
+         aria-label="Иконка"
+         style="--icon-url: url(//static.mts.ru/mts_rf/images/icons/catalog-btn.svg);">
+    </div>
+</div>
+
+<span class="mm-web-button__label">Каталог</span>
+
+    </button>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+                                </div>
+
+                                <div class="middle-menu__catalog-btn mobile">
+                                    
+
+
+    <div class="mm-web-button-host">
+        <div class="mm-web-button prerender">
+            <div class="mm-web-button-container mm-web-button-container_type_ghost  mm-web-button-container_size_m  ">
+                <div class="mm-web-button-container__content">
+                    
+
+    <button class="mm-web-action-button" type="button" style=" ">
+            
+
+<div class="mm-web-button-icon mm-web-button-icon_type_ghost ">
+    <div class="mm-web-icon"
+         role="img"
+         aria-label="Иконка"
+         style="--icon-url: url(//static.mts.ru/mts_rf/images/icons/m-burger.svg);">
+    </div>
+</div>
+
+    </button>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </header>
+</mts-header>
+
+<mts-main-content></mts-main-content>
+<!--/noindex-->
+<div class="b-wrapper_ukit ">
+    <ul class="crumbs " vocab="https://schema.org/" typeof="BreadcrumbList">
+        <li class="crumbs__item" property="itemListElement" typeof="ListItem">
+            <a href="/personal" class="crumbs__link" property="item" typeof="WebPage">
+                <span property="name">Частным лицам</span>
+            </a>
+            <meta property="position" content="1">
+        </li>
+        <li class="crumbs__item" property="itemListElement" typeof="ListItem">
+            <a href="/personal/servisy" class="crumbs__link" property="item" typeof="WebPage">
+                <span property="name">Сервисы</span>
+            </a>
+            <meta property="position" content="2">
+        </li>
+            <mts-breadcrumb-title>
+        <li class="crumbs__item" property="itemListElement" typeof="ListItem">
+            <span property="name">Семейная группа</span>
+            <meta property="position" content="3">
+        </li>
+            </mts-breadcrumb-title>
+    </ul>
+</div>
+                
+                
+
+                
+                <!--noindex-->
+                    <div class="robots-noindex noindex robots-nocontent header-frame">
+                        
+                        
+                    </div>
+                <!--/noindex-->
+                
+
+
+
+
+
+
+<mts-universal-page-app>
+    <div class="universal-page-wrapper">
+        <div class="content-wrapper ">
+            
+
+
+<section class="product-header-widget prerender">
+    <div class="banner-block banner-block_full-screen" style="background-image: url(//static.mts.ru/dpc_upload/contents/614/semeynaya_header.jpg)">
+        <div class="connection-block-with-logo connection-block-with-logo_full-screen">
+            <div class="connection-block-wrapper connection-block-wrapper_with-icon connection-block-wrapper_without-image"
+                 data-design-type="Default" style="background: ">
+                <div class="connection-block-top-content">
+                        <div class="service-badges-container">
+                            
+        <div class="badge-wrapper">
+            <div class="product-badge" style="background-color: var(--constant-light-banana); color: var(--constant-greyscale-800);">
+                <span class="badge-text">Бесплатно</span>
+            </div>
+        </div>
+
+                        </div>
+                    <h1 class="service-title">Семейная группа</h1>
+                        <img class="service-icon" src="//static.mts.ru/dpc_upload/contents/654/semeynaya_header_icon.svg" alt="Семейная группа">
+                </div>
+                    <div class="short-description-container">
+                        <p>Добавляйте близких и&nbsp;общайтесь безлимитно в&nbsp;сети МТС внутри группы, экономьте на&nbsp;связи до&nbsp;20%, делитесь услугами, следите за&nbsp;геолокацией детей</p>
+                    </div>
+                    <div class="price-wrapper">
+
+                        
+                    </div>
+                    <div class="bottom-container">
+                                <div class="connect-top-button">
+                                    
+
+
+    <div class="mm-web-button-host" fluid="fluid">
+        <div class="mm-web-button prerender">
+            <div class="mm-web-button-container mm-web-button-container_type_primary mm-web-button-container_fluid mm-web-button-container_size_m mm-web-button-container_mobile_size_m mm-web-button-container_tablet_size_l mm-web-button-container_desktopL_size_xl  ">
+                <div class="mm-web-button-container__content">
+                    
+
+    <a class="mm-web-link-button" href="https://c.mts.ru/uQ4e/sg" target="_self" style=" ">
+            
+
+<span class="mm-web-button__label">Создать группу</span>
+
+    </a>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+                                </div>
+
+                    </div>
+            </div>
+        </div>
+    </div>
+</section>
+    <section style="display:none" class="container benefits">
+            <div class="benefits__title-wrapper">
+                <h2 class="universal-title benefits__title">Преимущества семейной группы</h2>
+
+            </div>
+        <div class="benefits__wrapper">
+                <div class="benefits__row benefits__row_one-big-card">
+                            <div class="benefits__card">
+                                <div class="benefit-card benefit-card_">
+                                    <div class="benefit-card__content">
+                                        <h4 class="benefit-card__title">Безлимитные звонки внутри группы</h4>
+                                        <p class="benefit-card__description">В&nbsp;сети МТС России для участников семейных групп, созданных <nobr>с&nbsp;1&nbsp;октября 2026</nobr></p>
+                                    </div>
+                                    <div class="benefit-card__image-wrapper">
+                                            <img class="benefit-card__image" style="max-width:100%; object-fit:contain; object-position:bottom;" src="//static.mts.ru/dpc_upload/contents/618/061026_semeynaya_benefits_bezlimitniye_zvonki.png" alt="Безлимитные звонки внутри группы" />
+                                    </div>
+                                </div>
+                            </div>
+                </div>
+                <div class="benefits__row benefits__row_two-big-cards">
+                            <div class="benefits__card">
+                                <div class="benefit-card benefit-card_two-big-cards">
+                                    <div class="benefit-card__content">
+                                        <h4 class="benefit-card__title">Автоплатёж для семьи</h4>
+                                        <p class="benefit-card__description">Подключайте автопополнение баланса, чтобы близкие всегда оставались на&nbsp;связи</p>
+                                    </div>
+                                    <div class="benefit-card__image-wrapper">
+                                            <img class="benefit-card__image" style="max-width:100%; object-fit:contain; object-position:bottom;" src="//static.mts.ru/dpc_upload/contents/618/semeynaya_benefits_avtoplatezh.png" alt="Автоплатёж для семьи" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="benefits__card">
+                                <div class="benefit-card benefit-card_two-big-cards">
+                                    <div class="benefit-card__content">
+                                        <h4 class="benefit-card__title">Защищайте себя и&nbsp;своих близких</h4>
+                                        <p class="benefit-card__description">Подключите Защитник+ для семьи и&nbsp;делитесь подпиской безопасности</p>
+                                    </div>
+                                    <div class="benefit-card__image-wrapper">
+                                            <img class="benefit-card__image" style="max-width:100%; object-fit:contain; object-position:bottom;" src="//static.mts.ru/dpc_upload/contents/618/semeynaya_benefits_defender.png" alt="Защищайте себя и&nbsp;своих близких" />
+                                    </div>
+                                </div>
+                            </div>
+                </div>
+                <div class="benefits__row benefits__row_two-big-cards">
+                            <div class="benefits__card">
+                                <div class="benefit-card benefit-card_two-big-cards">
+                                    <div class="benefit-card__content">
+                                        <h4 class="benefit-card__title">Безопасный интернет</h4>
+                                        <p class="benefit-card__description">Цифровая защита для детей в&nbsp;сети МТС от&nbsp;опасного и&nbsp;взрослого контента</p>
+                                    </div>
+                                    <div class="benefit-card__image-wrapper">
+                                            <img class="benefit-card__image" style="max-width:100%; object-fit:contain; object-position:bottom;" src="//static.mts.ru/dpc_upload/contents/618/semeynaya_benefits_inet.png" alt="Безопасный интернет" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="benefits__card">
+                                <div class="benefit-card benefit-card_two-big-cards">
+                                    <div class="benefit-card__content">
+                                        <h4 class="benefit-card__title">Семейные кубики</h4>
+                                        <p class="benefit-card__description">Уникальные опции, которые улучшат любой тариф и&nbsp;помогут экономить всем участникам</p>
+                                    </div>
+                                    <div class="benefit-card__image-wrapper">
+                                            <img class="benefit-card__image" style="max-width:100%; object-fit:contain; object-position:bottom;" src="//static.mts.ru/dpc_upload/contents/618/semeynaya_benefits_cubes.png" alt="Семейные кубики" />
+                                    </div>
+                                </div>
+                            </div>
+                </div>
+                <div class="benefits__row benefits__row_two-big-cards">
+                            <div class="benefits__card">
+                                <div class="benefit-card benefit-card_two-big-cards">
+                                    <div class="benefit-card__content">
+                                        <h4 class="benefit-card__title">Будьте уверены, что близкие на связи</h4>
+                                        <p class="benefit-card__description">Просматривайте список участников, их&nbsp;баланс и&nbsp;пакеты интернета</p>
+                                    </div>
+                                    <div class="benefit-card__image-wrapper">
+                                            <img class="benefit-card__image" style="max-width:100%; object-fit:contain; object-position:bottom;" src="//static.mts.ru/dpc_upload/contents/618/semeynaya_benefits_svyaz.png" alt="Будьте уверены, что близкие на связи" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="benefits__card">
+                                <div class="benefit-card benefit-card_two-big-cards">
+                                    <div class="benefit-card__content">
+                                        <h4 class="benefit-card__title">Помогайте управлять тарифом и услугами</h4>
+                                        <p class="benefit-card__description">Настраивайте связь участникам, контролируйте списания</p>
+                                    </div>
+                                    <div class="benefit-card__image-wrapper">
+                                            <img class="benefit-card__image" style="max-width:100%; object-fit:contain; object-position:bottom;" src="//static.mts.ru/dpc_upload/contents/618/semeynaya_benefits_upravleniye.png" alt="Помогайте управлять тарифом и услугами" />
+                                    </div>
+                                </div>
+                            </div>
+                </div>
+                <div class="benefits__row benefits__row_two-big-cards">
+                            <div class="benefits__card">
+                                <div class="benefit-card benefit-card_two-big-cards">
+                                    <div class="benefit-card__content">
+                                        <h4 class="benefit-card__title">Экономьте на связи до 20%</h4>
+                                        <p class="benefit-card__description">Чем больше участников, тем выше скидка на&nbsp;тариф у&nbsp;каждого. Скидка действует на&nbsp;определённых тарифах</p>
+                                    </div>
+                                    <div class="benefit-card__image-wrapper">
+                                            <img class="benefit-card__image" style="max-width:100%; object-fit:contain; object-position:bottom;" src="//static.mts.ru/dpc_upload/contents/618/sem_benefits_skidka.png" alt="Экономьте на связи до 20%" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="benefits__card">
+                                <div class="benefit-card benefit-card_two-big-cards">
+                                    <div class="benefit-card__content">
+                                        <h4 class="benefit-card__title">Наблюдайте за геолокацией ребёнка</h4>
+                                        <p class="benefit-card__description">Будете видеть местоположение с&nbsp;высокой точностью и&nbsp;уровень заряда смартфона</p>
+                                    </div>
+                                    <div class="benefit-card__image-wrapper">
+                                            <img class="benefit-card__image" style="max-width:100%; object-fit:contain; object-position:bottom;" src="//static.mts.ru/dpc_upload/contents/618/semeynaya_benefits_geo.png" alt="Наблюдайте за геолокацией ребёнка" />
+                                    </div>
+                                </div>
+                            </div>
+                </div>
+                <div class="benefits__row benefits__row_two-big-cards">
+                            <div class="benefits__card">
+                                <div class="benefit-card benefit-card_two-big-cards">
+                                    <div class="benefit-card__content">
+                                        <h4 class="benefit-card__title">Включайте детский режим</h4>
+                                        <p class="benefit-card__description">Покажем ребёнку детский контент и&nbsp;тематические подборки услуг в&nbsp;Мой МТС</p>
+                                    </div>
+                                    <div class="benefit-card__image-wrapper">
+                                            <img class="benefit-card__image" style="max-width:100%; object-fit:contain; object-position:bottom;" src="//static.mts.ru/dpc_upload/contents/618/semeynaya_benefits_deti.png" alt="Включайте детский режим" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="benefits__card">
+                                <div class="benefit-card benefit-card_two-big-cards">
+                                    <div class="benefit-card__content">
+                                        <h4 class="benefit-card__title">Делитесь подпиской с близкими</h4>
+                                        <p class="benefit-card__description">Кино, музыка, защита от&nbsp;спама&nbsp;&mdash; все преимущества МТС Premium для участников группы. Подписку оплачивает организатор группы, 3&nbsp;участника присоединяются бесплатно</p>
+                                    </div>
+                                    <div class="benefit-card__image-wrapper">
+                                            <img class="benefit-card__image" style="max-width:100%; object-fit:contain; object-position:bottom;" src="//static.mts.ru/dpc_upload/contents/618/semeynaya_benefits_premium.png" alt="Делитесь подпиской с близкими" />
+                                    </div>
+                                </div>
+                            </div>
+                </div>
+        </div>
+    </section>
+
+<section class="universal-full-description universal-full-description-container container prerender">
+    <div class="universal-full-description__body">
+            <h2 class="universal-full-description__title">Что нужно знать</h2>
+        <div class="universal-full-description__content">
+                    
+<div class="universal-faq">
+        <div class="universal-faq__item">
+            <h4 class="universal-faq__item-title">Как устроена семейная группа</h4>
+            <div style="max-height: 0; visibility: hidden; opacity: 0; overflow: hidden;">
+                            <div><p>Семейная группа&nbsp;&mdash; это группа пользователей в&nbsp;МТС, для которой доступны специальные условия и&nbsp;возможности. Возможности зависят от&nbsp;роли участника: Организатор, Взрослый, Ребёнок или Старший.</p>
+<p>Организатор может пригласить в&nbsp;группу до&nbsp;9&nbsp;человек.</p>
+<p>Участники семейной группы видят информацию друг о&nbsp;друге.</p>
+<p><a href="https://static.mts.ru/dpc_upload/images/pravila_semeinoj_gruppy.pdf" target="_blank">Правила семейной группы</a></p></div>
+            </div>
+        </div>
+        <div class="universal-faq__item">
+            <h4 class="universal-faq__item-title">Для абонентов каких операторов</h4>
+            <div style="max-height: 0; visibility: hidden; opacity: 0; overflow: hidden;">
+                            <div><p>В&nbsp;семейные группы могут объединяться абоненты любых российских операторов, но&nbsp;некоторые преимущества будут доступны только абонентам МТС.</p></div>
+            </div>
+        </div>
+        <div class="universal-faq__item">
+            <h4 class="universal-faq__item-title">Сколько стоит семейная группа</h4>
+            <div style="max-height: 0; visibility: hidden; opacity: 0; overflow: hidden;">
+                            <div><p>Создать семейную группу и&nbsp;добавить участников можно бесплатно, но&nbsp;некоторые продукты МТС потребуется купить. Например, подписку МТС Premium вы&nbsp;покупаете и&nbsp;как Организатор можете делиться ей&nbsp;с&nbsp;участниками семейной группы.</p></div>
+            </div>
+        </div>
+        <div class="universal-faq__item">
+            <h4 class="universal-faq__item-title">Какие возможности есть в семейной группе</h4>
+            <div style="max-height: 0; visibility: hidden; opacity: 0; overflow: hidden;">
+                            <div><p>Безлимитные звонки на&nbsp;номера МТС доступны между участниками групп, которые созданы после 1&nbsp;октября 2026&nbsp;года. С&nbsp;19&nbsp;ноября безлимитные звонки станут доступны и&nbsp;тем, кто получал скидку до&nbsp;1&nbsp;октября.</p></div>
+            </div>
+        </div>
+        <div class="universal-faq__item">
+            <h4 class="universal-faq__item-title">Как работает геолокация</h4>
+            <div style="max-height: 0; visibility: hidden; opacity: 0; overflow: hidden;">
+                            <div><p>Организатор и&nbsp;Взрослый могут видеть геолокацию друг друга, если оба дали разрешение.</p>
+<p>Организатор и&nbsp;Старший могут видеть геолокацию Ребёнка, если это разрешил Организатор.</p></div>
+            </div>
+        </div>
+        <div class="universal-faq__item">
+            <h4 class="universal-faq__item-title">Как работает семейная скидка</h4>
+            <div style="max-height: 0; visibility: hidden; opacity: 0; overflow: hidden;">
+                            <div><p>В&nbsp;семейную группу можно вступить с&nbsp;любым тарифом, но&nbsp;семейная скидка доступна не&nbsp;на&nbsp;всех.</p>
+
+<p>Размер скидки на&nbsp;тариф зависит от&nbsp;количества участников. Скидка&nbsp;10%&nbsp;&mdash; когда в&nbsp;группе состоит три номера МТС, 15%&nbsp;&mdash; четыре номера, 20%&nbsp;&mdash; пять или больше. Если в&nbsp;группе два участника&nbsp;&mdash; скидка не&nbsp;предусмотрена.</p>
+
+<p>При расчёте скидки учитываются только номера МТС.</p>
+
+<p>Список тарифов, доступных для подключения скидки: МТС&nbsp;Супер, МТС&nbsp;Junior, МТС&nbsp;Junior+, РИИЛ, МТС&nbsp;Мудрый, RED, МТС&nbsp;ТОП, МТС&nbsp;ТОП+, Smart&nbsp;Гостевой, Smart&nbsp;Гостевой&nbsp;плюс, РИИЛ&nbsp;Плюс, МТС&nbsp;Дома&nbsp;Отлично, МТС&nbsp;Дома&nbsp;Выгодно, МТС&nbsp;Дома&nbsp;для&nbsp;Своих, МТС&nbsp;Дома&nbsp;по-новому, МТС&nbsp;Дома&nbsp;Супер, МТС&nbsp;Синергия, Люблю&nbsp;Саратов, Люблю&nbsp;Самару, Люблю&nbsp;Красноярск, Люблю&nbsp;Забайкалье, Люблю&nbsp;Нижний&nbsp;Новгород, Люблю&nbsp;Татарстан, Тариф&nbsp;&#8470;&nbsp;112</p>
+
+<p>Сохраняются скидки&nbsp;20% на&nbsp;тариф МТС&nbsp;Мудрый с&nbsp;ролью Старший и&nbsp;20% на&nbsp;тариф МТС&nbsp;Junior с&nbsp;ролью Ребёнок.</p>
+
+<p>С&nbsp;19&nbsp;ноября 2026 эти условия будут действовать для всех групп, которые получают скидку.</p>
+
+<p>С&nbsp;11&nbsp;ноября 2026 года семейная скидка не&nbsp;действует в&nbsp;Группе для близких, но&nbsp;остальные возможности семейной группы сохраняются. Если выйти из&nbsp;Группы для близких, скидка вернётся.</p></div>
+            </div>
+        </div>
+</div>
+
+                
+
+        </div>
+    </div>
+</section>
+
+        </div>
+    </div>
+</mts-universal-page-app>
+                
+            </div>
+            <!--noindex-->
+            <div class="robots-noindex noindex robots-nocontent">
+                
+                <noscript><link href='/Styles/QA/bundles/poll.css?v=86z_kxAYQMQuWdwIw_vMs1SElCPdW6z5JKzNL7f_ku8' rel='stylesheet' type='text/css' /></noscript><link href="/Styles/QA/bundles/poll.css?v=86z_kxAYQMQuWdwIw_vMs1SElCPdW6z5JKzNL7f_ku8" rel="stylesheet" type="text/css" media="print" onload="this.media=&#x27;all&#x27;" />
+    <section id="tnps-container" class="feedback-popup">
+        <div id="tnps-close" class="feedback-popup__close"></div>
+        <iframe id="tnps-frame" class="feedback-popup__iframe" frameborder="0"></iframe>
+    </section>
+    <script>
+        window.globalSettings.pollWidget = {"appId":"showcase_27679557-58cb-479a-9255-bfa3204e16f2","startDelayMs":60000,"eventId":"event_af6747af-4f4f-412d-a900-bb0daf577d7e","popupHeightPx":500,"tnpsScriptSrcUrl":"https://mtsopros.mts.ru/libsdk/sdk.v6.js","type":""};
+    </script>
+    <script fetchpriority="low" src="/bundles/pollWidget.js?v=5vsKJW1MccMqF2EGfCbQAz_C0UXMUunlHBtWB3Xvbt4" type="module"></script>
+
+            </div>
+            <!--/noindex-->
+            
+<!-- footer-->
+
+
+<noscript><link href='//static.mts.ru/mts_rf/static/1.0.0.14633/Styles/Promo/bundles/custom-links.css' rel='stylesheet' type='text/css' /></noscript><link href="//static.mts.ru/mts_rf/static/1.0.0.14633/Styles/Promo/bundles/custom-links.css" rel="stylesheet" type="text/css" media="print" onload="this.media=&#x27;all&#x27;" />
+
+<section class="footer-wrapper ">
+    <mts-footer data-is-dark-design="false">
+        <div class="footer">
+            <div class="footer__top">
+                <div class="b-wrapper_ukit b-wrapper_ukit-no-custom-tablet">
+                    <div class="grid">
+                        <div class="grid__col grid__col-12 grid__col-offset-0 grid__sd-col-12 grid__sd-col-offset-0">
+                            <div class="footer__top-inner">
+                                
+<div class="footer__text-block">
+    <div class="footer__text-grid">
+        <div class="footer__text-wrapper">
+            <h2 class="footer__text-title">МТС — связь и экосистема цифровых сервисов</h2>
+            <div class="footer__text-content">Актуальные новости не только о тарифах и услугах связи, но и новых продуктах МТС: цифровых приложениях для работы и отдыха, ТВ и медиа, финансовых сервисах, технологиях для запуска и продвижения бизнеса и других сервисах компании</div>
+        </div>
+    </div>
+</div>
+
+                                
+
+<div class="custom-links isDesktop" style="columns: 2;">
+        <ul class="custom-links__list custom-links__list_vertical">
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi">Тарифы</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mobile-tv-inet">Связь, ТВ&nbsp;и&nbsp;интернет</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mts-doma-otlichno">МТС&nbsp;Дома&nbsp;Отлично</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mts-doma-horosho">МТС&nbsp;Дома&nbsp;Хорошо</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mts-doma-super">МТС&nbsp;Дома&nbsp;Супер</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mobile">Тарифы мобильной связи</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/red">RED</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mts-super">МТС Супер</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz/mts-top">МТС ТОП</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz/mts-junior">МТС Junior</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/starshee-pokolenie">МТС Мудрый</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/proshche">МТС Проще</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/riil">РИИЛ</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mts_nalegke">МТС Налегке</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/satellite-tv">Тарифы для спутникового&nbsp;ТВ</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/god_na_maksimume">Год на&nbsp;максимуме</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/polugodovoj">Полугодовой</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/watches-and-modems">Тарифы для часов и&nbsp;модемов</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/dlya_noutbuka_mini">Для ноутбука мини</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/dlya_noutbuka">Для ноутбука</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/dlya_ustrojstv">Для устройств</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/telefon">Тарифы для домашнего телефона</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/uslugi">Услуги</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz">Мобильная связь</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/rouming-i-mezhgorod/poezdki-po-miru">Роуминг</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/pereyti-v-mts">Перейти в&nbsp;МТС со&nbsp;своим номером</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/esim">Оформить eSIM</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://t.me/SIM_MTS_bot">Оформить SIM-карту в&nbsp;Telegram</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/chistyj-nomer">Оформить чистый номер</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/krasivyj-nomer-mts">Выбрать красивый номер</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/bolshe-vozmozhnostej-nomera">Больше возможностей выбора номера</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://support.mts.ru/mts_mobilnaya_svyaz/Zamena-nomera-ili-SIM-karti-i-pereoformlenie/zamena-sim-karti">Заменить SIM-карту</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/sim-to-esim-page">Перейти на eSIM</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi">Для дома</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/home-inet">Домашний интернет</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/home-tv-i-kino">Домашнее&nbsp;ТВ</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/sputnik-tv">Спутниковое&nbsp;ТВ</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/home-phone">Домашний телефон</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link">Интернет-магазин</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://shop.mts.ru/catalog/smartfony/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_content=smartfone&amp;utm_campaign=footer">Смартфоны</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://shop.mts.ru/promo/naushniki-i-kolonki/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_content=naushniki&amp;utm_campaign=footer">Наушники и&nbsp;колонки</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://shop.mts.ru/promo/umnye-chasy-i-fitnes-braslety/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_content=chasy&amp;utm_campaign=footer">Умные часы и&nbsp;трекеры</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://shop.mts.ru/promo/planshety/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_content=planshety&amp;utm_campaign=footer">Планшеты</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://shop.mts.ru/promo/umnyj-dom/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_content=umnyi_dom&amp;utm_campaign=footer">Умный дом</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://shop.mts.ru/actions/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_content=skidki_akcii&amp;utm_campaign=footer">Скидки и&nbsp;акции</a>
+                </li>
+        </ul>
+        <ul class="custom-links__list custom-links__list_vertical">
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/servisy">Сервисы</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://premium.mts.ru/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_content=premium&amp;utm_campaign=footer">МТС Premium</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/servisy/semejnaya-gruppa">Семейная группа</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/servisy/razvlecheniya">Развлечения</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/servisy/finansi">Финансы</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/servisy/zabota_i_pomoshch">Забота и&nbsp;помощь</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/about/investoram-i-akcioneram/korporativnoe-upravlenie/dokumenti-pao-mts">Документы</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/about/investoram-i-akcioneram/korporativnoe-upravlenie/dokumenti-pao-mts">Документы ПАО «МТС»</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/servisy/sertifikaty-bezopasnosti-mincifry">Сертификаты безопасности Минцифры</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/pravovaya-informaciya" target="_self">Правовая информация</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/about/komplaens-i-delovaya-etika">Комплаенс и&nbsp;деловая этика</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/about/investoram-i-akcioneram/korporativnoe-upravlenie/raskritie-informacii">Раскрытие информации</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/cookie">Политика обработки cookies</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://static.mts.ru/dpc_upload/images/agreement.pdf">Соглашение о&nbsp;пользовании системой</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://static.mts.ru/dpc_upload/images/products/pravila_primeneniya_rekomendatelnyh_tehnologii_06_10_20232_my_mts.pdf">Правила применения рекомендательных технологий</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://static.mts.ru/dpc_upload/images/usloviya_servisa.pdf">Условия использования сервиса</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/sitemap">Карта сайта</a>
+                </li>
+        </ul>
+</div>
+<div class="custom-links isMobile" style="columns: 1">
+        <ul class="custom-links__list custom-links__list_vertical">
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi">Тарифы</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mobile-tv-inet">Связь, ТВ&nbsp;и&nbsp;интернет</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mts-doma-otlichno">МТС&nbsp;Дома&nbsp;Отлично</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mts-doma-horosho">МТС&nbsp;Дома&nbsp;Хорошо</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mts-doma-super">МТС&nbsp;Дома&nbsp;Супер</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mobile">Тарифы мобильной связи</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/red">RED</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mts-super">МТС Супер</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz/mts-top">МТС ТОП</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz/mts-junior">МТС Junior</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/starshee-pokolenie">МТС Мудрый</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/proshche">МТС Проще</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/riil">РИИЛ</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mts_nalegke">МТС Налегке</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/satellite-tv">Тарифы для спутникового&nbsp;ТВ</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/god_na_maksimume">Год на&nbsp;максимуме</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/polugodovoj">Полугодовой</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/watches-and-modems">Тарифы для часов и&nbsp;модемов</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/dlya_noutbuka_mini">Для ноутбука мини</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/dlya_noutbuka">Для ноутбука</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/dlya_ustrojstv">Для устройств</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/tarifi/vse-tarifi/telefon">Тарифы для домашнего телефона</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/uslugi">Услуги</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz">Мобильная связь</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/mobilnaya-svyaz/rouming-i-mezhgorod/poezdki-po-miru">Роуминг</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/pereyti-v-mts">Перейти в&nbsp;МТС со&nbsp;своим номером</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/esim">Оформить eSIM</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://t.me/SIM_MTS_bot">Оформить SIM-карту в&nbsp;Telegram</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/chistyj-nomer">Оформить чистый номер</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/krasivyj-nomer-mts">Выбрать красивый номер</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/bolshe-vozmozhnostej-nomera">Больше возможностей выбора номера</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://support.mts.ru/mts_mobilnaya_svyaz/Zamena-nomera-ili-SIM-karti-i-pereoformlenie/zamena-sim-karti">Заменить SIM-карту</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/sim-to-esim-page">Перейти на eSIM</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi">Для дома</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/home-inet">Домашний интернет</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/home-tv-i-kino">Домашнее&nbsp;ТВ</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/sputnik-tv">Спутниковое&nbsp;ТВ</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/home-phone">Домашний телефон</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link">Интернет-магазин</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://shop.mts.ru/catalog/smartfony/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_content=smartfone&amp;utm_campaign=footer">Смартфоны</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://shop.mts.ru/promo/naushniki-i-kolonki/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_content=naushniki&amp;utm_campaign=footer">Наушники и&nbsp;колонки</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://shop.mts.ru/promo/umnye-chasy-i-fitnes-braslety/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_content=chasy&amp;utm_campaign=footer">Умные часы и&nbsp;трекеры</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://shop.mts.ru/promo/planshety/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_content=planshety&amp;utm_campaign=footer">Планшеты</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://shop.mts.ru/promo/umnyj-dom/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_content=umnyi_dom&amp;utm_campaign=footer">Умный дом</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://shop.mts.ru/actions/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_content=skidki_akcii&amp;utm_campaign=footer">Скидки и&nbsp;акции</a>
+                </li>
+        </ul>
+        <ul class="custom-links__list custom-links__list_vertical">
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/servisy">Сервисы</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://premium.mts.ru/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_content=premium&amp;utm_campaign=footer">МТС Premium</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/servisy/semejnaya-gruppa">Семейная группа</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/servisy/razvlecheniya">Развлечения</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/servisy/finansi">Финансы</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/servisy/zabota_i_pomoshch">Забота и&nbsp;помощь</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/about/investoram-i-akcioneram/korporativnoe-upravlenie/dokumenti-pao-mts">Документы</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/about/investoram-i-akcioneram/korporativnoe-upravlenie/dokumenti-pao-mts">Документы ПАО «МТС»</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/servisy/sertifikaty-bezopasnosti-mincifry">Сертификаты безопасности Минцифры</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/pravovaya-informaciya" target="_self">Правовая информация</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/about/komplaens-i-delovaya-etika">Комплаенс и&nbsp;деловая этика</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/about/investoram-i-akcioneram/korporativnoe-upravlenie/raskritie-informacii">Раскрытие информации</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/cookie">Политика обработки cookies</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://static.mts.ru/dpc_upload/images/agreement.pdf">Соглашение о&nbsp;пользовании системой</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://static.mts.ru/dpc_upload/images/products/pravila_primeneniya_rekomendatelnyh_tehnologii_06_10_20232_my_mts.pdf">Правила применения рекомендательных технологий</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://static.mts.ru/dpc_upload/images/usloviya_servisa.pdf">Условия использования сервиса</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/sitemap">Карта сайта</a>
+                </li>
+        </ul>
+</div>
+
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="footer__body">
+                <div class="b-wrapper_ukit b-wrapper_ukit-no-custom-tablet">
+                    <div class="grid">
+                        <div class="grid__col grid__col-12 grid__col-offset-0 grid__sd-col-12 grid__sd-col-offset-0">
+                            <div class="footer__content">
+                                
+
+<div class="footer__content-left-grid">
+    <div class="footer__social">
+        <div class="footer__social-list">
+                    <a class="footer__social-item gtm-event-click" href="https://vk.com/mts" target="_blank" data-event="socialFooterClick"
+                        data-label="Вконтакте">
+                        <img alt="Вконтакте" decoding="async" loading="lazy" src="//static.mts.ru/dpc_upload/contents/618/Vk.svg">
+                    </a>
+                    <a class="footer__social-item gtm-event-click" href="https://ok.ru/mts" target="_blank" data-event="socialFooterClick"
+                        data-label="Одноклассники">
+                        <img alt="Одноклассники" decoding="async" loading="lazy" src="//static.mts.ru/dpc_upload/contents/618/Odnoklassniki.svg">
+                    </a>
+                    <a class="footer__social-item gtm-event-click" href="https://t.me/mtsofficial" target="_blank" data-event="socialFooterClick"
+                        data-label="Telegram">
+                        <img alt="Telegram" decoding="async" loading="lazy" src="//static.mts.ru/dpc_upload/contents/618/Telegram2.svg">
+                    </a>
+        </div>
+    </div>
+    <div class="footer__app">
+        <h2 class="footer__title">Скачайте Мой&nbsp;МТС</h2>
+        <div class="footer__qr"><img alt="Скачайте Мой&amp;nbsp;МТС" class="footer__qr-image" decoding="async" loading="lazy"
+                src="https://static.mts.ru/mts_rf/images/footer/qr_footer_mts_ru.svg" title="Скачайте Мой&amp;nbsp;МТС" /></div>
+        <div class="footer__app-right-grid">
+            <div class="footer__app-links">
+                        <a class="footer__app-link gtm-event-click" href="https://mymts.onelink.me/uQ4e/appstore"
+                            data-event="appFooterClick" data-label="App Store">
+                            <img alt="App Store" decoding="async" loading="lazy" src="//static.mts.ru/dpc_upload/contents/618/apple-light1.svg">
+                        </a>
+                        <a class="footer__app-link dark gtm-event-click" href="https://mymts.onelink.me/uQ4e/appstore"
+                            data-event="appFooterClick" data-label="App Store">
+                            <img alt="App Store" decoding="async" loading="lazy" src="//static.mts.ru/dpc_upload/contents/618/apple-dark.svg">
+                        </a>
+                        <a class="footer__app-link gtm-event-click" href="https://mymts.onelink.me/uQ4e/googleplay"
+                            data-event="appFooterClick" data-label="Google Play">
+                            <img alt="Google Play" decoding="async" loading="lazy" src="//static.mts.ru/dpc_upload/contents/618/googleplay-light.svg">
+                        </a>
+                        <a class="footer__app-link dark gtm-event-click" href="https://mymts.onelink.me/uQ4e/googleplay"
+                            data-event="appFooterClick" data-label="Google Play">
+                            <img alt="Google Play" decoding="async" loading="lazy" src="//static.mts.ru/dpc_upload/contents/618/googleplay-dark.svg">
+                        </a>
+                        <a class="footer__app-link gtm-event-click" href="https://mymts.onelink.me/uQ4e/AppGallery"
+                            data-event="appFooterClick" data-label="AppGallery">
+                            <img alt="AppGallery" decoding="async" loading="lazy" src="//static.mts.ru/dpc_upload/contents/618/huawei-light.svg">
+                        </a>
+                        <a class="footer__app-link dark gtm-event-click" href="https://mymts.onelink.me/uQ4e/AppGallery"
+                            data-event="appFooterClick" data-label="AppGallery">
+                            <img alt="AppGallery" decoding="async" loading="lazy" src="//static.mts.ru/dpc_upload/contents/618/huawei-dark.svg">
+                        </a>
+                        <a class="footer__app-link gtm-event-click" href="https://www.rustore.ru/catalog/app/ru.mts.mymts"
+                            data-event="appFooterClick" data-label="RuStore">
+                            <img alt="RuStore" decoding="async" loading="lazy" src="//static.mts.ru/dpc_upload/contents/618/rustore-light.svg">
+                        </a>
+                        <a class="footer__app-link dark gtm-event-click" href="https://www.rustore.ru/catalog/app/ru.mts.mymts"
+                            data-event="appFooterClick" data-label="RuStore">
+                            <img alt="RuStore" decoding="async" loading="lazy" src="//static.mts.ru/dpc_upload/contents/618/rustore-dark.svg">
+                        </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+                                
+
+<div class="custom-links isDesktop">
+        <ul class="custom-links__list custom-links__list_horizontal">
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/about">О компании</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://support.mts.ru/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=support&amp;utm_content=main_footer&amp;utm_term=link_tap">Поддержка</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/kontaktu">Контакты</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/novosti">Новости</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/vse-akcii">Акции</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/podderzhka/zoni-obsluzhivaniya/offices">Карта салонов МТС</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://job.mts.ru/">Карьера в&nbsp;МТС</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://ir.mts.ru/">Акционерам и&nbsp;инвесторам</a>
+                </li>
+        </ul>
+</div>
+<div class="custom-links isMobile" style="columns: 1">
+        <ul class="custom-links__list custom-links__list_horizontal">
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/about">О компании</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://support.mts.ru/?utm_source=inhouse&amp;utm_medium=mts_ru&amp;utm_campaign=support&amp;utm_content=main_footer&amp;utm_term=link_tap">Поддержка</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/kontaktu">Контакты</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/novosti">Новости</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/vse-akcii">Акции</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="/personal/podderzhka/zoni-obsluzhivaniya/offices">Карта салонов МТС</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://job.mts.ru/">Карьера в&nbsp;МТС</a>
+                </li>
+                <li>
+                    <a class="custom-links__link gtm-footer-link" href="https://ir.mts.ru/">Акционерам и&nbsp;инвесторам</a>
+                </li>
+        </ul>
+</div>
+
+                            </div>
+                            <div class="footer__bottom">
+                                <div class="footer__copy">© 2026 ПАО «МТС» Все права защищены</div>
+                                <div class="footer__age">18+</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </mts-footer>
+</section>
+
+<script type="text/javascript">
+    if (typeof window.globalSettings === 'undefined') {
+        window.globalSettings = {};
+    }
+    if (typeof window.globalSettings.layout === 'undefined') {
+        window.globalSettings.layout = {};
+    }
+
+    window.globalSettings.layout.footer = {"title":"МТС — связь и экосистема цифровых сервисов","description":"Актуальные новости не только о тарифах и услугах связи, но и новых продуктах МТС: цифровых приложениях для работы и отдыха, ТВ и медиа, финансовых сервисах, технологиях для запуска и продвижения бизнеса и других сервисах компании","descriptionImage":"","copyrightText":"© 2026 ПАО «МТС» Все права защищены","appBlockTitle":"Скачайте Мой\u0026nbsp;МТС","linksGroups":[{"alias":"footer-column-left-center-dom","groupType":"vertical","links":[{"title":"Тарифы","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1000,"isTitle":true,"isSubtitle":false},{"title":"Связь, ТВ\u0026nbsp;и\u0026nbsp;интернет","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mobile-tv-inet","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1100,"isTitle":false,"isSubtitle":true},{"title":"МТС\u0026nbsp;Дома\u0026nbsp;Отлично","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mts-doma-otlichno","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1110,"isTitle":false,"isSubtitle":false},{"title":"МТС\u0026nbsp;Дома\u0026nbsp;Хорошо","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mts-doma-horosho","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1120,"isTitle":false,"isSubtitle":false},{"title":"МТС\u0026nbsp;Дома\u0026nbsp;Супер","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mts-doma-super","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1130,"isTitle":false,"isSubtitle":false},{"title":"Тарифы мобильной связи","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mobile","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1200,"isTitle":false,"isSubtitle":true},{"title":"RED","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/red","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1210,"isTitle":false,"isSubtitle":false},{"title":"МТС Супер","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mts-super","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1230,"isTitle":false,"isSubtitle":false},{"title":"МТС ТОП","url":"/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz/mts-top","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1240,"isTitle":false,"isSubtitle":false},{"title":"МТС Junior","url":"/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz/mts-junior","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1250,"isTitle":false,"isSubtitle":false},{"title":"МТС Мудрый","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/starshee-pokolenie","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1260,"isTitle":false,"isSubtitle":false},{"title":"МТС Проще","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/proshche","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1265,"isTitle":false,"isSubtitle":false},{"title":"РИИЛ","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/riil","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1270,"isTitle":false,"isSubtitle":false},{"title":"МТС Налегке","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/mts_nalegke","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1280,"isTitle":false,"isSubtitle":false},{"title":"Тарифы для спутникового\u0026nbsp;ТВ","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/satellite-tv","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1300,"isTitle":false,"isSubtitle":true},{"title":"Год на\u0026nbsp;максимуме","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/god_na_maksimume","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1310,"isTitle":false,"isSubtitle":false},{"title":"Полугодовой","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/polugodovoj","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1320,"isTitle":false,"isSubtitle":false},{"title":"Тарифы для часов и\u0026nbsp;модемов","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/watches-and-modems","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1400,"isTitle":false,"isSubtitle":true},{"title":"Для ноутбука мини","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/dlya_noutbuka_mini","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1410,"isTitle":false,"isSubtitle":false},{"title":"Для ноутбука","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/dlya_noutbuka","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1420,"isTitle":false,"isSubtitle":false},{"title":"Для устройств","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/dlya_ustrojstv","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1430,"isTitle":false,"isSubtitle":false},{"title":"Тарифы для домашнего телефона","url":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi/telefon","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":1500,"isTitle":false,"isSubtitle":true},{"title":"Услуги","url":"/personal/mobilnaya-svyaz/uslugi","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":2000,"isTitle":true,"isSubtitle":false},{"title":"Мобильная связь","url":"/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":2100,"isTitle":false,"isSubtitle":true},{"title":"Роуминг","url":"/personal/mobilnaya-svyaz/rouming-i-mezhgorod/poezdki-po-miru","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":2110,"isTitle":false,"isSubtitle":false},{"title":"Перейти в\u0026nbsp;МТС со\u0026nbsp;своим номером","url":"/personal/pereyti-v-mts","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":2120,"isTitle":false,"isSubtitle":false},{"title":"Оформить eSIM","url":"/personal/esim","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":2130,"isTitle":false,"isSubtitle":false},{"title":"Оформить SIM-карту в\u0026nbsp;Telegram","url":"https://t.me/SIM_MTS_bot","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":2140,"isTitle":false,"isSubtitle":false},{"title":"Оформить чистый номер","url":"/personal/chistyj-nomer","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":2150,"isTitle":false,"isSubtitle":false},{"title":"Выбрать красивый номер","url":"/personal/krasivyj-nomer-mts","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":2160,"isTitle":false,"isSubtitle":false},{"title":"Больше возможностей выбора номера","url":"/personal/bolshe-vozmozhnostej-nomera","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":2165,"isTitle":false,"isSubtitle":false},{"title":"Заменить SIM-карту","url":"https://support.mts.ru/mts_mobilnaya_svyaz/Zamena-nomera-ili-SIM-karti-i-pereoformlenie/zamena-sim-karti","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":2170,"isTitle":false,"isSubtitle":false},{"title":"Перейти на eSIM","url":"/personal/sim-to-esim-page","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":2180,"isTitle":false,"isSubtitle":false},{"title":"Для дома","url":"/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":2200,"isTitle":false,"isSubtitle":true},{"title":"Домашний интернет","url":"/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/home-inet","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":2210,"isTitle":false,"isSubtitle":false},{"title":"Домашнее\u0026nbsp;ТВ","url":"/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/home-tv-i-kino","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":2220,"isTitle":false,"isSubtitle":false},{"title":"Спутниковое\u0026nbsp;ТВ","url":"/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/sputnik-tv","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":2230,"isTitle":false,"isSubtitle":false},{"title":"Домашний телефон","url":"/personal/dlya-doma/uslugi/katalog-uslug-fiksirovannoy-svyazi/home-phone","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":2240,"isTitle":false,"isSubtitle":false},{"title":"Интернет-магазин","url":null,"lightThemeImage":null,"darkThemeImage":null,"target":null,"order":5000,"isTitle":true,"isSubtitle":false},{"title":"Смартфоны","url":"https://shop.mts.ru/catalog/smartfony/?utm_source=inhouse\u0026utm_medium=mts_ru\u0026utm_content=smartfone\u0026utm_campaign=footer","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":5100,"isTitle":false,"isSubtitle":false},{"title":"Наушники и\u0026nbsp;колонки","url":"https://shop.mts.ru/promo/naushniki-i-kolonki/?utm_source=inhouse\u0026utm_medium=mts_ru\u0026utm_content=naushniki\u0026utm_campaign=footer","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":5110,"isTitle":false,"isSubtitle":false},{"title":"Умные часы и\u0026nbsp;трекеры","url":"https://shop.mts.ru/promo/umnye-chasy-i-fitnes-braslety/?utm_source=inhouse\u0026utm_medium=mts_ru\u0026utm_content=chasy\u0026utm_campaign=footer","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":5120,"isTitle":false,"isSubtitle":false},{"title":"Планшеты","url":"https://shop.mts.ru/promo/planshety/?utm_source=inhouse\u0026utm_medium=mts_ru\u0026utm_content=planshety\u0026utm_campaign=footer","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":5130,"isTitle":false,"isSubtitle":false},{"title":"Умный дом","url":"https://shop.mts.ru/promo/umnyj-dom/?utm_source=inhouse\u0026utm_medium=mts_ru\u0026utm_content=umnyi_dom\u0026utm_campaign=footer","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":5140,"isTitle":false,"isSubtitle":false},{"title":"Скидки и\u0026nbsp;акции","url":"https://shop.mts.ru/actions/?utm_source=inhouse\u0026utm_medium=mts_ru\u0026utm_content=skidki_akcii\u0026utm_campaign=footer","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":5150,"isTitle":false,"isSubtitle":false}],"order":10,"name":null},{"alias":"footer-column-right","groupType":"vertical","links":[{"title":"Сервисы","url":"/personal/servisy","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":3000,"isTitle":true,"isSubtitle":false},{"title":"МТС Premium","url":"https://premium.mts.ru/?utm_source=inhouse\u0026utm_medium=mts_ru\u0026utm_content=premium\u0026utm_campaign=footer","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":3110,"isTitle":false,"isSubtitle":false},{"title":"Семейная группа","url":"/personal/servisy/semejnaya-gruppa","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":3120,"isTitle":false,"isSubtitle":false},{"title":"Развлечения","url":"/personal/servisy/razvlecheniya","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":3130,"isTitle":false,"isSubtitle":false},{"title":"Финансы","url":"/personal/servisy/finansi","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":3140,"isTitle":false,"isSubtitle":false},{"title":"Забота и\u0026nbsp;помощь","url":"/personal/servisy/zabota_i_pomoshch","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":3150,"isTitle":false,"isSubtitle":false},{"title":"Документы","url":"/about/investoram-i-akcioneram/korporativnoe-upravlenie/dokumenti-pao-mts","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":4000,"isTitle":true,"isSubtitle":false},{"title":"Документы ПАО «МТС»","url":"/about/investoram-i-akcioneram/korporativnoe-upravlenie/dokumenti-pao-mts","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":4110,"isTitle":false,"isSubtitle":false},{"title":"Сертификаты безопасности Минцифры","url":"/personal/servisy/sertifikaty-bezopasnosti-mincifry","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":4120,"isTitle":false,"isSubtitle":false},{"title":"Правовая информация","url":"/personal/pravovaya-informaciya","lightThemeImage":null,"darkThemeImage":null,"target":"_self","order":4125,"isTitle":false,"isSubtitle":false},{"title":"Комплаенс и\u0026nbsp;деловая этика","url":"/about/komplaens-i-delovaya-etika","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":4130,"isTitle":false,"isSubtitle":false},{"title":"Раскрытие информации","url":"/about/investoram-i-akcioneram/korporativnoe-upravlenie/raskritie-informacii","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":4140,"isTitle":false,"isSubtitle":false},{"title":"Политика обработки cookies","url":"/personal/cookie","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":4150,"isTitle":false,"isSubtitle":false},{"title":"Соглашение о\u0026nbsp;пользовании системой","url":"https://static.mts.ru/dpc_upload/images/agreement.pdf","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":4160,"isTitle":false,"isSubtitle":false},{"title":"Правила применения рекомендательных технологий","url":"https://static.mts.ru/dpc_upload/images/products/pravila_primeneniya_rekomendatelnyh_tehnologii_06_10_20232_my_mts.pdf","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":4163,"isTitle":false,"isSubtitle":false},{"title":"Условия использования сервиса","url":"https://static.mts.ru/dpc_upload/images/usloviya_servisa.pdf","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":4165,"isTitle":false,"isSubtitle":false},{"title":"Карта сайта","url":"/personal/sitemap","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":4170,"isTitle":false,"isSubtitle":false}],"order":30,"name":null}],"menuLinksGroups":[{"alias":"footer-links-menu","groupType":"horizontal","links":[{"title":"О компании","url":"/about","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":10,"isTitle":true,"isSubtitle":false},{"title":"Поддержка","url":"https://support.mts.ru/?utm_source=inhouse\u0026utm_medium=mts_ru\u0026utm_campaign=support\u0026utm_content=main_footer\u0026utm_term=link_tap","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":20,"isTitle":true,"isSubtitle":false},{"title":"Контакты","url":"/personal/kontaktu","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":30,"isTitle":true,"isSubtitle":false},{"title":"Новости","url":"/personal/novosti","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":40,"isTitle":true,"isSubtitle":false},{"title":"Акции","url":"/personal/vse-akcii","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":50,"isTitle":true,"isSubtitle":false},{"title":"Карта салонов МТС","url":"/personal/podderzhka/zoni-obsluzhivaniya/offices","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":60,"isTitle":true,"isSubtitle":false},{"title":"Карьера в\u0026nbsp;МТС","url":"https://job.mts.ru/","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":70,"isTitle":true,"isSubtitle":false},{"title":"Акционерам и\u0026nbsp;инвесторам","url":"https://ir.mts.ru/","lightThemeImage":null,"darkThemeImage":null,"target":null,"order":80,"isTitle":true,"isSubtitle":false}],"order":0,"name":null}],"appLinksGroups":[{"alias":"footer-app","groupType":"horizontal","links":[{"title":"App Store","url":"https://mymts.onelink.me/uQ4e/appstore","lightThemeImage":{"id":6507478,"image":"//static.mts.ru/dpc_upload/contents/618/apple-light1.svg","sortOrder":null,"screenSize":null,"imageType":null},"darkThemeImage":{"id":6507479,"image":"//static.mts.ru/dpc_upload/contents/618/apple-dark.svg","sortOrder":null,"screenSize":null,"imageType":null},"target":null,"order":10,"isTitle":false,"isSubtitle":false},{"title":"Google Play","url":"https://mymts.onelink.me/uQ4e/googleplay","lightThemeImage":{"id":6507481,"image":"//static.mts.ru/dpc_upload/contents/618/googleplay-light.svg","sortOrder":null,"screenSize":null,"imageType":null},"darkThemeImage":{"id":6507480,"image":"//static.mts.ru/dpc_upload/contents/618/googleplay-dark.svg","sortOrder":null,"screenSize":null,"imageType":null},"target":null,"order":20,"isTitle":false,"isSubtitle":false},{"title":"AppGallery","url":"https://mymts.onelink.me/uQ4e/AppGallery","lightThemeImage":{"id":6507482,"image":"//static.mts.ru/dpc_upload/contents/618/huawei-light.svg","sortOrder":null,"screenSize":null,"imageType":null},"darkThemeImage":{"id":6507483,"image":"//static.mts.ru/dpc_upload/contents/618/huawei-dark.svg","sortOrder":null,"screenSize":null,"imageType":null},"target":null,"order":30,"isTitle":false,"isSubtitle":false},{"title":"RuStore","url":"https://www.rustore.ru/catalog/app/ru.mts.mymts","lightThemeImage":{"id":6507485,"image":"//static.mts.ru/dpc_upload/contents/618/rustore-light.svg","sortOrder":null,"screenSize":null,"imageType":null},"darkThemeImage":{"id":6507484,"image":"//static.mts.ru/dpc_upload/contents/618/rustore-dark.svg","sortOrder":null,"screenSize":null,"imageType":null},"target":null,"order":40,"isTitle":false,"isSubtitle":false}],"order":10,"name":null},{"alias":"footer-social-media","groupType":"horizontal","links":[{"title":"Вконтакте","url":"https://vk.com/mts","lightThemeImage":{"id":6508181,"image":"//static.mts.ru/dpc_upload/contents/618/Vk.svg","sortOrder":null,"screenSize":null,"imageType":null},"darkThemeImage":{"id":6508181,"image":"//static.mts.ru/dpc_upload/contents/618/Vk.svg","sortOrder":null,"screenSize":null,"imageType":null},"target":"_blank","order":10,"isTitle":false,"isSubtitle":false},{"title":"Одноклассники","url":"https://ok.ru/mts","lightThemeImage":{"id":6508179,"image":"//static.mts.ru/dpc_upload/contents/618/Odnoklassniki.svg","sortOrder":null,"screenSize":null,"imageType":null},"darkThemeImage":{"id":6508179,"image":"//static.mts.ru/dpc_upload/contents/618/Odnoklassniki.svg","sortOrder":null,"screenSize":null,"imageType":null},"target":"_blank","order":20,"isTitle":false,"isSubtitle":false},{"title":"Telegram","url":"https://t.me/mtsofficial","lightThemeImage":{"id":6508180,"image":"//static.mts.ru/dpc_upload/contents/618/Telegram2.svg","sortOrder":null,"screenSize":null,"imageType":null},"darkThemeImage":{"id":6508180,"image":"//static.mts.ru/dpc_upload/contents/618/Telegram2.svg","sortOrder":null,"screenSize":null,"imageType":null},"target":"_blank","order":30,"isTitle":false,"isSubtitle":false}],"order":20,"name":null}],"qrCodeImage":"https://static.mts.ru/mts_rf/images/footer/qr_footer_mts_ru.svg","copyrightDescriptions":"На\u0026nbsp;информационном ресурсе применяются рекомендательные технологии","appBlockDescriptions":"Управляйте сервисами МТС, проверяйте баланс, контролируйте расходы, настраивайте тариф и\u0026nbsp;услуги\u003cbr\u003e\u003cbr\u003e\u003ca href=\u0022https://www.mts.ru/personal/mymts\u0022 target=\u0022_blank\u0022\u003eУзнать больше о\u0026nbsp;приложении\u003c/a\u003e","isGosDesign":false};
+</script>
+
+<!-- end footer-->
+        </div>
+
+    </div>
+    <!--noindex-->
+    
+<mts-popup-user-actions></mts-popup-user-actions>
+<script type="text/javascript">
+    if (typeof (window.globalSettings.layout) === "undefined") {
+        window.globalSettings.layout = {};
+    };
+    window.globalSettings.layout.popupUserActions = {"regionId":78043,"region":"msk","segment":"PrivateClients","messages":{"footer":"В <a href=\"https://lk.ssl.mts.ru\">Личном кабинете </a>вы можете посмотреть весь список доступных к подключению услуг и те, кто вам не дозвонился, смогут оставлять голосовые сообщения. Эти сообщения вы можете прослушать в любой момент.","success":"Заявка принята.","successDescription":"В течение нескольких минут Вам<br> придёт SMS с результатом.","error":"<div class=\"popup-change-tariff__status\">\n    <div class=\"popup-change-tariff__status-media\"><img src=\"/Content/i/popup-services/connect-chat.svg\" alt=\"\"></div>\n    <div class=\"popup-change-tariff__status-message\">\n        <p>При добавлении услуги произошла ошибка.</p>\n       <!--  <p>Для решения вопроса просьба обратиться в Чат со специалистом.</p>\n    </div>\n    <button class=\"btn btn_wide\" onClick=\"(function(){window.QA.MTS.openChat(); $('.popup__close').trigger('click');}())\">Обратиться в Чат</button>\n</div>-->","errorDescription":""},"service":{"messages":{"alreadyExists":"Услуга уже подключена на номере.","unavailable":"Услуга недоступна для подключения на вашем тарифном плане.","differentSegment":"Извините, на вашем тарифном плане подключение недоступно.","notEnoughMoney":"На вашем счете не хватает денег для подключения выбранной услуги. Пополнить счет без комиссии можно <a href=\"#\" class=\"js-open-refill-form\">здесь</a>.","notEnoughMoneyForSetup":null,"connected":"","ussd":"Узнать команду для подключения","userBlocked":"Не удалось подключить выбранную услугу.<br />Абонентский номер заблокирован.","redirectToHomeRegion":"Внимание! Сейчас вы будете перенаправлены на страницу \"домашнего\" региона. Стоимость услуги в вашем регионе может отличаться!"}},"tariff":{"messages":{"alreadyExists":"Тариф уже подключен на номере.","unavailable":"Тариф недоступен для перехода.","differentSegment":"Извините, на вашем тарифном плане смена на данный тариф недоступна.","notEnoughMoney":"На вашем счете не хватает денег для перехода на выбранный тариф.<br>Пополнить счет без комиссии можно <a href=\"https://payment.mts.ru/?PaymentForm=1150&NUMBER={msisdn}&Amount=500&bt=UK&source=mts&channel=1\">здесь</a>","notEnoughMoneyForSetup":"На вашем счете не хватает денег для настройки тарифа.<br>Пополнить счет без комиссии можно <a href=\"https://payment.mts.ru/?PaymentForm=1150&NUMBER={msisdn}&Amount=500&bt=UK&source=mts&channel=1\">здесь</a>","connected":"Тарифный план изменен.","ussd":"Для перехода на этот тариф: Наберите на своем телефоне команду или перейдите на этот тариф через личный кабинет","userBlocked":null,"redirectToHomeRegion":null},"tariffsBaseUrlLink":"/personal/mobilnaya-svyaz/tarifi/vse-tarifi"},"transferTariffNotification":{"titleTemplate":"","bodyTemplate":"<p>Для вас на текущих настройках тарифа «{{0}}» действует бесплатный промо-пакет {{1}}.</p><p>Предупреждаем, что при смене тарифа промо-пакет {{1}} отключится.</p>"},"lkLinkContainer":"<div class=\"popup-how-connect__item\">\n                <div class=\"popup-how-connect__col-icon\"><span class=\"popup-how-connect__icon popup-how-connect__icon_clientarea-login\"><img src=\"/upload/images/b-icon_clientarea-login.svg\"></span></div>\n                <div class=\"popup-how-connect__col-text\">Воспользуйтесь <a href=\"https://lk.ssl.mts.ru/\">Личным&nbsp;кабинетом</a></div>\n            </div>","lkFixConnectLinkContainer":" <div class=\"popup-how2__item\">\n  <div class=\"popup-how2__col-icon\">\n  <span class=\"popup-how2__icon\">\n  <img src=\"//static.mts.ru/mts_rf/images/b-icon_clientarea-login.svg\"></span></div>\n  <div class=\"popup-how2__col-text\">Если Вы действующий Абонент фиксированной связи, воспользуйтесь  <a href=\"https://kabinet.mts.ru\">Личным кабинетом</a></div>\n</div>\n<div class=\"popup-how2__item\">\n  <div class=\"popup-how2__col-icon\">\n  <span class=\"popup-how2__icon\">\n  <img src=\"//static.mts.ru/mts_rf/images/b-icon_choose-tariff.svg\"></span></div>\n  <div class=\"popup-how2__col-text\">Если Вы новый Абонент, оставьте <a href=\"/personal/dlya-doma/checkconnect/\">Заявку на подключение</a></div>\n</div>","subscriptionUssdTemplate":"<div class=\"popup-how-connect__item\">\n    <div class=\"popup-how-connect__col-icon\">\n\t     <span class=\"popup-how-connect__icon popup-how-connect__icon_clientarea-login\">\n\t\t     <img src=\"/upload/images/b-icon_mobile.svg\">\n\t    </span>\n\t</div>\n    <div class=\"popup-voice-mail__connection-number\" style=\"text-align: left; margin-bottom: 0rem;\">Наберите на&nbsp;своём телефоне     \n\t\t<div class=\"popup-voice-mail__number-show\">команду</div>\n        <span href=\"tel:{{SubscriptionUssd}}\" class=\"b-number\">{{SubscriptionUssd}}</span>\n    </div>\n</div>","subscriptionSmsTemplate":"<div class=\"popup-how-connect__item\">\n                      <div class=\"popup-how-connect__col-icon\"><span class=\"popup-how-connect__icon popup-how-connect__icon_envelope\"><img src=\"//static.mts.ru/mts_rf/images/b-icon_envelope.svg\"></span></div>\n                      <div class=\"popup-how-connect__col-text\">Отправьте SMS с&nbsp;текстом 2230 на&nbsp;номер {{SubscriptionSms}}</div>\n                    </div>","hiddenFormsHtml":"<form action=\"https://payment.mts.ru/\" method=\"post\" class=\"refill-form\">\n  <input name=\"PaymentForm\" type=\"hidden\" value=\"1150\">\n  <input name=\"bt\" type=\"hidden\" value=\"UK\">\n  <input name=\"source\" type=\"hidden\" value=\"mts\">\n  <input name=\"channel\" type=\"hidden\" value=\"1\">\n  <input name=\"number\" type=\"hidden\" value=\"\">\n  <input name=\"amount\" type=\"hidden\" value=\"500\">\n</form>","appLink":"https://redirect.appmetrica.yandex.com/serve/530765304469407894","lkTariffLink":{"title":"Личный кабинет","url":"https://lk.mts.ru/tarif?search=","target":"_self","isCustomAction":false,"useLocationAssign":null,"authRestrictions":null},"lkServiceLink":"https://lk.mts.ru/uslugi/podklyuchennye?search=","b2blkLink":"https://lk-b2b.mts.ru/","virtualManagerLink":"<div class=\"popup-how-connect__item\">\n                    <div class=\"popup-how-connect__col-icon\"><span class=\"popup-how-connect__icon popup-how-connect__icon_clientarea-login\"><img src=\"//static.mts.ru/mts_rf/images/b-icon_clientarea-login.svg\"></span></div>\n                    <div class=\"popup-how-connect__col-text\">Воспользуйтесь <a href=\"https://lk-b2b.mts.ru/\">Личным кабинетом МТС Бизнес</a></div>\n                </div>","simcardBlockedService":"BL0008","migrationLink":"/personal/pereyti-v-mts","settingsButtonFreezeTimeInMinutes":5,"uaManagerApiClientCode":"","homeServicesFormSettings":{"title":"","header":null,"success":"","failure":"","duplicate":""},"homeServicesOfferType":""};
+</script>
+<script>
+    window.globalSettings.connectProductWidget = window.globalSettings.connectProductWidget || {};
+    window.globalSettings.connectProductWidget['Service'] = {"productType":"Service","connectMethodsTitle":"Выберите способ подключения","uApiRequestClientCode":""};
+</script>
+
+        <mts-option-connect></mts-option-connect>
+        <script src="/bundles/angular/optionConnect.js?v=RGhuD0sVMHWUQ6OJFcaYUaLXytgHZy_tILCpiRqJuYs" defer="" type="module" fetchpriority="high"></script>
+        <link rel="stylesheet" href="/bundles/angular/optionConnect.css">
+
+    <!--/noindex-->
+    <div id="requiredElementsHolder" style="display: none"></div>
+    
+    
+
+<script>
+    regionsAutocompleteData = []; //base.js ovveride
+    window.globalSettings.region = {"currentRegionDpcAlias":"msk","currentRegionSiteAlias":"moskva","currentRegionId":1826,"defaultCookieDomain":".mts.ru","currentRegionDpcId":2214136,"parentDpcId":2214136,"currentRegionDisplayTitle":"Москва и Московская область","currentRegionTitle":"Москва","currentCityDisplayTitle":"Москва","urlMatchingPattern":"https://{region}.mts.ru","siteRegionId":78043,"currentRegionFiasId":"0c5b2444-70a0-4932-980c-b4dc0d3f02b5","currentRegionFiasCode":"77000000000000000000000000","currentRegionKladrCode":"7700000000000"};
+</script>
+    
+    
+    
+    <script>
+            window.globalSettings.universalPage = window.globalSettings.universalPage || {};
+            window.globalSettings.universalPage.widgets = [{"type":"universal-header-widget","widgetTitle":"shapka","title":"Семейная группа","orderOnPage":0,"badges":[{"id":6404814,"title":"Бесплатно","backgroundColor":{"designSystemColor":"--constant-light-banana"},"textColor":{"designSystemColor":"--constant-greyscale-800"},"position":"Common","onlyForNewSubscribers":false,"ignoreInProductCustomizationMode":false,"marketingProductIds":[6403653],"hideInCard":false,"hideInBasket":false,"showSmartTooltipWithDiscountValues":false,"showSmartTooltipWithRestrictions":false,"showBulletedSmartTooltip":false,"hideWhenEmptyContent":false,"isParamsPopupButton":false,"iconPosition":"left"}],"productBanner":{"imageBackground":"//static.mts.ru/dpc_upload/contents/614/semeynaya_header.jpg","imageBackgroundMobile":"//static.mts.ru/dpc_upload/contents/614/semeynaya_header_mob.jpg","imageBackgroundDesktop":"//static.mts.ru/dpc_upload/contents/614/semeynaya_header.jpg","isFullScreenBackground":true,"detailsButton":{"title":"Подробнее","url":"#benefits-semeinaya-gruppa","target":"_self","isCustomAction":false}},"shortDescription":"Добавляйте близких и&nbsp;общайтесь безлимитно в&nbsp;сети МТС внутри группы, экономьте на&nbsp;связи до&nbsp;20%, делитесь услугами, следите за&nbsp;геолокацией детей","headerIcon":"//static.mts.ru/dpc_upload/contents/654/semeynaya_header_icon.svg","connectedBadge":{"id":5052023,"title":"Подключено","sortOrder":100,"backgroundColor":{"customColor":"#26CD58"},"textColor":{"designSystemColor":"--constant-greyscale-0"},"position":"Common","onlyForNewSubscribers":false,"ignoreInProductCustomizationMode":false,"hideInCard":false,"hideInBasket":false,"showSmartTooltipWithDiscountValues":false,"showSmartTooltipWithRestrictions":false,"showBulletedSmartTooltip":false,"hideWhenEmptyContent":false,"isParamsPopupButton":false,"iconPosition":"left"},"isArchive":false,"productFeatures":[],"baseSettings":{"paddingsTopInternal":{"id":5777959,"title":"0-0-0-0-0-0-0","desktopXl":"0","desktopL":"0","desktopM":"0","desktopS":"0","desktopXs":"0","tablet":"0","mobile":"0"},"paddingsBottomInternal":{"id":6314477,"title":"160-160-128-128-96-96-64","desktopXl":"160","desktopL":"160","desktopM":"128","desktopS":"128","desktopXs":"96","tablet":"96","mobile":"64"},"paddingsExternal":{"id":5777959,"title":"0-0-0-0-0-0-0","desktopXl":"0","desktopL":"0","desktopM":"0","desktopS":"0","desktopXs":"0","tablet":"0","mobile":"0"},"shapeSection":"square"},"seoData":{"title":"➤Семейная группа – подключить услугу от МТС в Москве","description":"✅Подключить услугу Семейная группа от МТС в Москве. Ведущий 📱 оператор связи в России. ⭐Тарифы, услуги, интернет, телевидение. Лучшие предложения и выгодные условия. Узнайте больше на официальном сайте МТС!"},"displayOptions":{"elementPosition":"default","designType":"default","isDarkDesign":false},"actionOptions":{"lkServiceLink":"https://lk.mts.ru/uslugi/podklyuchennye?search=","connectButton":{"title":"Создать группу","url":"https://c.mts.ru/uQ4e/sg","target":"_blank","isCustomAction":false},"hasEventConnectButton":false,"showWidgetFormPopup":false,"fixConnectPopup":{"links":[]},"relatedProductsGlobalCodes":[],"hasChildSets":false,"hasAnchor":false,"needAuthInConnectPopup":false,"isReferralGenerator":false,"isInviteFriendFlow":false,"isInvalidReferralCode":false},"datesOptions":{"hideStartDate":false,"hideEndDate":false},"zoneName":"MainZone","id":1460100,"productInfo":{"productId":6403655,"marketingProductId":6403653,"productAlias":"semejnaya-gruppa","productTitle":"Семейная группа","productType":"Service"},"isMainPage":false,"widgetAlias":""},{"type":"universal-benefits-widget","widgetTitle":"preimuschestva","title":"Преимущества семейной группы","textPositionType":"center","designType":"default","rows":[{"title":"Преимущества семейной группы Ряд 1","type":"OneBigCard","benefits":[{"id":7254945,"title":"Безлимитные звонки внутри группы","description":"В&nbsp;сети МТС России для участников семейных групп, созданных <nobr>с&nbsp;1&nbsp;октября 2026</nobr>","image":"//static.mts.ru/dpc_upload/contents/618/061026_semeynaya_benefits_bezlimitniye_zvonki.png","hideBackgroundColor":false}],"showTitleInMobile":false,"hideBackground":false},{"title":"Преимущества семейной группы Ряд 2","type":"TwoBigCards","benefits":[{"id":7268209,"title":"Автоплатёж для семьи","description":"Подключайте автопополнение баланса, чтобы близкие всегда оставались на&nbsp;связи","image":"//static.mts.ru/dpc_upload/contents/618/semeynaya_benefits_avtoplatezh.png","hideBackgroundColor":false},{"id":6726842,"title":"Защищайте себя и&nbsp;своих близких","description":"Подключите Защитник+ для семьи и&nbsp;делитесь подпиской безопасности","image":"//static.mts.ru/dpc_upload/contents/618/semeynaya_benefits_defender.png","universalButtons":[{"id":6726843,"text":"подключить","textMobile":"подключить","link":"/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz/zashchitnik","sortOrder":0,"iconPlace":"Left","designType":"Secondary","target":"_blank"}],"hideBackgroundColor":false}],"showTitleInMobile":false,"hideBackground":false},{"title":"Преимущества семейной группы Ряд 3","type":"TwoBigCards","benefits":[{"id":6726844,"title":"Безопасный интернет","description":"Цифровая защита для детей в&nbsp;сети МТС от&nbsp;опасного и&nbsp;взрослого контента","image":"//static.mts.ru/dpc_upload/contents/618/semeynaya_benefits_inet.png","universalButtons":[{"id":6726846,"text":"подключить","textMobile":"подключить","link":"/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz/zashchitnik?related-product-details=6707854","sortOrder":0,"designType":"Secondary","target":"_blank"}],"hideBackgroundColor":false},{"id":6726847,"title":"Семейные кубики","description":"Уникальные опции, которые улучшат любой тариф и&nbsp;помогут экономить всем участникам","image":"//static.mts.ru/dpc_upload/contents/618/semeynaya_benefits_cubes.png","universalButtons":[{"id":6726995,"text":"Подробнее","textMobile":"Подробнее","link":"/personal/mobilnaya-svyaz/uslugi/mobilnaya-svyaz/semeinye-kubiki","sortOrder":0,"designType":"Secondary","target":"_blank"}],"hideBackgroundColor":false}],"showTitleInMobile":false,"hideBackground":false},{"title":"Преимущества семейной группы Ряд 4","type":"TwoBigCards","benefits":[{"id":6403676,"title":"Будьте уверены, что близкие на связи","description":"Просматривайте список участников, их&nbsp;баланс и&nbsp;пакеты интернета","image":"//static.mts.ru/dpc_upload/contents/618/semeynaya_benefits_svyaz.png","hideBackgroundColor":false},{"id":6403678,"title":"Помогайте управлять тарифом и услугами","description":"Настраивайте связь участникам, контролируйте списания","image":"//static.mts.ru/dpc_upload/contents/618/semeynaya_benefits_upravleniye.png","hideBackgroundColor":false}],"showTitleInMobile":false,"hideBackground":false},{"title":"Преимущества семейной группы Ряд 5","type":"TwoBigCards","benefits":[{"id":6404796,"title":"Экономьте на связи до 20%","description":"Чем больше участников, тем выше скидка на&nbsp;тариф у&nbsp;каждого. Скидка действует на&nbsp;определённых тарифах","image":"//static.mts.ru/dpc_upload/contents/618/sem_benefits_skidka.png","hideBackgroundColor":false},{"id":6403680,"title":"Наблюдайте за геолокацией ребёнка","description":"Будете видеть местоположение с&nbsp;высокой точностью и&nbsp;уровень заряда смартфона","image":"//static.mts.ru/dpc_upload/contents/618/semeynaya_benefits_geo.png","hideBackgroundColor":false}],"showTitleInMobile":false,"hideBackground":false},{"title":"Преимущества семейной группы Ряд 6","type":"TwoBigCards","benefits":[{"id":6403682,"title":"Включайте детский режим","description":"Покажем ребёнку детский контент и&nbsp;тематические подборки услуг в&nbsp;Мой МТС","image":"//static.mts.ru/dpc_upload/contents/618/semeynaya_benefits_deti.png","hideBackgroundColor":false},{"id":6404798,"title":"Делитесь подпиской с близкими","description":"Кино, музыка, защита от&nbsp;спама&nbsp;&mdash; все преимущества МТС Premium для участников группы. Подписку оплачивает организатор группы, 3&nbsp;участника присоединяются бесплатно","image":"//static.mts.ru/dpc_upload/contents/618/semeynaya_benefits_premium.png","hideBackgroundColor":false}],"showTitleInMobile":false,"hideBackground":false}],"productOrders":[],"isDarkDesign":false,"baseSettings":{"paddingsTopInternal":{"id":5777959,"title":"0-0-0-0-0-0-0","desktopXl":"0","desktopL":"0","desktopM":"0","desktopS":"0","desktopXs":"0","tablet":"0","mobile":"0"},"paddingsBottomInternal":{"id":6314477,"title":"160-160-128-128-96-96-64","desktopXl":"160","desktopL":"160","desktopM":"128","desktopS":"128","desktopXs":"96","tablet":"96","mobile":"64"},"paddingsExternal":{"id":5777959,"title":"0-0-0-0-0-0-0","desktopXl":"0","desktopL":"0","desktopM":"0","desktopS":"0","desktopXs":"0","tablet":"0","mobile":"0"},"shapeSection":"square"},"availableCityIds":[2214136,2214784,2214763,3772574,3772578,2214767,2214757,2214779,2214774,3767587,2214783,2214773,2214747,3765845,4769836,3772603,3644273,2947265,4733493,3772583,3772605,3258604,2214791,5628553,3772581,3772608,2214759,2214787,2214789,3772607,3772582,20077,20068,20076,20078,20075,20071,20074,20079,20060,20073,20069,20063,20062,20070,20080,2540784],"currentCity":{"id":2214136,"title":"Москва","alias":"moskva","parent":{"id":19967,"title":"Москва и МО","alias":"msk","parent":{"id":338946,"title":"Москва и Подмосковье","alias":"msk-mr","parent":{"id":19975,"title":"Россия","alias":"Russia","isMainCity":false,"regionType":"Country","oldSiteId":3164,"mpcId":"Russia"},"isMainCity":false,"regionType":"MacroRegion","kladrCode":"5000000000000","oldSiteId":1731},"isMainCity":false,"regionType":"Region","kladrCode":"7700000000000","oldSiteId":1826,"siteAlias":"moskva"},"isMainCity":true,"regionType":"City","mgtsId":"Москва","kladrCode":"7700000000000","fiasCode":"0c5b2444-70a0-4932-980c-b4dc0d3f02b5","titlePrepositional":"Москве","oldSiteId":1826},"sendUtm":false,"zoneName":"MainZone","id":1460102,"productInfo":{"productId":6403655,"marketingProductId":6403653,"productAlias":"semejnaya-gruppa","productTitle":"Семейная группа","productType":"Service"},"orderOnPage":2,"isMainPage":false,"contentItemAlias":"preimushhestva-semejnoj-gruppy","widgetAlias":""},{"type":"universal-full-description-widget","widgetTitle":"podrobnee","isDarkDesign":false,"availableCityIds":[2214136,2214784,2214763,3772574,3772578,2214767,2214757,2214779,2214774,3767587,2214783,2214773,2214747,3765845,4769836,3772603,3644273,2947265,4733493,3772583,3772605,3258604,2214791,5628553,3772581,3772608,2214759,2214787,2214789,3772607,3772582,20077,20068,20076,20078,20075,20071,20074,20079,20060,20073,20069,20063,20062,20070,20080,2540784],"currentCity":{"id":2214136,"title":"Москва","alias":"moskva","parent":{"id":19967,"title":"Москва и МО","alias":"msk","parent":{"id":338946,"title":"Москва и Подмосковье","alias":"msk-mr","parent":{"id":19975,"title":"Россия","alias":"Russia","isMainCity":false,"regionType":"Country","oldSiteId":3164,"mpcId":"Russia"},"isMainCity":false,"regionType":"MacroRegion","kladrCode":"5000000000000","oldSiteId":1731},"isMainCity":false,"regionType":"Region","kladrCode":"7700000000000","oldSiteId":1826,"siteAlias":"moskva"},"isMainCity":true,"regionType":"City","mgtsId":"Москва","kladrCode":"7700000000000","fiasCode":"0c5b2444-70a0-4932-980c-b4dc0d3f02b5","titlePrepositional":"Москве","oldSiteId":1826},"details":{"title":"Что нужно знать","description":"","accordionSet":[{"id":6404802,"title":"Как устроена семейная группа","items":[{"id":6404803,"universalContent":{"type":"html","content":"<p>Семейная группа&nbsp;&mdash; это группа пользователей в&nbsp;МТС, для которой доступны специальные условия и&nbsp;возможности. Возможности зависят от&nbsp;роли участника: Организатор, Взрослый, Ребёнок или Старший.</p>\n<p>Организатор может пригласить в&nbsp;группу до&nbsp;9&nbsp;человек.</p>\n<p>Участники семейной группы видят информацию друг о&nbsp;друге.</p>\n<p><a href=\"https://static.mts.ru/dpc_upload/images/pravila_semeinoj_gruppy.pdf\" target=\"_blank\">Правила семейной группы</a></p>","hasFirstRowAsHeader":false},"sortOrder":10}],"sortOrder":10},{"id":6404804,"title":"Для абонентов каких операторов","items":[{"id":6404805,"universalContent":{"type":"html","content":"<p>В&nbsp;семейные группы могут объединяться абоненты любых российских операторов, но&nbsp;некоторые преимущества будут доступны только абонентам МТС.</p>","hasFirstRowAsHeader":false},"sortOrder":20}],"sortOrder":20},{"id":6404806,"title":"Сколько стоит семейная группа","items":[{"id":6404807,"universalContent":{"type":"html","content":"<p>Создать семейную группу и&nbsp;добавить участников можно бесплатно, но&nbsp;некоторые продукты МТС потребуется купить. Например, подписку МТС Premium вы&nbsp;покупаете и&nbsp;как Организатор можете делиться ей&nbsp;с&nbsp;участниками семейной группы.</p>","hasFirstRowAsHeader":false},"sortOrder":30}],"sortOrder":30},{"id":6404808,"title":"Какие возможности есть в семейной группе","items":[{"id":6404809,"universalContent":{"type":"html","content":"<p>Безлимитные звонки на&nbsp;номера МТС доступны между участниками групп, которые созданы после 1&nbsp;октября 2026&nbsp;года. С&nbsp;19&nbsp;ноября безлимитные звонки станут доступны и&nbsp;тем, кто получал скидку до&nbsp;1&nbsp;октября.</p>","hasFirstRowAsHeader":false},"sortOrder":40}],"sortOrder":40},{"id":6404810,"title":"Как работает геолокация","items":[{"id":6404811,"universalContent":{"type":"html","content":"<p>Организатор и&nbsp;Взрослый могут видеть геолокацию друг друга, если оба дали разрешение.</p>\n<p>Организатор и&nbsp;Старший могут видеть геолокацию Ребёнка, если это разрешил Организатор.</p>","hasFirstRowAsHeader":false},"sortOrder":60}],"sortOrder":60},{"id":6404812,"title":"Как работает семейная скидка","items":[{"id":6404813,"universalContent":{"type":"html","content":"<p>В&nbsp;семейную группу можно вступить с&nbsp;любым тарифом, но&nbsp;семейная скидка доступна не&nbsp;на&nbsp;всех.</p>\n\n<p>Размер скидки на&nbsp;тариф зависит от&nbsp;количества участников. Скидка&nbsp;10%&nbsp;&mdash; когда в&nbsp;группе состоит три номера МТС, 15%&nbsp;&mdash; четыре номера, 20%&nbsp;&mdash; пять или больше. Если в&nbsp;группе два участника&nbsp;&mdash; скидка не&nbsp;предусмотрена.</p>\n\n<p>При расчёте скидки учитываются только номера МТС.</p>\n\n<p>Список тарифов, доступных для подключения скидки: МТС&nbsp;Супер, МТС&nbsp;Junior, МТС&nbsp;Junior+, РИИЛ, МТС&nbsp;Мудрый, RED, МТС&nbsp;ТОП, МТС&nbsp;ТОП+, Smart&nbsp;Гостевой, Smart&nbsp;Гостевой&nbsp;плюс, РИИЛ&nbsp;Плюс, МТС&nbsp;Дома&nbsp;Отлично, МТС&nbsp;Дома&nbsp;Выгодно, МТС&nbsp;Дома&nbsp;для&nbsp;Своих, МТС&nbsp;Дома&nbsp;по-новому, МТС&nbsp;Дома&nbsp;Супер, МТС&nbsp;Синергия, Люблю&nbsp;Саратов, Люблю&nbsp;Самару, Люблю&nbsp;Красноярск, Люблю&nbsp;Забайкалье, Люблю&nbsp;Нижний&nbsp;Новгород, Люблю&nbsp;Татарстан, Тариф&nbsp;&#8470;&nbsp;112</p>\n\n<p>Сохраняются скидки&nbsp;20% на&nbsp;тариф МТС&nbsp;Мудрый с&nbsp;ролью Старший и&nbsp;20% на&nbsp;тариф МТС&nbsp;Junior с&nbsp;ролью Ребёнок.</p>\n\n<p>С&nbsp;19&nbsp;ноября 2026 эти условия будут действовать для всех групп, которые получают скидку.</p>\n\n<p>С&nbsp;11&nbsp;ноября 2026 года семейная скидка не&nbsp;действует в&nbsp;Группе для близких, но&nbsp;остальные возможности семейной группы сохраняются. Если выйти из&nbsp;Группы для близких, скидка вернётся.</p>","hasFirstRowAsHeader":false},"sortOrder":50}],"sortOrder":50}]},"baseSettings":{"paddingsTopInternal":{"id":5777959,"title":"0-0-0-0-0-0-0","desktopXl":"0","desktopL":"0","desktopM":"0","desktopS":"0","desktopXs":"0","tablet":"0","mobile":"0"},"paddingsBottomInternal":{"id":6314477,"title":"160-160-128-128-96-96-64","desktopXl":"160","desktopL":"160","desktopM":"128","desktopS":"128","desktopXs":"96","tablet":"96","mobile":"64"},"paddingsExternal":{"id":5777959,"title":"0-0-0-0-0-0-0","desktopXl":"0","desktopL":"0","desktopM":"0","desktopS":"0","desktopXs":"0","tablet":"0","mobile":"0"},"shapeSection":"square"},"document":{"title":"Семейная группа."},"mediaArticles":{"articles":[]},"zoneName":"MainZone","id":1460104,"productInfo":{"productId":6403655,"marketingProductId":6403653,"productAlias":"semejnaya-gruppa","productTitle":"Семейная группа","productType":"Service"},"orderOnPage":3,"isMainPage":false,"widgetAlias":""}];
+    </script>
+    <script src="/bundles/angular/universalPage.js?v=G1J_t9FNMynLIvEjFWt86uD0rdkKWYnrwopuYIdNmdg" defer="" type="module" fetchpriority="high"></script>
+
+    <!--noindex-->
+    <div class="robots-noindex noindex robots-nocontent">
+        
+        
+        
+<script>
+    window.globalSettings.tooltipWidgets = window.globalSettings.tooltipWidgets || []
+    window.globalSettings.tooltipWidgets.push({"text":"Ваш тариф, баланс, расходы и&nbsp;управление подключёнными услугами","textColor":"","backgroundColor":"","userType":"auth","selector":"profile-widget-app","repeatCount":20,"repeatHours":24,"showTime":10000,"locationBehavior":"Profile"})
+</script>
+<script>
+    window.globalSettings.tooltipWidgets = window.globalSettings.tooltipWidgets || []
+    window.globalSettings.tooltipWidgets.push({"text":"Личный кабинет: здесь ваш тариф, баланс, расходы и&nbsp;подключённые услуги","textColor":"","backgroundColor":"","userType":"unauth","selector":"profile-widget-app","repeatCount":20,"repeatHours":24,"showTime":10000,"locationBehavior":"Profile"})
+</script>
+        
+        
+<script>
+    window.globalSettings.paymentWidget = {"widgetScriptUrl":"https://pay.mts.ru/assets/js/web-sdk/v1/sdk.js","amount":500.0,"widgetEnvironment":"PROD"};
+</script>
+
+<div id="payment-widget"></div>
+        
+    </div>
+    <!--/noindex-->
+</body>
+</html>
