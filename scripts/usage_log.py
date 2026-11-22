@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 IDLE_GAP_MINUTES = 30.0
+BURST_SECONDS = 5.0
 AGENT_LOG_DIR = "agent-logs"
 AGENT_LOG_ENV = "STRAT_AGENT_LOGS"
 
@@ -41,8 +42,17 @@ def parse_ts(value: object) -> datetime | None:
     return stamp
 
 
-def journal_minutes(entries: list[dict], idle_gap: float = IDLE_GAP_MINUTES) -> dict:
-    """Wall-clock minutes per stage from neighbouring log timestamps."""
+def journal_minutes(
+    entries: list[dict],
+    idle_gap: float = IDLE_GAP_MINUTES,
+    burst_seconds: float = BURST_SECONDS,
+) -> dict:
+    """Wall-clock minutes per stage from neighbouring log timestamps.
+
+    A gap goes to the stage of the later record. When the later record opens a
+    burst of records written within ``burst_seconds`` of each other and the
+    burst names several stages, the gap is split equally between them.
+    """
     stamped = []
     for order, entry in enumerate(entries):
         stamp = parse_ts(entry.get("ts"))
@@ -56,14 +66,28 @@ def journal_minutes(entries: list[dict], idle_gap: float = IDLE_GAP_MINUTES) -> 
     stamped.sort()
     by_stage: dict[int, float] = {}
     pauses = 0
-    for (before, _o1, _s1), (after, _o2, stage) in zip(stamped, stamped[1:]):
+    for index in range(1, len(stamped)):
+        before = stamped[index - 1][0]
+        after, _order, stage = stamped[index]
         gap = (after - before).total_seconds() / 60.0
         if gap < 0:
             continue
         if gap > idle_gap:
             pauses += 1
             continue
-        by_stage[stage] = by_stage.get(stage, 0.0) + gap
+        stages = [stage]
+        if gap * 60.0 > burst_seconds:
+            # Several stages logged in one burst («стратегия», «план проверки» in the
+            # same second) were worked on together before it. The gap is theirs, shared.
+            stages = []
+            for later in range(index, len(stamped)):
+                if later > index and (stamped[later][0] - stamped[later - 1][0]).total_seconds() > burst_seconds:
+                    break
+                if stamped[later][2] not in stages:
+                    stages.append(stamped[later][2])
+        share = gap / len(stages)
+        for item in stages:
+            by_stage[item] = by_stage.get(item, 0.0) + share
     for _stamp, _order, stage in stamped:
         by_stage.setdefault(stage, 0.0)
     return {
@@ -92,29 +116,50 @@ def _usage_numbers(usage: dict) -> dict[str, int]:
     }
 
 
-def read_turn_log(path: Path) -> list[dict]:
-    """Every ``result`` record with usage in one stream-json file."""
+def scan_turn_log(path: Path) -> tuple[list[dict], str | None]:
+    """``result`` records with usage, and what is wrong with the file if anything.
+
+    A turn that was cut off (limit, crash, killed client) leaves a log without
+    its closing ``result`` record. Its tokens are spent but unknown, so the
+    total is understated; the problem text says so instead of staying silent.
+    """
     turns: list[dict] = []
     models: list[str] = []
     try:
         handle = path.open(encoding="utf-8", errors="replace")
-    except OSError:
-        return turns
+    except OSError as exc:
+        return turns, f"не читается ({exc})"
+    records = 0
+    broken = 0
+    after_result = 0
+    errors = 0
     with handle:
         for line in handle:
             line = line.strip()
+            if not line:
+                continue
             if not line.startswith("{"):
+                broken += 1
                 continue
             try:
                 record = json.loads(line)
             except json.JSONDecodeError:
+                broken += 1
                 continue
             if not isinstance(record, dict):
                 continue
+            records += 1
             model = record.get("model")
             if record.get("type") == "system" and isinstance(model, str) and model and model not in models:
                 models.append(model)
-            if record.get("type") != "result" or not isinstance(record.get("usage"), dict):
+            if record.get("type") != "result":
+                if turns:
+                    after_result += 1
+                continue
+            after_result = 0
+            if record.get("is_error") or str(record.get("subtype") or "success") not in {"success", ""}:
+                errors += 1
+            if not isinstance(record.get("usage"), dict):
                 continue
             numbers = _usage_numbers(record["usage"])
             turn = {
@@ -128,7 +173,23 @@ def read_turn_log(path: Path) -> list[dict]:
             if isinstance(cost, (int, float)):
                 turn["cost_usd"] = float(cost)
             turns.append(turn)
-    return turns
+    problem = None
+    if records == 0:
+        problem = "пустой или не stream-json" + (f" ({broken} строк не JSON)" if broken else "")
+    elif not turns:
+        problem = "нет итоговой записи result: ход оборван, его токены не учтены"
+    elif after_result:
+        problem = f"после итоговой записи ещё {after_result} событий: журнал продолжен и оборван, хвост не учтён"
+    elif errors:
+        problem = "клиент агента закончил ход с ошибкой (is_error)"
+    elif broken:
+        problem = f"{broken} строк не разобраны как JSON: журнал мог быть обрезан"
+    return turns, problem
+
+
+def read_turn_log(path: Path) -> list[dict]:
+    """Every ``result`` record with usage in one stream-json file."""
+    return scan_turn_log(path)[0]
 
 
 def candidate_logs(project: Path | None, explicit: list[str] | None = None) -> list[Path]:
@@ -156,8 +217,12 @@ def candidate_logs(project: Path | None, explicit: list[str] | None = None) -> l
 def agent_usage(project: Path | None, explicit: list[str] | None = None) -> dict:
     files = candidate_logs(project, explicit)
     turns: list[dict] = []
+    incomplete: list[dict] = []
     for path in files:
-        turns.extend(read_turn_log(path))
+        found, problem = scan_turn_log(path)
+        turns.extend(found)
+        if problem:
+            incomplete.append({"file": str(path), "name": path.name, "problem": problem})
     total = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "duration_ms": 0}
     cost = 0.0
     has_cost = False
@@ -177,6 +242,7 @@ def agent_usage(project: Path | None, explicit: list[str] | None = None) -> dict
         "total": total,
         "cost_usd": cost if has_cost else None,
         "models": models,
+        "incomplete": incomplete,
     }
 
 
@@ -186,7 +252,21 @@ def fmt(value: float) -> str:
     return f"{value:.1f}".replace(".", ",")
 
 
+def format_incomplete(report: dict) -> list[str]:
+    items = report.get("incomplete") or []
+    if not items:
+        return []
+    lines = [f"ВНИМАНИЕ: неполных журналов ходов {len(items)} — расход ниже фактического:"]
+    for item in items:
+        lines.append(f"- {item['name']}: {item['problem']}")
+    return lines
+
+
 def format_agent_usage(report: dict) -> list[str]:
+    return _format_agent_usage(report) + format_incomplete(report)
+
+
+def _format_agent_usage(report: dict) -> list[str]:
     turns = report["turns"]
     if not turns:
         if report["files"]:

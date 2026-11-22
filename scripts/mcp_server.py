@@ -862,6 +862,7 @@ def handle_cost(arguments: dict) -> dict:
         data["journal_minutes"] = round(clock["total"], 1)
         agent = strat.usage_log.agent_usage(project)
         data["agent_usage"] = agent["total"] if agent["turns"] else None
+        data["incomplete_agent_logs"] = [item["name"] + ": " + item["problem"] for item in agent.get("incomplete") or []]
     return finish(code, text, data)
 
 

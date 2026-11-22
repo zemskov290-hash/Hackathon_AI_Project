@@ -158,6 +158,7 @@ scripts/interview.py              гайд, обезличивание, разб
 scripts/grounding.py              числа, проверяемые ссылки, ПДн в интервью
 scripts/derivation_check.py       вывод чисел прогноза: формула, а не только ссылка [U…]
 scripts/plan_review.py            экономика варианта, барьер коммуникации, заглушки, служебные метки
+scripts/usage_log.py              минуты по журналу и токены по журналам ходов агента
 scripts/mcp_server.py             MCP по stdio, те же команды
 scripts/read_material.py          текст из файла, офисные форматы по желанию
 hooks/                            скрипты и как их включить
