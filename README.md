@@ -154,7 +154,11 @@ scripts/portability.py            матрица адаптеров Cursor, Clau
 scripts/analysis.py               расчёт таблиц, его вызывает и CLI, и MCP
 scripts/analysis_runner.py        запуск скрипта анализа без сети и вне папки проекта
 scripts/inspect_media.py          DOM, изображение, PDF, расшифровка
-scripts/kb.py                     база знаний: BM25 и необязательная семантика
+scripts/kb.py                     база знаний: BM25, поиск по основам слов и синонимам, необязательная семантика
+scripts/kb_graph.py               база знаний по связям: trace S → E → U → вариант → строка стратегии
+scripts/routing.py                самокоррекция маршрута: один записанный повтор после брака
+scripts/media.py                  аудио и видео: готовая расшифровка, локальный whisper или честный пробел
+scripts/case_compare.py           полный кейс: агент против чата, время, токены, рубли по заданной цене
 scripts/interview.py              гайд, обезличивание, разбор реплик
 scripts/grounding.py              числа, проверяемые ссылки, ПДн в интервью
 scripts/derivation_check.py       вывод чисел прогноза: формула, а не только ссылка [U…]
@@ -171,6 +175,7 @@ projects/demo-family-tariffs/     снимок прогона; ответы ли
 projects/demo-analysis/           синтетический расчёт и разбор витрины
 bench/                            задачи бенчмарка на синтетических данных
 docs/benchmark.md                 сводка агент vs чат; пустая, пока нет прогонов
+docs/comparison.md                сравнение с исходным способом: измеренное и пробелы
 docs/portability.md               матрица сред
 docs/decisions/                   почему ядро, модели, граф, хуки, MCP, анализ, бенчмарк
 docs/devlog.md                    журнал разработки
