@@ -156,6 +156,7 @@ scripts/inspect_media.py          DOM, изображение, PDF, расшиф
 scripts/kb.py                     база знаний: BM25 и необязательная семантика
 scripts/interview.py              гайд, обезличивание, разбор реплик
 scripts/grounding.py              числа, проверяемые ссылки, ПДн в интервью
+scripts/derivation_check.py       вывод чисел прогноза: формула, а не только ссылка [U…]
 scripts/mcp_server.py             MCP по stdio, те же команды
 scripts/read_material.py          текст из файла, офисные форматы по желанию
 hooks/                            скрипты и как их включить

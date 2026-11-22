@@ -623,7 +623,7 @@ def handle_indicators_table(arguments: dict) -> dict:
 
 def handle_add_assumption(arguments: dict) -> dict:
     project = confine_project(arguments["project"])
-    value = reject_dash(arguments["value"], "value")
+    value = reject_dash(arguments.get("value") or "", "value")
     name = reject_dash(arguments["name"], "name")
     unit = reject_dash(arguments.get("unit") or "", "unit")
     note = reject_dash(arguments.get("note") or "", "note")
@@ -647,6 +647,9 @@ def handle_add_assumption(arguments: dict) -> dict:
             forecast_role=arguments.get("forecast_role") or "initiative",
             because=arguments.get("because") or "",
             because_file=None,
+            qualitative=bool(arguments.get("qualitative")),
+            derivation=reject_dash(arguments.get("derivation") or "", "derivation"),
+            derivation_file=None,
         ),
     )
     data: dict = {"project": project.name, "kind": arguments["kind"]}
@@ -1465,7 +1468,9 @@ def build_tools() -> list[dict]:
             "strat_add_assumption",
             "Записать число, которого нет в источнике: допущение, прогноз или оценка. "
             "Идентификатор U001, ссылка в тексте [U001]. Якорь анализа [A001.метрика] не затрагивается. "
-            "В том же предложении должно быть слово kind. value — само число: 200, 400 тыс., 1,2 млн, 60%.",
+            "В том же предложении должно быть слово kind. value — само число: 200, 400 тыс., 1,2 млн, 60%. "
+            "Посылка без величины — qualitative: true, без «1 флаг». "
+            "Число, которое входит в расчёт прогноза, получает derivation — формулу из [U…]/[E…]/[Q…].",
             project_schema(
                 {
                     "kind": {
@@ -1488,8 +1493,16 @@ def build_tools() -> list[dict]:
                         "Почему прогноз хуже сценария без изменений, если так вышло.",
                         max_length=2_000,
                     ),
+                    "qualitative": {
+                        "type": "boolean",
+                        "description": "Посылка без величины («пилот без перестройки биллинга»). Число не нужно.",
+                    },
+                    "derivation": string_prop(
+                        "Откуда число: формула из [U…]/[E…]/[S…]/[Q…], например `[U010] * 0,6 = 6000`.",
+                        max_length=1_000,
+                    ),
                 },
-                ["kind", "value", "name"],
+                ["kind", "name"],
             ),
             {**MUTATION, "title": "Записать допущение"},
             handle_add_assumption,

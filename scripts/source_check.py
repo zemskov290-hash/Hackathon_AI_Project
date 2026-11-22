@@ -689,10 +689,25 @@ def load_assumptions(project: Path) -> tuple[dict[str, dict], str | None]:
             return {}, f"повторяется допущение {assumption_id}"
         if row.get("kind") not in ASSUMPTION_KINDS:
             return {}, f"{assumption_id}: kind должен быть допущение, прогноз или оценка"
-        if parse_quantity(str(row.get("value") or "")) is None:
-            return {}, f"{assumption_id}: в value нет числа"
+        if not is_qualitative(row) and parse_quantity(str(row.get("value") or "")) is None:
+            return {}, f"{assumption_id}: в value нет числа (качественное допущение — поле qualitative: true)"
         by_id[assumption_id] = row
     return by_id, None
+
+
+# Units that only say «yes, this premise holds». Older registries stored a
+# qualitative premise as value 1 with such a unit; the number means nothing.
+FLAG_UNITS = {"флаг", "flag", "признак", "да/нет", "bool", "boolean"}
+FLAG_MARKER_RE = re.compile(r"(?<![\w.,])[01]\s*(?:флаг\w*|flag\w*|признак\w*)(?!\w)", re.IGNORECASE)
+
+
+def is_qualitative(row: dict) -> bool:
+    """A premise without a magnitude: «pilot without billing rework», not «6000 months»."""
+    if row.get("qualitative") is True or str(row.get("qualitative") or "").casefold() in {"true", "yes", "да", "1"}:
+        return True
+    unit = re.sub(r"\s+", " ", str(row.get("unit") or "")).strip().casefold().rstrip(".")
+    value = str(row.get("value") or "").strip()
+    return unit in FLAG_UNITS and value in {"0", "1"}
 
 
 def _assumption_label(row: dict) -> str:
@@ -709,7 +724,9 @@ def _assumption_label(row: dict) -> str:
 
 
 def assumption_quantity(row: dict) -> Quantity | None:
-    """Number from value plus unit. «4» and «млн» is 4 million, not 4."""
+    """Number from value plus unit. «4» and «млн» is 4 million, not 4. None for a qualitative premise."""
+    if is_qualitative(row):
+        return None
     value = str(row.get("value") or "").strip()
     unit = str(row.get("unit") or "").strip()
     direct = parse_quantity(value)
@@ -844,7 +861,7 @@ def _substitute_assumptions(body: str, assumptions: dict[str, dict]) -> str:
             return match.group(0)
         quantity = assumption_quantity(row)
         if quantity is None:
-            missing.append(assumption_id)
+            missing.append(assumption_id + (" (качественное, без числа)" if is_qualitative(row) else ""))
             return match.group(0)
         literal = format(quantity.value, "f")
         if quantity.percent:

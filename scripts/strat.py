@@ -33,6 +33,7 @@ import kb
 import indicators
 import optional_packages
 import evidence_honesty
+import derivation_check
 import source_check
 import tls_fallback
 import usage_log
@@ -1538,12 +1539,13 @@ def cmd_add_assumption(args: argparse.Namespace) -> int:
             "kind: допущение, прогноз или оценка. "
             "Это не якорь анализа: анализ остаётся [A001.метрика], допущение — [U001]."
         )
+    qualitative = str(getattr(args, "qualitative", "") or "").strip().casefold() in {"true", "1", "yes", "да"}
     value = resolve_text(
         args.value,
         args.value_file,
         label="значение допущения",
         env_name="STRAT_ASSUMPTION_VALUE",
-        required=True,
+        required=not qualitative,
     )
     name = resolve_text(
         args.name,
@@ -1582,9 +1584,37 @@ def cmd_add_assumption(args: argparse.Namespace) -> int:
         label="обоснование прогноза",
         env_name="STRAT_BECAUSE",
     ) or ""
+    derivation = resolve_text(
+        getattr(args, "derivation", None),
+        getattr(args, "derivation_file", None),
+        label="вывод числа",
+        env_name="STRAT_DERIVATION",
+    ) or ""
     forecast_role = str(getattr(args, "forecast_role", "") or "").strip() or "initiative"
-    if source_check.parse_quantity(value or "") is None:
-        die("В значении нет числа. Пример: 200, 400 тыс., 1,2 млн, 60%, 8 п.п.")
+    unit_folded = re.sub(r"\s+", " ", unit).strip().casefold().rstrip(".")
+    if not qualitative and unit_folded in source_check.FLAG_UNITS:
+        die(
+            "Посылку без величины не записывают числом «1 флаг»: такая метка потом попадает в текст и обещания. "
+            "Запишите её как качественное допущение: --qualitative (в JSON \"qualitative\": true), "
+            "value — сама формулировка или пусто."
+        )
+    if qualitative:
+        if kind != "допущение":
+            die("Качественным бывает только допущение. Прогноз и оценка — это число.")
+        if getattr(args, "indicator", None) or getattr(args, "indicator_file", None):
+            die("К показателю привязывают прогноз с числом, не качественное допущение.")
+        if derivation.strip():
+            die("У качественного допущения нет числа, выводить нечего. Уберите derivation.")
+        value = (value or "").strip() or (name or "").strip()
+    elif source_check.parse_quantity(value or "") is None:
+        die(
+            "В значении нет числа. Пример: 200, 400 тыс., 1,2 млн, 60%, 8 п.п. "
+            "Посылка без величины — качественное допущение: --qualitative."
+        )
+    if derivation.strip():
+        problem = derivation_check.validate_derivation(derivation, value or "", unit, project)
+        if problem:
+            die(problem)
     if indicators.gaming_note(note) or indicators.gaming_note(because):
         die(
             "В заметке нельзя писать, что число подогнано под проверку. "
@@ -1603,6 +1633,11 @@ def cmd_add_assumption(args: argparse.Namespace) -> int:
         "note": note.strip(),
         "status": "active",
     }
+    if qualitative:
+        record["qualitative"] = True
+        record["unit"] = ""
+    if derivation.strip():
+        record["derivation"] = derivation.strip()
     if indicator_name.strip():
         if kind != "прогноз":
             die("К показателю привязывают только прогноз. Допущение без показателя записывайте как раньше.")
@@ -1670,6 +1705,13 @@ def cmd_add_assumption(args: argparse.Namespace) -> int:
     rows.append(record)
     save_jsonl(project / "assumptions.jsonl", rows)
     print(f"id: {assumption_id}")
+    if qualitative:
+        print(
+            f"Качественное допущение записано: {assumption_id} («{record['value']}»). "
+            f"В тексте ссылка [{assumption_id}] рядом со словом «допущение» и смыслом посылки. "
+            "Число и метки вида «1 флаг» рядом с ним не пишут."
+        )
+        return 0
     print(
         f"Допущение записано: {assumption_id} ({kind}, {record['value']}). "
         f"В тексте ссылка [{assumption_id}], в том же предложении — слово «{kind}». "
@@ -2705,6 +2747,7 @@ def check_project(project: Path, state: dict | None = None, *, strict: bool = Fa
     source_check.review(project, texts, sources, evidence, add)
     evidence_honesty.review(project, texts, sources, evidence, add)
     indicators.review(project, texts, add)
+    derivation_check.review(project, texts, add)
     grounding.review_project_layout(project, add)
     grounding.review_temp_files(project, add)
     grounding.review_privacy(project, add)
@@ -4905,6 +4948,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_assumption.add_argument("--because", help="почему прогноз хуже сценария без изменений, если так вышло")
     add_assumption.add_argument("--because-file", help="обоснование из файла UTF-8")
+    add_assumption.add_argument(
+        "--qualitative",
+        action="store_true",
+        help="посылка без величины («пилот без перестройки биллинга»); число и «1 флаг» не пишут",
+    )
+    add_assumption.add_argument(
+        "--derivation",
+        help="откуда число: формула из [U…]/[E…]/[S…]/[Q…], например «`[U010] * 0,6 = 6000`»",
+    )
+    add_assumption.add_argument("--derivation-file", help="вывод числа из файла UTF-8")
     add_assumption.add_argument(
         "--json",
         help="объект или список объектов UTF-8; «-» читает stdin. Не кладите этот файл в папку проекта",
