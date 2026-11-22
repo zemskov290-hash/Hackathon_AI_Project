@@ -42,6 +42,24 @@ class InterviewJunkTests(unittest.TestCase):
             self.assertNotIn("Роль", text)
             self.assertNotIn("Как вы узнаёте", text)
 
+    def test_bold_callouts_are_not_speakers(self) -> None:
+        transcript = (
+            "**Важно:** это не разговор с реальным человеком. Персона «[имя]» собрана из учебного брифа. "
+            "Нельзя цитировать как факт.\n\n"
+            "**Профиль (вымышленный):** женщина около 45 лет.\n\n"
+            "**В:** Как вы в последний раз создавали семейную группу?\n\n"
+            "**[имя]:** Создала группу в приложении, мама тянула с приглашением неделю.\n\n"
+            "**В:** Как часто заходите в раздел?\n\n"
+            "**[имя]:** Раз в месяц, когда приходит счёт или кто-то жалуется на списание.\n"
+        )
+        quotes = [item["text"] for item in interview.analyse(transcript, [], synthetic=True)["quotes"]]
+        self.assertEqual(len(quotes), 2, quotes)
+        self.assertTrue(quotes[0].startswith("Создала группу"))
+        for text in quotes:
+            self.assertNotIn("реальным", text)
+            self.assertNotIn("Персона", text)
+            self.assertNotIn("*", text)
+
     def test_synthetic_records_are_not_hypotheses(self) -> None:
         rows = [
             {"id": "E001", "type": "synthetic", "status": "active", "claim": "ребёнок пишет что всё встало"},

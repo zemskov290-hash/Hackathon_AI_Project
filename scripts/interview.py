@@ -160,7 +160,9 @@ SPEAKER_LINE_RE = re.compile(r"^\s*(?:\*\*)?([\[\]A-Za-zА-Яа-яЁё ]{1,24}?)
 SERVICE_RE = re.compile(
     r"синтетическ\w*\s+(?:интервью|расшифровк\w*|респондент\w*|реплик\w*|персон\w*|данн\w*)|"
     r"не\s+является\s+реальн|не\s+голос\s+клиента|не\s+реальн\w*\s+(?:интервью|человек|респондент)|"
-    r"вымышлен|персона\s+собрана|живого\s+респондента\s+нет|обезличенн\w*\s+выдержк|"
+    r"вымышлен|персон\w*\b[^.]{0,40}\bсобран|живого\s+респондента\s+нет|обезличенн\w*\s+выдержк|"
+    r"не\s+(?:разговор|беседа|диалог|интервью)\s+с\s+(?:реальн|живым)|"
+    r"нельзя\s+(?:цитировать|использовать)\s+(?:как\s+факт|для\s+подтвержд)|"
     r"^\[?(?:участник|респондент)\]?\s*:\s*\d{4}-\d{2}-\d{2}",
     re.IGNORECASE,
 )
@@ -176,6 +178,10 @@ def is_service_line(sentence: str) -> bool:
     return SERVICE_RE.search(text) is not None
 
 
+# A placeholder left by anonymisation stands for the respondent's name.
+NAME_PLACEHOLDERS = {"имя", "участник", "респондент", "name"}
+
+
 def _speaker(line: str) -> tuple[str, str] | None:
     match = SPEAKER_LINE_RE.match(line)
     if not match:
@@ -183,7 +189,8 @@ def _speaker(line: str) -> tuple[str, str] | None:
     label = match.group(1).strip().strip("[]").strip().casefold()
     if not label or len(label.split()) > 2:
         return None
-    return label, match.group(2)
+    said = match.group(2).strip().lstrip("*_").strip()
+    return label, said
 
 
 def reply_lines(text: str) -> list[str]:
@@ -201,6 +208,26 @@ def reply_lines(text: str) -> list[str]:
     has_dialogue = any(
         item is not None and item[0] in INTERVIEWER_LABELS for item, _line in labelled
     )
+    if has_dialogue:
+        # A speaker talks more than once. A one-off bold label («**Важно:** …»,
+        # «**Профиль:** …») is a callout of the file, not a person.
+        counts: dict[str, int] = {}
+        for item, _line in labelled:
+            if item is not None:
+                counts[item[0]] = counts.get(item[0], 0) + 1
+        labelled = [
+            (
+                item
+                if item is None
+                or item[0] in INTERVIEWER_LABELS
+                or item[0] in ROLE_LABELS
+                or item[0] in NAME_PLACEHOLDERS
+                or counts.get(item[0], 0) >= 2
+                else None,
+                line,
+            )
+            for item, line in labelled
+        ]
     kept = []
     for item, line in labelled:
         if has_dialogue:
