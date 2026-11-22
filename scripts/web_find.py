@@ -14,7 +14,9 @@ import re
 from html.parser import HTMLParser
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote_plus, urljoin, urlparse, urlunparse
-from urllib.request import Request, urlopen
+from urllib.request import Request
+
+import tls_fallback
 
 # A library-style agent token gets HTTP 202 from DuckDuckGo: an anti-bot stub, not a result page.
 # A normal browser GET is what returns the HTML the parsers read.
@@ -41,7 +43,7 @@ def http_get(url: str) -> tuple[int, str]:
     """Return HTTP status and decoded body. Network failures raise WebError."""
     request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.1"})
     try:
-        with urlopen(request, timeout=TIMEOUT) as response:
+        with tls_fallback.urlopen(request, timeout=TIMEOUT) as response:
             raw = response.read(LIMIT_BYTES + 1)
             charset = response.headers.get_content_charset() or "utf-8"
             status = getattr(response, "status", 200) or 200

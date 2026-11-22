@@ -34,6 +34,7 @@ import indicators
 import optional_packages
 import evidence_honesty
 import source_check
+import tls_fallback
 import usage_log
 import web_find
 
@@ -1024,7 +1025,7 @@ def download_url_once(url: str) -> tuple[str, str, str]:
         headers={"User-Agent": FETCH_USER_AGENT, "Accept": "text/html,text/plain;q=0.9,*/*;q=0.1"},
     )
     try:
-        with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT_SECONDS) as response:
+        with tls_fallback.urlopen(request, timeout=FETCH_TIMEOUT_SECONDS) as response:
             chunks: list[bytes] = []
             total = 0
             truncated = False
@@ -1044,6 +1045,8 @@ def download_url_once(url: str) -> tuple[str, str, str]:
         retryable = exc.code in {429, 500, 502, 503, 504}
         raise FetchFailed(f"Страница не открылась: HTTP {exc.code} для {url}.", retryable) from exc
     except urllib.error.URLError as exc:
+        if tls_fallback.is_cert_failure(exc):
+            raise FetchFailed(f"Адрес не открылся: {url}. {tls_fallback.CERT_HINT} {exc.reason}", False) from exc
         raise FetchFailed(
             f"Сеть недоступна или адрес не открылся: {url}. {exc.reason}",
             True,
