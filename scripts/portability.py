@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -96,13 +97,17 @@ def shell_problems(command: str) -> list[str]:
     return problems
 
 
+INTERPRETERS = ("python", "python3", "py")
+
+
 def split_hook_command(command: str) -> list[str] | None:
-    prefix = 'python -c "'
-    if not command.startswith(prefix) or command.count('"') != 2:
+    interpreter, _, rest = command.partition(" ")
+    prefix = '-c "'
+    if interpreter not in INTERPRETERS or not rest.startswith(prefix) or command.count('"') != 2:
         return None
-    rest = command[len(prefix) :]
+    rest = rest[len(prefix) :]
     source, _, name = rest.partition('"')
-    argv = ["python", "-c", source]
+    argv = [interpreter, "-c", source]
     tail = name.strip()
     if tail:
         argv.append(tail)
@@ -130,7 +135,7 @@ def mcp_argv(payload: dict) -> list[str] | None:
         return None
     command = item.get("command")
     args = item.get("args")
-    if command != "python" or not isinstance(args, list) or not args:
+    if command not in INTERPRETERS or not isinstance(args, list) or not args:
         return None
     return [str(command), *[str(arg) for arg in args]]
 
@@ -199,7 +204,23 @@ def subagent_files_ok(root: Path) -> list[str]:
     return problems
 
 
+SUBSTITUTED: set[str] = set()
+
+
+def resolve_interpreter(argv: list[str]) -> list[str]:
+    """Run the config's interpreter; if it is not on PATH, use this Python and remember that.
+
+    The IDE would fail with the same config, so the report names the gap and the fix
+    (regenerate configs with --python python3) instead of hiding it.
+    """
+    if shutil.which(argv[0]):
+        return argv
+    SUBSTITUTED.add(argv[0])
+    return [sys.executable, *argv[1:]]
+
+
 def launch(argv: list[str], stdin: bytes, root: Path, timeout: float = 20) -> subprocess.CompletedProcess[bytes]:
+    argv = resolve_interpreter(argv)
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
     env["CURSOR_PROJECT_DIR"] = str(root)
@@ -444,6 +465,45 @@ def evaluate(root: Path | None = None, *, live: bool = True) -> dict:
     return {"root": str(root), "live": live, "cells": cells, "errors": unique_errors, "ok": not unique_errors}
 
 
+def configured_interpreters(root: Path) -> list[str]:
+    """Interpreter names the IDE configs start: hooks and MCP."""
+    names: list[str] = []
+    for rel in (*HOOK_FILES.values(), *MCP_FILES.values()):
+        text = read_text(root, rel)
+        if not text:
+            continue
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        commands: list[str] = []
+        walk_commands(payload, commands)
+        for command in commands:
+            name = command.split(" ", 1)[0]
+            if name in INTERPRETERS and name not in names:
+                names.append(name)
+    return names
+
+
+def interpreter_warning(root: Path | None = None) -> str | None:
+    """Name a config interpreter missing from PATH and the command that fixes it."""
+    root = (root or ROOT).resolve()
+    missing = [name for name in configured_interpreters(root) if not shutil.which(name)]
+    if not missing:
+        return None
+    present = next((name for name in INTERPRETERS if shutil.which(name)), None)
+    fix = (
+        f" Перепишите конфиги: {present} hooks/launcher.py --python {present} и "
+        f"{present} scripts/mcp_server.py --write-configs --python {present}."
+        if present
+        else ""
+    )
+    return (
+        f"Предупреждение: в PATH нет {', '.join(missing)}, а конфиги хуков и MCP запускают именно его. "
+        f"IDE с этими конфигами хук и MCP не стартует.{fix}"
+    )
+
+
 def summary_line(report: dict) -> str:
     if report["ok"] and not report["live"]:
         return (
@@ -456,7 +516,15 @@ def summary_line(report: dict) -> str:
 
 
 def render_text(report: dict) -> str:
-    lines = [summary_line(report), ""]
+    lines = [summary_line(report)]
+    warning = interpreter_warning(Path(report["root"]))
+    if warning:
+        lines.append(warning)
+    if SUBSTITUTED:
+        lines.append(
+            f"Живой запуск шёл через {sys.executable}: в PATH нет {', '.join(sorted(SUBSTITUTED))}."
+        )
+    lines.append("")
     for env_id, title in ENVIRONMENTS:
         bits = []
         for cap in CAPABILITIES:

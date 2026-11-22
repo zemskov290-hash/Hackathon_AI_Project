@@ -4244,6 +4244,9 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
 
         report = portability.evaluate(ROOT, live=False)
         print(portability.summary_line(report))
+        warning = portability.interpreter_warning(ROOT)
+        if warning:
+            print(warning)
         port_ok = bool(report["ok"])
     except Exception as exc:  # noqa: BLE001 — doctor reports a broken install instead of crashing
         print(f"Переносимость: проверка не выполнена. {scrub(str(exc))}")

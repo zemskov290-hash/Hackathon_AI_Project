@@ -5,15 +5,15 @@ stdout is JSON-RPC 2.0 (newline-delimited, or Content-Length if the client
 uses that framing). Logs go to stderr only. Tool handlers call ``strat``
 functions; they do not reimplement checks, gates, or registries.
 
-Regenerate IDE configs after editing ``LAUNCH_PROGRAM``::
+Regenerate IDE configs after editing ``BOOTSTRAP_PARTS``::
 
     python scripts/mcp_server.py --write-configs
+    python scripts/mcp_server.py --write-configs --python python3
 """
 
 from __future__ import annotations
 
 import argparse
-import base64
 import io
 import json
 import os
@@ -80,53 +80,20 @@ INSTRUCTIONS = (
     "Ответ без чисел допустим. Не отправляй ответ, пока инструмент сообщает ошибки."
 )
 
-# Finder baked into the IDE command. Edit it, then run --write-configs.
-# The shell line carries only base64: PowerShell 5.1 expands $VAR and strips
-# inner double quotes from native arguments, so the program cannot be inlined.
-LAUNCH_PROGRAM = r"""
-import os
-import runpy
-import sys
-from pathlib import Path
-
-def climb(start):
-    try:
-        current = Path(start).expanduser()
-    except (OSError, RuntimeError, ValueError):
-        return None
-    try:
-        if not current.exists():
-            return None
-    except OSError:
-        return None
-    for parent in (current, *current.parents):
-        if (parent / "AGENTS.md").is_file() and (parent / "scripts" / "mcp_server.py").is_file():
-            return parent
-    return None
-
-def main():
-    seeds = []
-    for key in ("CURSOR_PROJECT_DIR", "CLAUDE_PROJECT_DIR", "STRAT_REPO_ROOT"):
-        value = os.environ.get(key)
-        if value:
-            seeds.append(value)
-    seeds.append(os.getcwd())
-    root = None
-    for seed in seeds:
-        root = climb(seed)
-        if root is not None:
-            break
-    if root is None:
-        sys.stderr.write("mcp root not found\n")
-        raise SystemExit(1)
-    os.chdir(root)
-    scripts = str(root / "scripts")
-    if scripts not in sys.path:
-        sys.path.insert(0, scripts)
-    runpy.run_path(str(root / "scripts" / "mcp_server.py"), run_name="__main__")
-
-main()
-"""
+# Readable finder baked into the IDE command. Edit it, then run --write-configs.
+# MCP args go to the process without a shell. The same text also works as one
+# PowerShell, cmd or sh line (see shell_command): it has only single quotes and
+# no $, %, backslash or !. It climbs from CURSOR_PROJECT_DIR, CLAUDE_PROJECT_DIR,
+# STRAT_REPO_ROOT and cwd to the root and runs scripts/mcp_launch.py.
+BOOTSTRAP_PARTS = (
+    "import os,runpy,sys",
+    "from pathlib import Path",
+    "hit=lambda s:[p for p in (Path(s),*Path(s).parents) if (p/'scripts'/'mcp_launch.py').is_file() and (p/'AGENTS.md').is_file()] if s else []",
+    "found=[p for k in ('CURSOR_PROJECT_DIR','CLAUDE_PROJECT_DIR','STRAT_REPO_ROOT') for p in hit(os.environ.get(k))]+hit(os.getcwd())",
+    "runpy.run_path(str(found[0]/'scripts'/'mcp_launch.py'),run_name='__main__') if found else sys.exit('mcp root not found')",
+)
+BOOTSTRAP = ";".join(BOOTSTRAP_PARTS)
+INTERPRETERS = ("python", "python3", "py")
 
 
 class ProtocolError(Exception):
@@ -149,56 +116,66 @@ class ToolFailure(Exception):
 
 
 def launch_program() -> str:
-    lines = [line.rstrip() for line in LAUNCH_PROGRAM.strip("\n").splitlines()]
-    text = "\n".join(lines)
-    if not text.endswith("\n"):
-        text += "\n"
-    for banned in ("$", "%"):
-        if banned in text:
+    """The Python passed with -c. Kept free of characters a shell would touch."""
+    for banned in ('"', "$", "%", "\\", "!", "`"):
+        if banned in BOOTSTRAP:
             raise RuntimeError(f"launcher program contains {banned!r}")
-    return text
+    return BOOTSTRAP
 
 
 def command_args() -> list[str]:
-    encoded = base64.b64encode(launch_program().encode("utf-8")).decode("ascii")
-    if any(char in encoded for char in "$%\"'"):
-        raise RuntimeError("base64 of the launcher picked up a shell metacharacter")
-    return ["-c", f"import base64;exec(base64.b64decode('{encoded}'))"]
+    return ["-c", launch_program()]
 
 
-def shell_command() -> str:
-    """One PowerShell/cmd line. The only double quotes wrap the -c payload."""
-    source = command_args()[1]
-    return f'python -c "{source}"'
+def shell_command(interpreter: str = "python") -> str:
+    """One PowerShell/cmd/sh line. The only double quotes wrap the -c payload."""
+    return f'{interpreter} -c "{launch_program()}"'
 
 
-def cursor_config() -> dict:
-    return {"mcpServers": {"strat": {"command": "python", "args": command_args()}}}
+def _interpreter(value: str) -> str:
+    if value not in INTERPRETERS:
+        raise RuntimeError(f"interpreter must be one of {', '.join(INTERPRETERS)}")
+    return value
 
 
-def claude_config() -> dict:
-    return {"mcpServers": {"strat": {"command": "python", "args": command_args()}}}
+def cursor_config(interpreter: str = "python") -> dict:
+    return {"mcpServers": {"strat": {"command": _interpreter(interpreter), "args": command_args()}}}
 
 
-def vscode_config() -> dict:
+def claude_config(interpreter: str = "python") -> dict:
+    return {"mcpServers": {"strat": {"command": _interpreter(interpreter), "args": command_args()}}}
+
+
+def vscode_config(interpreter: str = "python") -> dict:
     return {
         "servers": {
-            "strat": {"type": "stdio", "command": "python", "args": command_args()}
+            "strat": {"type": "stdio", "command": _interpreter(interpreter), "args": command_args()}
         }
     }
 
 
-def config_files() -> dict[Path, dict]:
+def configured_interpreter() -> str:
+    """Interpreter in the committed .cursor/mcp.json, so tests compare like with like."""
+    try:
+        payload = json.loads((strat.ROOT / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
+        command = payload["mcpServers"]["strat"]["command"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError):
+        return "python"
+    return command if command in INTERPRETERS else "python"
+
+
+def config_files(interpreter: str | None = None) -> dict[Path, dict]:
     root = strat.ROOT
+    chosen = interpreter or configured_interpreter()
     return {
-        root / ".cursor" / "mcp.json": cursor_config(),
-        root / ".mcp.json": claude_config(),
-        root / ".vscode" / "mcp.json": vscode_config(),
+        root / ".cursor" / "mcp.json": cursor_config(chosen),
+        root / ".mcp.json": claude_config(chosen),
+        root / ".vscode" / "mcp.json": vscode_config(chosen),
     }
 
 
-def write_configs() -> None:
-    for path, payload in config_files().items():
+def write_configs(interpreter: str = "python") -> None:
+    for path, payload in config_files(interpreter).items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
         print(path.relative_to(strat.ROOT))
@@ -2354,7 +2331,11 @@ def probe(timeout: float = 12.0) -> tuple[bool, str]:
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if "--write-configs" in args:
-        write_configs()
+        interpreter = "python"
+        if "--python" in args:
+            index = args.index("--python")
+            interpreter = args[index + 1] if index + 1 < len(args) else ""
+        write_configs(_interpreter(interpreter))
         return 0
     return serve()
 

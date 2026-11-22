@@ -1,168 +1,113 @@
-"""Readable hook launcher and the command written into the IDE configs.
+"""Writes the hook command into the IDE configs. The hook itself is ``hooks/launch.py``.
 
 Why the command looks the way it does
 --------------------------------------
-Cursor on Windows runs hook commands through PowerShell. A command that
-contains ``$CLAUDE_PROJECT_DIR`` is expanded by PowerShell before Python
-starts. That variable is empty (it is not ``$env:CLAUDE_PROJECT_DIR``), so
-``python "$CLAUDE_PROJECT_DIR/hooks/run.py"`` becomes ``python \\hooks\\run.py``
-and Python opens ``C:\\hooks\\run.py``.
+Cursor on Windows runs hook commands through PowerShell. ``$CLAUDE_PROJECT_DIR``
+in a command is expanded by PowerShell before Python starts. That variable is
+empty (it is not ``$env:CLAUDE_PROJECT_DIR``), so ``python
+"$CLAUDE_PROJECT_DIR/hooks/run.py"`` opens ``C:\\hooks\\run.py``. Cursor's CLI
+has also been seen starting hooks with cwd outside the repository, so a plain
+``python hooks/launch.py`` is not safe either.
 
 Cursor also loads ``.claude/settings.json`` when third-party imports are on
-(the default). Every matching hook runs. If the answers disagree, deny wins
-over allow. A broken Claude hook therefore blocks the action even when
-``.cursor/hooks.json`` would have allowed it.
+(the default). Every matching hook runs. If the answers disagree, deny wins.
 
-The command below is the same in both files. It is::
+PowerShell 5.1 strips double quotes inside an argument of ``python.exe``. So
+the command is one ``python -c "..."`` line with readable Python that has only
+single quotes, no ``$``, no ``%``, no backslash and no ``!``. It reads the hook
+payload from stdin, finds the root (``CURSOR_PROJECT_DIR``,
+``CLAUDE_PROJECT_DIR``, cwd, then ``workspace_roots`` and ``cwd`` from the
+payload), puts the payload back on stdin and runs ``hooks/launch.py <name>``.
+No root: guards answer allow, others ``{}``.
 
-    python -c "import base64;exec(base64.b64decode('<program>'))" <name>
+Regenerate the configs after editing ``BOOTSTRAP``::
 
-PowerShell 5.1 strips double quotes when it starts python.exe, so inlining the
-program (which needs quotes) becomes a SyntaxError, the hook exits 1, and the
-guard fails open. Base64 has no quotes, no ``$`` and no ``%``. It is only
-``PROGRAM`` encoded. Decode a blob with::
-
-    python -c "import base64; print(base64.b64decode('PASTE').decode())"
-
-Regenerate the configs after editing ``PROGRAM``::
-
-    python hooks/launcher.py
+    python hooks/launcher.py                   # interpreter «python»
+    python hooks/launcher.py --python python3  # where only python3 is on PATH
 
 The unit test fails if a committed config drifts from ``command_for``.
 """
 
 from __future__ import annotations
 
-import base64
+import argparse
 import json
 import sys
 from pathlib import Path
 
-# The program encoded into the hook command. Edit this, then run the file.
-PROGRAM = """
-import io
-import json
-import os
-import runpy
-import sys
-from pathlib import Path
-
-def isatty():
-    probe = getattr(sys.stdin, "isatty", None)
-    return bool(probe()) if callable(probe) else False
-
-def payload_of(raw):
-    if not raw.strip():
-        return {}
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError:
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
-
-def seeds(payload):
-    found = []
-    for key in ("CURSOR_PROJECT_DIR", "CLAUDE_PROJECT_DIR"):
-        value = os.environ.get(key)
-        if value:
-            found.append(value)
-    roots = payload.get("workspace_roots") or []
-    if isinstance(roots, str):
-        roots = [roots]
-    if isinstance(roots, list):
-        found.extend(str(item) for item in roots if item)
-    for key in ("cwd", "workspace_root"):
-        value = payload.get(key)
-        if isinstance(value, str) and value:
-            found.append(value)
-    tool = payload.get("tool_input")
-    if isinstance(tool, dict):
-        for key in ("cwd", "working_directory"):
-            value = tool.get(key)
-            if isinstance(value, str) and value:
-                found.append(value)
-    found.append(str(Path.cwd()))
-    return found
-
-def climb(start):
-    if not start:
-        return None
-    current = Path(start).expanduser()
-    for parent in [current, *current.parents]:
-        if (parent / "hooks" / "run.py").is_file() and (parent / "AGENTS.md").is_file():
-            return parent
-    return None
-
-def allow(name):
-    mark = chr(34)
-    if name.startswith("guard_"):
-        sys.stdout.write("{" + mark + "permission" + mark + ":" + mark + "allow" + mark + "}" + chr(10))
-    else:
-        sys.stdout.write("{}" + chr(10))
-    sys.stderr.write("hook root not found" + chr(10))
-
-def main():
-    raw = "" if isatty() else sys.stdin.read()
-    sys.stdin = io.StringIO(raw)
-    payload = payload_of(raw)
-    name = sys.argv[1] if len(sys.argv) > 1 else ""
-    root = None
-    for seed in seeds(payload):
-        root = climb(seed)
-        if root is not None:
-            break
-    if root is None:
-        allow(name)
-        raise SystemExit(0)
-    sys.path[:0] = [str(root / "scripts"), str(root / "hooks")]
-    import stdio_utf8
-    stdio_utf8.configure_stdio()
-    sys.argv = ["run.py", name]
-    runpy.run_path(str(root / "hooks" / "run.py"), run_name="__main__")
-
-main()
-"""
+# One line of Python, split here only for reading. Keep it free of " $ % \\ and !.
+BOOTSTRAP_PARTS = (
+    "import io,json,os,runpy,sys",
+    "from pathlib import Path",
+    # Keep the payload: the hook reads it after the root is found.
+    "raw='' if sys.stdin is None or sys.stdin.isatty() else sys.stdin.read()",
+    "sys.stdin=io.StringIO(raw)",
+    "hit=lambda s:[p for p in (Path(s),*Path(s).parents) if (p/'hooks'/'launch.py').is_file() and (p/'AGENTS.md').is_file()] if s else []",
+    "found=hit(os.environ.get('CURSOR_PROJECT_DIR'))+hit(os.environ.get('CLAUDE_PROJECT_DIR'))+hit(os.getcwd())",
+    # The payload is parsed only when the environment and cwd did not lead to the root.
+    "data=json.loads(raw) if not found and raw.strip()[:1]=='{' else {}",
+    "roots=data.get('workspace_roots') or []",
+    "found+=[p for s in ([roots] if isinstance(roots,str) else list(roots))+[data.get('cwd')] for p in hit(s)]",
+    "runpy.run_path(str(found[0]/'hooks'/'launch.py'),run_name='__main__') if found else "
+    "(print(json.dumps(dict(permission='allow')) if sys.argv[-1].startswith('guard_') else '{}'),"
+    "sys.stderr.write('hook root not found'+chr(10)))",
+)
+BOOTSTRAP = ";".join(BOOTSTRAP_PARTS)
+FORBIDDEN = ('"', "$", "%", "\\", "!", "`")
+INTERPRETERS = ("python", "python3", "py")
 
 NAMES = ("post_write", "guard_shell", "guard_read", "stage_end")
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def program_text() -> str:
-    """The exact Python source placed inside the hook command."""
-    lines = [line.rstrip() for line in PROGRAM.strip("\n").splitlines()]
-    text = "\n".join(lines)
-    if not text.endswith("\n"):
-        text += "\n"
-    for banned in ("'", "$", "%"):
-        if banned in text:
-            raise SystemExit(f"launcher program contains {banned!r}; the shell command would split")
-    return text
+def bootstrap_text() -> str:
+    """The Python placed inside the hook command."""
+    for banned in FORBIDDEN:
+        if banned in BOOTSTRAP:
+            raise SystemExit(f"hook bootstrap contains {banned!r}; the shell command would break")
+    return BOOTSTRAP
 
 
-def command_for(name: str) -> str:
+def command_for(name: str, interpreter: str = "python") -> str:
     if name not in NAMES:
         raise SystemExit(f"unknown hook name: {name}")
-    encoded = base64.b64encode(program_text().encode("utf-8")).decode("ascii")
-    if any(token in encoded for token in ("$", "%", '"', "'")):
-        raise SystemExit("base64 of the launcher picked up a shell metacharacter")
-    # This quoting matched a live PowerShell 5.1 run: the payload has no quotes.
-    return f'python -c "import base64;exec(base64.b64decode(\'{encoded}\'))" {name}'
+    if interpreter not in INTERPRETERS:
+        raise SystemExit(f"interpreter must be one of {', '.join(INTERPRETERS)}")
+    return f'{interpreter} -c "{bootstrap_text()}" {name}'
 
 
 def embedded_program(command: str) -> str:
-    marker = "base64.b64decode('"
-    start = command.find(marker)
-    if start < 0:
-        raise ValueError("command is not the base64 launcher")
-    start += len(marker)
-    end = command.find("')", start)
-    if end < 0:
-        raise ValueError("command is not the base64 launcher")
-    return base64.b64decode(command[start:end]).decode("utf-8")
+    """The Python between the only pair of double quotes."""
+    if command.count('"') != 2:
+        raise ValueError("command is not the hook bootstrap")
+    return command.split('"')[1]
 
 
-def _configs() -> tuple[dict, dict]:
-    commands = {name: command_for(name) for name in NAMES}
+def configured_interpreter(path: Path) -> str:
+    """Interpreter used by an existing config, so a regeneration keeps the choice."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "python"
+    found: list[str] = []
+
+    def walk(value: object) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key == "command" and isinstance(item, str):
+                    found.append(item.split(" ", 1)[0])
+                else:
+                    walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    walk(payload)
+    return found[0] if found and found[0] in INTERPRETERS else "python"
+
+
+def _configs(interpreter: str = "python") -> tuple[dict, dict]:
+    commands = {name: command_for(name, interpreter) for name in NAMES}
     cursor = {
         "version": 1,
         "hooks": {
@@ -193,8 +138,8 @@ def _configs() -> tuple[dict, dict]:
     return cursor, claude
 
 
-def write_configs() -> None:
-    cursor, claude = _configs()
+def write_configs(interpreter: str = "python") -> None:
+    cursor, claude = _configs(interpreter)
     rendered = {
         ROOT / ".cursor" / "hooks.json": cursor,
         ROOT / "hooks" / "cursor-hooks.json.example": cursor,
@@ -206,6 +151,18 @@ def write_configs() -> None:
         print(path.relative_to(ROOT))
 
 
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="записать команду хуков в конфиги IDE")
+    parser.add_argument(
+        "--python",
+        choices=INTERPRETERS,
+        default="python",
+        help="имя интерпретатора в команде: python (по умолчанию), python3 или py",
+    )
+    args = parser.parse_args(argv)
+    write_configs(args.python)
+    return 0
+
+
 if __name__ == "__main__":
-    write_configs()
-    sys.exit(0)
+    sys.exit(main())

@@ -637,16 +637,19 @@ class FramingAndLaunchTests(unittest.TestCase):
     def test_configs_have_no_shell_metacharacters_and_match_the_launcher(self) -> None:
         command = mcp_server.shell_command()
         self.assertEqual(command.count('"'), 2)
-        self.assertEqual(command.count("'"), 2)
         self.assertNotIn("$", command)
         self.assertNotIn("%", command)
-        self.assertNotIn("CLAUDE_PROJECT_DIR", command)
-        self.assertNotIn("CURSOR_PROJECT_DIR", command)
-        encoded = command.split("b64decode('", 1)[1].split("')", 1)[0]
-        program = base64.b64decode(encoded).decode("utf-8")
+        self.assertNotIn("\\", command)
+        self.assertNotIn("base64", command)
+        program = command.split('"')[1]
+        self.assertEqual(program, mcp_server.launch_program())
         self.assertIn("AGENTS.md", program)
+        self.assertIn("mcp_launch.py", program)
         self.assertIn("mcp root not found", program)
-        self.assertNotIn("$", program)
+        self.assertTrue((ROOT / "scripts" / "mcp_launch.py").is_file())
+        self.assertEqual(mcp_server.cursor_config("python3")["mcpServers"]["strat"]["command"], "python3")
+        with self.assertRaises(RuntimeError):
+            mcp_server.cursor_config("python; rm")
         for path, expected in mcp_server.config_files().items():
             self.assertTrue(path.is_file(), path)
             loaded = json.loads(path.read_text(encoding="utf-8"))

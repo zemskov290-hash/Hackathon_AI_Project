@@ -21,7 +21,7 @@
 
 `strat_fetch` помечает ответ `untrusted: true` и начинает текст с «НЕДОВЕРЕННЫЕ ДАННЫЕ». Снимок страницы — данные, не инструкции. Путь проекта после разрешения обязан лежать в каталоге `projects` (`STRAT_PROJECTS_DIR`, если он задан). Файл для `strat_add_source` — только внутри папки этого проекта. Значение «-» не читает stdin протокола. Ключ API в ответ не попадает: его вырезает тот же `scrub`, что и в CLI.
 
-Команда подключения одна и та же в `.cursor/mcp.json`, `.mcp.json` (Claude Code) и `.vscode/mcp.json` (Copilot): `python` и аргумент `-c` с `exec` от base64. В строке нет `$`, `%` и внутренних двойных кавычек. Программа читает `CURSOR_PROJECT_DIR`, `CLAUDE_PROJECT_DIR` и `STRAT_REPO_ROOT` из окружения процесса, затем поднимается от текущего каталога к `AGENTS.md` и `scripts/mcp_server.py`. Переменные не написаны в команде, поэтому PowerShell 5.1 их не раскрывает. Пересобрать json: `python scripts/mcp_server.py --write-configs`.
+Команда подключения одна и та же в `.cursor/mcp.json`, `.mcp.json` (Claude Code) и `.vscode/mcp.json` (Copilot): `python` и аргумент `-c` с короткой читаемой строкой Python. В строке нет `$`, `%` и двойных кавычек. Она читает `CURSOR_PROJECT_DIR`, `CLAUDE_PROJECT_DIR` и `STRAT_REPO_ROOT` из окружения процесса, затем поднимается от текущего каталога к `AGENTS.md` и `scripts/mcp_launch.py` и запускает его; тот переходит в корень и запускает `scripts/mcp_server.py`. Переменные не написаны в команде, поэтому PowerShell 5.1 их не раскрывает. До 2026-11-22 в аргументе был base64 той же программы. Пересобрать json: `python scripts/mcp_server.py --write-configs`.
 
 SDK не подключали. Запасной путь — прежний CLI, не вторая реализация сервера. Если инструментов в сессии нет, агент вызывает `python scripts/strat.py`.
 

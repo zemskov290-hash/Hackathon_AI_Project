@@ -233,8 +233,12 @@ class HookStdinTests(unittest.TestCase):
             self.assertNotIn("$", command)
             self.assertNotIn("%", command)
             name = command.rsplit(" ", 1)[-1]
-            self.assertEqual(command, launcher.command_for(name))
-            self.assertEqual(launcher.embedded_program(command), launcher.program_text())
+            interpreter = launcher.configured_interpreter(ROOT / ".cursor" / "hooks.json")
+            self.assertEqual(command, launcher.command_for(name, interpreter))
+            self.assertEqual(launcher.embedded_program(command), launcher.bootstrap_text())
+            self.assertNotIn("base64", command)
+            self.assertEqual(command.count('"'), 2)
+            self.assertIn("hooks'/'launch.py", command)
         payloads = {
             "guard_shell": '{"command":"python --version"}\n',
             "guard_read": '{"file_path":"note.txt","content":"hi"}\n',
@@ -283,6 +287,32 @@ class HookStdinTests(unittest.TestCase):
                 self.assertNotIn("hooks/run.py", result.stderr + result.stdout)
                 decisions.append(body["permission"])
             self.assertEqual(decisions, ["deny", "deny"])
+
+    def test_launcher_writes_another_interpreter_and_keeps_the_program(self) -> None:
+        launcher = self._launcher()
+        cursor, claude = launcher._configs("python3")
+        command = cursor["hooks"]["beforeShellExecution"][0]["command"]
+        self.assertTrue(command.startswith('python3 -c "'))
+        self.assertEqual(launcher.embedded_program(command), launcher.bootstrap_text())
+        self.assertEqual(claude["hooks"]["Stop"][0]["hooks"][0]["command"], launcher.command_for("stage_end", "python3"))
+        with self.assertRaises(SystemExit):
+            launcher.command_for("guard_shell", "python; rm")
+        for banned in ('"', "$", "%", "\\", "!"):
+            self.assertNotIn(banned, launcher.bootstrap_text())
+
+    def test_launch_py_runs_a_hook_by_hand_from_another_cwd(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "hooks" / "launch.py"), "guard_shell"],
+                input='{"command":"py -m pip install x"}\n',
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                cwd=tmp,
+                timeout=60,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["permission"], "deny")
 
     def _launcher(self):
         spec = importlib.util.spec_from_file_location("strat_hook_launcher", ROOT / "hooks" / "launcher.py")
