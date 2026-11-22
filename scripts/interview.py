@@ -115,9 +115,15 @@ def anonymize(text: str, names: list[str] | None = None) -> tuple[str, list[str]
     if NAME_PAIR_RE.search(cleaned):
         removed.append("имя")
         cleaned = NAME_PAIR_RE.sub("[имя]", cleaned)
-    if SPEAKER_RE.search(cleaned):
+    def speaker(match: re.Match[str]) -> str:
+        label = match.group(1)
+        # «Дата:», «Роль:», «Респондент:» are header fields and roles, not a person's name.
+        if META_LABEL_RE.match(label + ":") or label.casefold() in ROLE_LABELS:
+            return match.group(0)
         removed.append("имя")
-        cleaned = SPEAKER_RE.sub("[участник]:", cleaned)
+        return "[участник]:"
+
+    cleaned = SPEAKER_RE.sub(speaker, cleaned)
     # Stable order, no duplicates.
     kinds = []
     for kind in removed:
@@ -134,6 +140,80 @@ def require_clean(text: str) -> None:
             + ", ".join(leftover)
             + "). Приём отклонён, файл не записан."
         )
+
+
+ROLE_LABELS = {
+    "интервьюер", "модератор", "исследователь", "вопрос", "ответ", "респондент", "участник",
+    "организатор", "клиент", "пользователь", "абонент",
+}
+# Speaker labels of the person asking. Their lines are questions, not replies.
+INTERVIEWER_LABELS = {
+    "и", "в", "q", "интервьюер", "модератор", "исследователь", "вопрос", "interviewer", "moderator",
+}
+# Labels of header fields. «Дата: …» or «Роль респондента: …» describe the file, nobody said them.
+META_LABEL_RE = re.compile(
+    r"^(?:дата|время|роль(?:\s+респондента)?|персона|сегмент|согласие|формат|длительность|примечание|"
+    r"контекст|источник|тема|цель|сценарий|город|возраст|профиль|метод|канал|id|интервью)\s*:",
+    re.IGNORECASE,
+)
+SPEAKER_LINE_RE = re.compile(r"^\s*(?:\*\*)?([\[\]A-Za-zА-Яа-яЁё ]{1,24}?)(?:\*\*)?\s*:\s*(.*)$")
+SERVICE_RE = re.compile(
+    r"синтетическ\w*\s+(?:интервью|расшифровк\w*|респондент\w*|реплик\w*|персон\w*|данн\w*)|"
+    r"не\s+является\s+реальн|не\s+голос\s+клиента|не\s+реальн\w*\s+(?:интервью|человек|респондент)|"
+    r"вымышлен|персона\s+собрана|живого\s+респондента\s+нет|обезличенн\w*\s+выдержк|"
+    r"^\[?(?:участник|респондент)\]?\s*:\s*\d{4}-\d{2}-\d{2}",
+    re.IGNORECASE,
+)
+
+
+def is_service_line(sentence: str) -> bool:
+    """Header, label or disclaimer: part of the file, not something the respondent said."""
+    text = sentence.strip().strip("*_ ")
+    if not text or text.startswith("#"):
+        return True
+    if META_LABEL_RE.match(text):
+        return True
+    return SERVICE_RE.search(text) is not None
+
+
+def _speaker(line: str) -> tuple[str, str] | None:
+    match = SPEAKER_LINE_RE.match(line)
+    if not match:
+        return None
+    label = match.group(1).strip().strip("[]").strip().casefold()
+    if not label or len(label.split()) > 2:
+        return None
+    return label, match.group(2)
+
+
+def reply_lines(text: str) -> list[str]:
+    """Lines the respondent said.
+
+    In a transcript with speaker labels, lines of the interviewer and lines
+    without a label (headers, notes) are dropped and the label is cut off.
+    Without labels every line is kept. Header fields and disclaimers are
+    dropped in both cases.
+    """
+    body = re.sub(r"<!--.*?-->", " ", text, flags=re.S)
+    body = re.sub(r"```.*?```", " ", body, flags=re.S)
+    raw = [line.strip() for line in body.splitlines() if line.strip()]
+    labelled = [(_speaker(line), line) for line in raw]
+    has_dialogue = any(
+        item is not None and item[0] in INTERVIEWER_LABELS for item, _line in labelled
+    )
+    kept = []
+    for item, line in labelled:
+        if has_dialogue:
+            if item is None:
+                continue
+            label, said = item
+            if label in INTERVIEWER_LABELS or META_LABEL_RE.match(line):
+                continue
+            line = said
+        if is_service_line(line):
+            continue
+        kept.append(line)
+    return kept
 
 
 def sentences_of(text: str) -> list[str]:
@@ -250,7 +330,9 @@ def build_guide(hypotheses: list[dict], questions_text: str) -> str:
 
 def analyse(transcript: str, hypotheses: list[dict], *, synthetic: bool) -> dict:
     quotes = []
-    for sentence in sentences_of(transcript):
+    for sentence in sentences_of("\n".join(reply_lines(transcript))):
+        if is_service_line(sentence):
+            continue
         quotes.append({"text": sentence, "pain": is_pain(sentence)})
     pains = [item for item in quotes if item["pain"]]
     key = pains[:3] or quotes[:2]
@@ -258,7 +340,11 @@ def analyse(transcript: str, hypotheses: list[dict], *, synthetic: bool) -> dict
     for row in hypotheses:
         if row.get("status", "active") != "active":
             continue
-        if row.get("type") not in {"hypothesis", "synthetic"}:
+        # A synthetic record is not a hypothesis about people: linking a synthetic
+        # reply to another synthetic reply only echoes the file.
+        if row.get("type") != "hypothesis":
+            continue
+        if str(row.get("locator") or "") == "интервью":
             continue
         claim = str(row.get("claim") or "")
         best = None
