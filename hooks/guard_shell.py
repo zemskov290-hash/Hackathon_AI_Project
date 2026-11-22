@@ -22,13 +22,13 @@ def emit(payload: dict, permission: str, reason: str) -> None:
         body = {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
-                "permissionDecision": "allow" if permission == "allow" else "deny",
+                "permissionDecision": permission if permission in {"allow", "deny", "ask"} else "allow",
                 "permissionDecisionReason": reason,
             }
         }
     else:
         body = {"permission": permission if permission in {"allow", "deny", "ask"} else "allow"}
-        if permission == "deny" and reason:
+        if permission in {"deny", "ask"} and reason:
             body["user_message"] = reason
             body["agent_message"] = reason
     write_json(body)

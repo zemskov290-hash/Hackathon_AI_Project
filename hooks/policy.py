@@ -87,11 +87,46 @@ PIP_DENY = (
     "Прямой pip запрещён. Ставит только python scripts/strat.py install "
     "из белого списка, после явного подтверждения человека."
 )
-PIPE_DENY = "Установка через curl или wget в оболочку запрещена."
+PIPE_DENY = "Скачать и сразу выполнить (curl или wget в оболочку, iwr или irm в iex) запрещено."
 INSTALL_DENY = "strat install принимает только пакет и версию из белого списка requirements.txt."
 PIP_RE = re.compile(r"(?i)(?:^|[;&|`\n])\s*(?:python(?:3)?\s+-m\s+)?pip3?\s+")
+# Any installer, not only a bare «pip» at the start of the line. Checked per shell segment after
+# quote characters are dropped, so «cmd /c "pip install x"», «py -3 -m pip install x»,
+# «C:\\Python\\Scripts\\pip.exe install x» and «subprocess.run(['pip', 'install', 'x'])» match too.
+INSTALLER_RES = (
+    re.compile(r"(?i)(?<![\w.-])pip[\d.]*(?:\.exe)?(?:\s+-\S+)*\s+(?:install|download|wheel)\b"),
+    re.compile(r"(?i)(?<![\w-])-m\s*(?:pip|ensurepip)\b"),
+    re.compile(r"(?i)(?<![\w.-])uv(?:\.exe)?\s+(?:pip\s+(?:install|sync)|add|sync|tool\s+install|run\s+--with)\b"),
+    re.compile(r"(?i)(?<![\w.-])uvx(?:\.exe)?\s"),
+    re.compile(r"(?i)(?<![\w.-])pipx(?:\.exe)?\s+(?:install|run|inject)\b"),
+    re.compile(r"(?i)(?<![\w.-])(?:conda|mamba|micromamba)(?:\.exe|\.bat)?\s+(?:install|create|update)\b"),
+    re.compile(r"(?i)(?<![\w.-])(?:poetry|pdm|hatch|rye)(?:\.exe)?\s+add\b"),
+    re.compile(r"(?i)(?<![\w.-])easy_install\b"),
+)
 PIPE_RE = re.compile(
-    r"(?i)\b(?:curl|wget)\b[^|\n]*\|\s*(?:sh|bash|zsh|ksh|iex|powershell|pwsh)\b"
+    r"(?i)\b(?:curl|wget|iwr|irm|invoke-webrequest|invoke-restmethod)\b[^|\n]*\|\s*"
+    r"(?:sh|bash|zsh|ksh|iex|invoke-expression|powershell|pwsh|python[\d.]*|py)\b"
+)
+# PowerShell download-and-run without a pipe: iex (iwr ...), iex (New-Object Net.WebClient).DownloadString(...).
+DOWNLOAD_EXEC_RE = re.compile(
+    r"(?i)\b(?:iex|invoke-expression)\b\s*\(?\s*\(?\s*(?:iwr|irm|invoke-webrequest|invoke-restmethod|new-object)\b"
+    r"|\.downloadstring\s*\("
+)
+# In these commands quoted text is data (a commit message, a search pattern), not something run.
+DATA_VERBS = {
+    "git",
+    "echo",
+    "rg",
+    "grep",
+    "findstr",
+    "select-string",
+    "sls",
+    "write-output",
+    "write-host",
+}
+INSTALL_ASK = (
+    "Установка пакета с флагом --confirmed: правила требуют явного «да» человека в этом ходе. "
+    "Хук просит IDE спросить вас, а не верит флагу, который модель могла поставить сама."
 )
 INSTALL_RE = re.compile(
     r"(?i)(?:python(?:3)?\s+)?(?:scripts[/\\]strat\.py|\bstrat)\s+install\b([^;&|\n]*)"
@@ -176,16 +211,67 @@ def _install_tail_reason(tail: str) -> str | None:
     return None
 
 
-def install_block_reason(command: str) -> str | None:
-    if PIPE_RE.search(command):
-        return PIPE_DENY
+def shell_segments(command: str) -> list[str]:
+    """Split on unquoted ; & | and newlines. Quotes ' and " are tracked, escapes are not."""
+    segments: list[str] = []
+    current: list[str] = []
+    quote = ""
+    for char in command:
+        if quote:
+            current.append(char)
+            if char == quote:
+                quote = ""
+            continue
+        if char in "'\"":
+            quote = char
+            current.append(char)
+            continue
+        if char in ";&|\n":
+            segments.append("".join(current))
+            current = []
+            continue
+        current.append(char)
+    segments.append("".join(current))
+    return [segment for segment in segments if segment.strip()]
+
+
+def _segment_for_scan(segment: str) -> str:
+    stripped = segment.strip().lstrip("&. ").strip()
+    first = re.split(r"\s+", stripped, maxsplit=1)[0].casefold() if stripped else ""
+    first = re.sub(r"\.exe$", "", first.rsplit("\\", 1)[-1].rsplit("/", 1)[-1])
+    if first in DATA_VERBS:
+        return re.sub(r"\"[^\"]*\"|'[^']*'", " ", segment)
+    return re.sub(r"[\"'`,\[\]()]", " ", segment)
+
+
+def runs_installer(command: str) -> bool:
     if PIP_RE.search(command):
+        return True
+    for segment in shell_segments(command):
+        flat = _segment_for_scan(segment)
+        if any(pattern.search(flat) for pattern in INSTALLER_RES):
+            return True
+    return False
+
+
+def install_block_reason(command: str) -> str | None:
+    if PIPE_RE.search(command) or DOWNLOAD_EXEC_RE.search(command):
+        return PIPE_DENY
+    if runs_installer(command):
         return PIP_DENY
     for match in INSTALL_RE.finditer(command):
         reason = _install_tail_reason(match.group(1))
         if reason:
             return reason
     return None
+
+
+def install_needs_human(command: str) -> bool:
+    """A whitelisted strat install that claims --confirmed. The hook asks the person instead of trusting it."""
+    for match in INSTALL_RE.finditer(command):
+        if "--confirmed" in match.group(1).casefold():
+            return True
+    return False
 
 
 def shell_block_reason(command: str) -> str | None:
@@ -322,6 +408,8 @@ def decide(payload: dict) -> tuple[str, str]:
         reason = shell_block_reason(command)
         if reason:
             return "deny", reason
+        if install_needs_human(command):
+            return "ask", INSTALL_ASK
         return "allow", ""
     tool = str(payload.get("tool_name") or "")
     path = edited_path(payload)
