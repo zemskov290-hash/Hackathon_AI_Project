@@ -44,6 +44,8 @@ class ProjectCase(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.saved = {k: os.environ.get(k) for k in ("STRAT_PROJECTS_DIR", "STRAT_LLM_API_KEY", "STRAT_MODEL_CHEAP", "STRAT_MODEL_STRONG")}
         os.environ["STRAT_PROJECTS_DIR"] = self.tmp.name
+        self.saved.setdefault("STRAT_CURSOR_ROUTE", os.environ.get("STRAT_CURSOR_ROUTE"))
+        os.environ["STRAT_CURSOR_ROUTE"] = "0"
         run(strat.cmd_init, Namespace(project_id="lv", title="Уровни", title_file=None))
         self.project = Path(self.tmp.name) / "lv"
 
@@ -411,6 +413,77 @@ class CaseCompareTests(ProjectCase):
             code = bench.main(["case-cost", str(self.project)])
         self.assertEqual(code, 0)
         self.assertIn("замера нет", out.getvalue())
+
+
+def stream(model: str, text: str, inp: int = 120, out: int = 8, ms: int = 2500) -> str:
+    events = [
+        {"type": "system", "subtype": "init", "model": model},
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": text}]}},
+        {"type": "result", "subtype": "success", "result": text, "duration_ms": ms, "is_error": False,
+         "usage": {"inputTokens": inp, "outputTokens": out}},
+    ]
+    return "\n".join(json.dumps(e, ensure_ascii=False) for e in events) + "\n"
+
+
+class CursorRouteTests(ProjectCase):
+    def setUp(self) -> None:
+        super().setUp()
+        for key in ("STRAT_LLM_API_KEY", "OPENROUTER_API_KEY"):
+            os.environ.pop(key, None)
+        os.environ["STRAT_CURSOR_ROUTE"] = "1"
+        import cursor_route
+
+        self.cr = cursor_route
+
+    def fake_agent(self, answers: list[str]):
+        calls = []
+
+        def runner(argv, folder, env, timeout):
+            calls.append(argv)
+            return 0, answers[len(calls) - 1], "", 2.0
+
+        return calls, runner
+
+    def test_parse_stream(self) -> None:
+        parsed = self.cr.parse_stream("мусор\n" + stream("Composer 2.5 Fast", "Ответ"))
+        self.assertEqual(parsed["model"], "Composer 2.5 Fast")
+        self.assertEqual(parsed["content"], "Ответ")
+        self.assertEqual((parsed["input_tokens"], parsed["output_tokens"], parsed["duration_ms"]), (120, 8, 2500))
+
+    def test_no_key_uses_cursor_agent_and_escalates_on_defect(self) -> None:
+        calls, runner = self.fake_agent([stream("composer-2.5-fast", "TODO"), stream("claude-sonnet-5-thinking-high", "Нормальный ответ по делу.")])
+        real_call = self.cr.call
+        with mock.patch.object(self.cr, "enabled", return_value=True), mock.patch.object(
+            self.cr.classify, "cursor_launch", return_value=(["agent"], {})
+        ), mock.patch.object(self.cr, "call", side_effect=lambda p, t: real_call(p, t, runner=runner, workspace=Path(self.tmp.name) / "ws")):
+            code, out = run(strat.cmd_complete, complete_ns("lv"))
+        self.assertEqual(code, 0, out)
+        self.assertIn("MODE: cursor-agent", out)
+        self.assertEqual(len(calls), 2)
+        self.assertIn("composer-2.5-fast", calls[0])
+        self.assertIn(self.cr.model_for("strong"), calls[1])
+        self.assertTrue(self.cr.model_for("strong"))
+        rows = [json.loads(l) for l in (self.project / "log.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+        models = [(r.get("tier"), r.get("model")) for r in rows if r.get("tier")]
+        self.assertIn(("cheap", "composer-2.5-fast"), models)
+        self.assertIn(("strong", "claude-sonnet-5-thinking-high"), models)
+        self.assertIn("маркер низкого качества", self.state()["routing_escalations"][0]["reason"])
+        entries = strat.load_log(self.project)
+        split = "\n".join(strat.format_model_split(entries))
+        self.assertIn("cheap / composer-2.5-fast: вызовов 1", split)
+        self.assertIn("strong / claude-sonnet-5-thinking-high", split)
+
+    def test_agent_missing_keeps_manual(self) -> None:
+        with mock.patch.object(self.cr.classify, "agent_spec", return_value=None):
+            code, out = run(strat.cmd_complete, complete_ns("lv"))
+        self.assertEqual(code, 0)
+        self.assertIn("MODE: manual", out)
+
+    def test_launch_failure_does_not_crash(self) -> None:
+        with mock.patch.object(self.cr.classify, "cursor_launch", side_effect=RuntimeError("нет agent")):
+            outcome = self.cr.call("ping", "cheap")
+        self.assertFalse(outcome["ok"])
+        self.assertIn("не запустился", outcome["error"])
 
 
 if __name__ == "__main__":

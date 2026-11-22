@@ -93,6 +93,7 @@ def clean_env(projects: Path | None = None) -> dict[str, str]:
     env["PYTHONUNBUFFERED"] = "1"
     env["STRAT_FETCH_RETRIES"] = "1"
     env["STRAT_FETCH_BACKOFF_SECONDS"] = "0"
+    env["STRAT_CURSOR_ROUTE"] = "0"
     if projects is not None:
         env["STRAT_PROJECTS_DIR"] = str(projects)
     return env

@@ -27,6 +27,7 @@ from stdio_utf8 import configure_stdio
 
 import analysis
 import classify
+import cursor_route
 import grounding
 import inspect_media
 import routing
@@ -3027,6 +3028,28 @@ def format_usage(
     )
 
 
+def format_model_split(entries: list[dict]) -> list[str]:
+    """Calls of complete by tier and model, as written in log.jsonl (tier, model, minutes, tokens)."""
+    groups: dict[tuple[str, str], dict] = {}
+    for entry in entries:
+        if not entry.get("tier") or not entry.get("model"):
+            continue
+        key = (str(entry["tier"]), str(entry["model"]))
+        bucket = groups.setdefault(key, {"calls": 0, "minutes": 0.0, "tokens": 0})
+        bucket["calls"] += 1
+        bucket["minutes"] += float(entry.get("minutes") or 0)
+        bucket["tokens"] += int(entry.get("tokens") or 0)
+    if not groups:
+        return []
+    lines = ["По уровням и моделям (вызовы complete):"]
+    for (tier, model), bucket in sorted(groups.items()):
+        lines.append(
+            f"- {tier} / {model}: вызовов {bucket['calls']}, минуты {fmt_num(round(bucket['minutes'], 3))}, "
+            f"токены {bucket['tokens'] or '—'}"
+        )
+    return lines
+
+
 def format_cost(
     project: Path,
     entries: list[dict],
@@ -3057,6 +3080,7 @@ def format_cost(
         else:
             lines.append(f"Этап {stage} {name}: минуты {fmt_num(bucket['minutes'])}{wall}")
     lines.append(f"Итого: {format_usage(entries, total, project, agent)}")
+    lines.extend(format_model_split(entries))
     lines.append(
         "«минуты» — то, что агент записал в log --minutes; «по журналу» — разница отметок времени "
         f"соседних записей log.jsonl, паузы длиннее {usage_log.fmt(clock['idle_gap'])} мин не считаются. "
@@ -3829,6 +3853,7 @@ def log_completion(
     tokens: int | None,
     cost: float | None,
     grounds: str,
+    minutes: float | None = None,
 ) -> None:
     if project is None:
         return
@@ -3839,6 +3864,7 @@ def log_completion(
         stage,
         f"Вызов complete, уровень {tier}",
         grounds=grounds,
+        minutes=minutes,
         tokens=tokens,
         cost=cost,
         model=model,
@@ -3884,9 +3910,44 @@ def cmd_complete(args: argparse.Namespace) -> int:
     return code
 
 
+def _complete_cursor(args: argparse.Namespace, tier: str, prompt: str, project) -> tuple[int, str, str]:
+    """No API key: the tier goes to cursor-agent with the model from config/routing.json."""
+    outcome = cursor_route.call(prompt, tier)
+    model = str(outcome.get("model") or "cursor/default")
+    print("MODE: cursor-agent")
+    print(f"TIER: {tier}")
+    print(f"MODEL: {model}" + (f" (запрошена {outcome['requested']})" if outcome.get("requested") and outcome["requested"] != model else ""))
+    tokens = None
+    if outcome.get("input_tokens") or outcome.get("output_tokens"):
+        tokens = int(outcome.get("input_tokens") or 0) + int(outcome.get("output_tokens") or 0)
+    if not outcome["ok"]:
+        print(outcome.get("error") or "cursor-agent не ответил")
+        log_completion(
+            project, stage=args.stage, tier=tier, model=model, mode="error", prompt=prompt, content="",
+            tokens=None, cost=None, grounds=str(outcome.get("error") or "cursor-agent не ответил"),
+            minutes=round(float(outcome.get("seconds") or 0) / 60.0, 3),
+        )
+        return 1, "error", ""
+    content = str(outcome.get("content") or "")
+    print(content)
+    print(
+        f"USAGE: input={outcome.get('input_tokens') or '—'} output={outcome.get('output_tokens') or '—'} "
+        f"model={model} tier={tier} seconds={outcome.get('seconds')} cost=подписка Cursor, счёта за вызов нет"
+    )
+    log_completion(
+        project, stage=args.stage, tier=tier, model=model, mode="api", prompt=prompt, content=content,
+        tokens=tokens, cost=None,
+        grounds=f"cursor-agent без ключа API: уровень {tier}, модель из system.init {model}, {outcome.get('seconds')} с.",
+        minutes=round(float(outcome.get("seconds") or 0) / 60.0, 3),
+    )
+    return 0, "api", content
+
+
 def _complete_tier(args: argparse.Namespace, tier: str, prompt: str, project) -> tuple[int, str, str]:
     """One model call on one tier. Returns (exit code, mode, answer)."""
     key = os.environ.get("STRAT_LLM_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
+    if tier != "ide" and not key and cursor_route.enabled():
+        return _complete_cursor(args, tier, prompt, project)
     if tier == "ide" or not key:
         print("MODE: manual")
         print(f"TIER: {tier}")

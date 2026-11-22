@@ -34,6 +34,7 @@ def run(
         "PYTHONUTF8",
     ):
         merged.pop(key, None)
+    merged["STRAT_CURSOR_ROUTE"] = "0"
     if env:
         merged.update(env)
     return subprocess.run(
