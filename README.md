@@ -157,6 +157,7 @@ scripts/inspect_media.py          DOM, изображение, PDF, расшиф
 scripts/kb.py                     база знаний: BM25, поиск по основам слов и синонимам, необязательная семантика
 scripts/kb_graph.py               база знаний по связям: trace S → E → U → вариант → строка стратегии
 scripts/routing.py                самокоррекция маршрута: один записанный повтор после брака
+scripts/cursor_route.py           уровни cheap/strong через cursor-agent, когда ключа API нет
 scripts/media.py                  аудио и видео: готовая расшифровка, локальный whisper или честный пробел
 scripts/case_compare.py           полный кейс: агент против чата, время, токены, рубли по заданной цене
 scripts/interview.py              гайд, обезличивание, разбор реплик
@@ -183,6 +184,8 @@ tests/                            unittest и сломанная фикстур�
 ```
 
 ## Хуки, маршрут и повтор шага
+
+Маршрут без ключа API: `complete --tier cheap` идёт через cursor-agent на `composer-2.5-fast`, `--tier strong` — на `claude-sonnet-5-thinking-high`. Модели меняются в `config/routing.json` → `classifier.cursor_agent` (`cheap_model`, `strong_model`), например strong на `claude-opus-5-5-medium`; список моделей аккаунта — `agent --list-models`. Брак ответа cheap даёт один записанный повтор на strong; `cost` показывает вызовы по уровням и моделям. Без agent в PATH — `MODE: manual`.
 
 Хуки включены. Cursor берёт [`.cursor/hooks.json`](.cursor/hooks.json) и, по умолчанию, ещё и [`.claude/settings.json`](.claude/settings.json) ([сторонние хуки](https://cursor.com/docs/reference/third-party-hooks)). На Windows обе команды идут через PowerShell. Запись `$CLAUDE_PROJECT_DIR` там — пустая переменная PowerShell, и путь схлопывается в `C:\hooks\run.py`. Поэтому в обоих файлах одна команда `python -c "…" <имя>` с короткой читаемой строкой Python из [`hooks/launcher.py`](hooks/launcher.py): в ней только одинарные кавычки, нет `$`, `%`, `\` и `!`, так что PowerShell 5.1, cmd и sh передают её без изменений. Строка находит корень и запускает читаемый [`hooks/launch.py`](hooks/launch.py). `python hooks/launcher.py` перезаписывает json, тест ловит расхождение. Если в PATH есть только `python3`, конфиги переписывает `python3 hooks/launcher.py --python python3` (и `python3 scripts/mcp_server.py --write-configs --python python3` для MCP); `doctor` и `portability` предупреждают, если интерпретатора из конфигов нет в PATH. Программа читает `CURSOR_PROJECT_DIR` и `CLAUDE_PROJECT_DIR`, затем `workspace_roots` и `cwd` из JSON на stdin, и только потом поднимается от текущего каталога к `AGENTS.md`. Повторный запуск сторожа даёт то же решение; при расхождении у Cursor побеждает отказ. События: `afterFileEdit`, `postToolUse`, `beforeShellExecution`, `beforeReadFile`, `stop`.
 
