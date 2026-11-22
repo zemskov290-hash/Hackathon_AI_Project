@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MCP server for the project-factory strategist. Python 3.10+, stdlib only.
+"""MCP server for the Product Factory strategist. Python 3.10+, stdlib only.
 
 stdout is JSON-RPC 2.0 (newline-delimited, or Content-Length if the client
 uses that framing). Logs go to stderr only. Tool handlers call ``strat``
@@ -46,7 +46,7 @@ UNTRUSTED_BANNER = (
 )
 
 INSTRUCTIONS = (
-    "Сервер «Стратег фабрики проектов». Состояние projects/<id>/ меняй этими инструментами, "
+    "Сервер «Стратег Фабрики продуктов». Состояние projects/<id>/ меняй этими инструментами, "
     "а не правкой jsonl и не разбором вывода оболочки. Если инструмента нет, запасной путь — "
     "python scripts/strat.py, правила те же.\n"
     "strat_confirm, strat_advance, strat_accept_revision, strat_reject_revision и strat_install требуют human_confirmed=true и только "

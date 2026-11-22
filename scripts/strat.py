@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Project-factory strategist CLI. Python 3.10+, standard library only.
+"""Product Factory strategist CLI. Python 3.10+, standard library only.
 
 User-facing messages are Russian. Identifiers and comments are English.
 """
@@ -4749,7 +4749,7 @@ def cmd_reply_check(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="strat",
-        description="Стратег фабрики проектов: состояние, свидетельства, проверка и затраты.",
+        description="Стратег Фабрики продуктов: состояние, свидетельства, проверка и затраты.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Проект можно не указывать, если он один (кроме папок с _) или задан projects/.current.\n"
