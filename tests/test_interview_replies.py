@@ -60,6 +60,53 @@ class InterviewJunkTests(unittest.TestCase):
             self.assertNotIn("Персона", text)
             self.assertNotIn("*", text)
 
+    FIXTURES = ROOT / "tests" / "fixtures" / "interviews"
+
+    def replies(self, name: str) -> list[str]:
+        text = (self.FIXTURES / name).read_text(encoding="utf-8")
+        return interview.sentences_of("\n".join(interview.reply_lines(text)))
+
+    def test_run10_transcripts_show_pains_of_every_kind(self) -> None:
+        # Synthetic transcripts written by the agent in demo run 10. Before the
+        # broader patterns no reply in them counted as a pain.
+        kinds: dict[str, list[str]] = {}
+        for name in ("run10-synthetic-I001.md", "run10-synthetic-I002.md"):
+            for reply in self.replies(name):
+                for kind in interview.pain_kinds(reply):
+                    kinds.setdefault(kind, []).append(reply)
+        self.assertEqual(set(kinds), {"страх", "непонимание", "деньги", "доверие", "усилия"})
+        self.assertTrue(any("страшно" in item for item in kinds["страх"]))
+        self.assertTrue(any("Не понял" in item for item in kinds["непонимание"]))
+        self.assertTrue(any("списали" in item for item in kinds["деньги"]))
+        self.assertTrue(any("приложению — не очень" in item for item in kinds["доверие"]))
+        self.assertTrue(any("отключу" in item for item in kinds["усилия"]))
+
+    def test_run10_analysis_names_barrier_kinds(self) -> None:
+        text = (self.FIXTURES / "run10-synthetic-I002.md").read_text(encoding="utf-8")
+        result = interview.analyse(text, [], synthetic=True)
+        self.assertTrue(result["pains"])
+        self.assertIn("Барьеры по типам", result["markdown"])
+        self.assertNotIn("Боль не дописана", result["markdown"])
+        for item in result["quotes"]:
+            self.assertNotIn("реальным", item["text"])
+
+    def test_key_quotes_cover_different_kinds(self) -> None:
+        text = (self.FIXTURES / "run10-synthetic-I001.md").read_text(encoding="utf-8")
+        result = interview.analyse(text, [], synthetic=True)
+        covered = set()
+        for item in result["quotes"]:
+            covered.update(item["kinds"])
+        self.assertGreaterEqual(len(covered), 3)
+
+    def test_negated_or_neutral_reply_is_not_a_pain(self) -> None:
+        for text in (
+            "Всё понятно и удобно, недорого.",
+            "Не страшно, справлюсь сама.",
+            "Мне нравится, что видно остаток.",
+            "Посмотреть, сколько гигабайт у кого.",
+        ):
+            self.assertEqual(interview.pain_kinds(text), [], text)
+
     def test_synthetic_records_are_not_hypotheses(self) -> None:
         rows = [
             {"id": "E001", "type": "synthetic", "status": "active", "claim": "ребёнок пишет что всё встало"},

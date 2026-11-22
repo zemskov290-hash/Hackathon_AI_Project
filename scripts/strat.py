@@ -4707,13 +4707,16 @@ def cmd_interview_accept(args: argparse.Namespace) -> int:
     source_id = _register_kb_source(project, record)
     evidence_ids = []
     for item in analysis["quotes"]:
+        barrier = ""
+        if item.get("kinds"):
+            barrier = " (барьер: " + ", ".join(item["kinds"]) + ")"
         if synthetic:
             claim = (
-                "Синтетическая реплика, не реальное интервью: "
+                "Синтетическая реплика" + barrier + ", не реальное интервью: "
                 + item["text"][:180]
             )
         else:
-            claim = "Реплика обезличенного разговора: " + item["text"][:180]
+            claim = "Реплика обезличенного разговора" + barrier + ": " + item["text"][:180]
         evidence_id = _add_interview_evidence(
             project,
             claim=claim,

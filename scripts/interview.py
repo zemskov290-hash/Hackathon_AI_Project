@@ -50,7 +50,6 @@ SPEAKER_RE = re.compile(
 )
 HANDLE_RE = re.compile(r"(?<!\w)@[A-Za-z][A-Za-z0-9_]{4,}")
 CARD_RE = re.compile(r"(?<!\d)\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}(?!\d)")
-PAIN_STEMS = ("меша", "неудоб", "проблем", "боль", "раздраж", "трудн", "дорого", "не могу")
 TOKEN_RE = re.compile(r"[0-9A-Za-zА-Яа-яЁё]{4,}")
 SYNTHETIC_SENTENCE = (
     "Это синтетическое интервью. Оно не является реальным интервью и не голос клиента."
@@ -263,15 +262,58 @@ def _stem(word: str) -> str:
     return folded[:5]
 
 
-def is_pain(sentence: str) -> bool:
+# Kinds of pain and barrier a respondent names in their own words. A pattern
+# that starts with «не» is the negation itself; for the others a «не» right
+# before the word cancels it («недорого», «не страшно»).
+PAIN_PATTERNS: tuple[tuple[str, str], ...] = (
+    ("страх", r"страш|боюс|боит|боя(?:ть|л)|опаса|тревож|пуга|волну|нервнич|паник"),
+    (
+        "непонимание",
+        r"не\s+понял|не\s+понима|непонят|запута|путаю|путал|не\s+знал|не\s+заметил|не\s+разобр|"
+        r"не\s+ясно|неясн|не\s+в\s+курсе|не\s+чита|не\s+дочита|сложно\s+разобр|оказалось|"
+        r"узна\w*\s+(?:потом|последн|случайно|поздно)|узна\w*,?\s+когда|вспомни\w*\s+только|"
+        r"думал\w*,?\s+(?:что|все|всё)|редко\s+понима|не\s+помн|не\s+уверен|не\s+видел|"
+        r"предупреждени\w*\s+не\s+было",
+    ),
+    (
+        "деньги",
+        r"дорог|переплат|списал|списани|лишн\w*\s+(?:деньг|плат|трат)|платить\s+за|"
+        r"счет\s+(?:вырос|больше)|неожиданн\w*\s+(?:списан|счет|плат)|не\s+по\s+карману",
+    ),
+    (
+        "доверие",
+        r"не\s+довер|недовер|подозр|обман|скрыва|скрыт|мелк\w*\s+шрифт|следят|следит|слежк|"
+        r"видит\s+мо|без\s+спроса|навязыва|давать\s+доступ|врет|врут|не\s+вер|верю[^.]{0,20}не\s+очень|"
+        r"контролир|стыдно|обидно|конфликт",
+    ),
+    (
+        "усилия",
+        r"неудоб|долго|приходится|вручную|каждый\s+раз|лень|тянул|тяжело|мутор|много\s+шагов|"
+        r"сложно|трудн|не\s+могу|не\s+получа|не\s+получил|меша|раздраж|проблем|бесит|достал|"
+        r"слишком\s+много|боль\b|отключ\w*|забуд|пинать|бросает|тормоз|"
+        r"(?:пять|десять|много)\s+(?:пушей|экранов|уведомлен|раз)",
+    ),
+)
+_PAIN_RES = tuple((kind, re.compile(pattern)) for kind, pattern in PAIN_PATTERNS)
+
+
+def pain_kinds(sentence: str) -> list[str]:
+    """Kinds of pain or barrier in a reply: страх, непонимание, деньги, доверие, усилия."""
     folded = sentence.casefold().replace("ё", "е")
-    for stem in PAIN_STEMS:
-        for match in re.finditer(re.escape(stem), folded):
-            before = folded[max(0, match.start() - 6) : match.start()]
-            if re.search(r"(?:^|\s)не\s*$", before):
-                continue
-            return True
-    return False
+    kinds = []
+    for kind, pattern in _PAIN_RES:
+        for match in pattern.finditer(folded):
+            if not match.group(0).startswith("не"):
+                before = folded[max(0, match.start() - 6) : match.start()]
+                if re.search(r"(?:^|\s)не\s*$", before) or before.endswith("не"):
+                    continue
+            kinds.append(kind)
+            break
+    return kinds
+
+
+def is_pain(sentence: str) -> bool:
+    return bool(pain_kinds(sentence))
 
 
 def relate(quote: str, claim: str) -> str:
@@ -360,9 +402,20 @@ def analyse(transcript: str, hypotheses: list[dict], *, synthetic: bool) -> dict
     for sentence in sentences_of("\n".join(reply_lines(transcript))):
         if is_service_line(sentence):
             continue
-        quotes.append({"text": sentence, "pain": is_pain(sentence)})
+        kinds = pain_kinds(sentence)
+        quotes.append({"text": sentence, "pain": bool(kinds), "kinds": kinds})
     pains = [item for item in quotes if item["pain"]]
-    key = pains[:3] or quotes[:2]
+    # Key quotes cover different kinds of pain first, then follow the transcript order.
+    key: list[dict] = []
+    seen_kinds: set[str] = set()
+    for item in pains:
+        if len(key) < 3 and not set(item["kinds"]) <= seen_kinds:
+            key.append(item)
+            seen_kinds.update(item["kinds"])
+    for item in pains:
+        if len(key) < 3 and item not in key:
+            key.append(item)
+    key = key or quotes[:2]
     links = []
     for row in hypotheses:
         if row.get("status", "active") != "active":
@@ -402,14 +455,24 @@ def analyse(transcript: str, hypotheses: list[dict], *, synthetic: bool) -> dict
     if not key:
         lines.append("Дословных реплик длиннее 20 знаков нет. Пересказ свидетельством не стал.")
     for item in key:
-        mark = "боль" if item["pain"] else "реплика"
+        mark = "боль: " + ", ".join(item["kinds"]) if item["pain"] else "реплика"
         lines.append(f"- ({mark}) «{item['text']}»")
     lines.extend(["", "## Боли", ""])
     if not pains:
         lines.append("В выдержке нет реплики с болью. Боль не дописана.")
     else:
-        for item in pains[:3]:
-            lines.append(f"- «{item['text']}»")
+        for item in key:
+            lines.append(f"- ({', '.join(item['kinds'])}) «{item['text']}»")
+        counts: dict[str, int] = {}
+        for item in pains:
+            for kind in item["kinds"]:
+                counts[kind] = counts.get(kind, 0) + 1
+        lines.append("")
+        lines.append(
+            "Барьеры по типам (реплик): "
+            + ", ".join(f"{kind} {counts[kind]}" for kind, _pattern in PAIN_PATTERNS if kind in counts)
+            + "."
+        )
     lines.extend(["", "## Гипотезы", ""])
     if not links:
         lines.append("Ни одна реплика не подтверждает и не опровергает гипотезу из реестра.")
@@ -425,7 +488,7 @@ def analyse(transcript: str, hypotheses: list[dict], *, synthetic: bool) -> dict
                 f"«{item['quote']}»"
             )
     lines.append("")
-    return {"quotes": key, "pains": pains[:3], "links": links, "markdown": "\n".join(lines)}
+    return {"quotes": key, "pains": [item for item in key if item["pain"]], "links": links, "markdown": "\n".join(lines)}
 
 
 def render_transcript(
