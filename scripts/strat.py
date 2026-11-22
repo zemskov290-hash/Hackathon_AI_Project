@@ -7,6 +7,8 @@ User-facing messages are Russian. Identifiers and comments are English.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import hashlib
 import json
 import os
@@ -27,9 +29,12 @@ import analysis
 import classify
 import grounding
 import inspect_media
+import routing
 import reply_check
 import interview
 import kb
+import kb_graph
+import media
 import indicators
 import optional_packages
 import evidence_honesty
@@ -429,6 +434,79 @@ def remember_step(project: Path, step_id: str, status: str, inputs: str, detail:
         "detail": detail,
     }
     save_state(project, state)
+
+
+def record_escalation(
+    project: Path | None,
+    step: str,
+    *,
+    kind: str,
+    source: str,
+    target: str,
+    reason: str,
+    stage: int | None = None,
+) -> bool:
+    """Write one routing escalation to state.json and log.md. False if this step already escalated."""
+    if project is None:
+        print(f"ROUTING: проект не выбран, эскалация {source} -> {target} не записана в журнал ({reason}).")
+        return True
+    state = load_state(project)
+    if routing.already_escalated(state, step) is not None:
+        return False
+    rows = state.get("routing_escalations")
+    if not isinstance(rows, list):
+        rows = []
+    rows.append(
+        {
+            "step": step,
+            "kind": kind,
+            "from": source,
+            "to": target,
+            "reason": reason,
+            "at": now_iso(),
+        }
+    )
+    state["routing_escalations"] = rows[-200:]
+    save_state(project, state)
+    if stage is None:
+        stage = int(state.get("stage") or 0)
+    what = "уровень" if kind == "tier" else "инструмент"
+    append_log(
+        project,
+        stage if stage in STAGES else 0,
+        f"Маршрутизация: шаг {step} — {what} {source} заменён на {target}, один повтор",
+        grounds=f"Брак: {reason}. Повтор не тихий: записан здесь и в state.json routing_escalations.",
+    )
+    return True
+
+
+def cmd_reroute(args: argparse.Namespace) -> int:
+    """Agent-reported defect (check errors, poor answer) on a step: escalate once, log the reason."""
+    project = resolve_project(args.project)
+    ensure_write(project)
+    defect = (args.defect or "").strip()
+    if not defect:
+        die("Укажите --defect: что именно не так (ошибки check, пустой поиск, заглушки).")
+    step = (args.step or "").strip()
+    if not step:
+        die("Укажите --step: имя шага, например stage5-options или search:тарифы.")
+    if args.tool:
+        kind, current = "tool", args.tool
+    else:
+        kind, current = "tier", args.from_tier or "cheap"
+    target = routing.escalation_target(kind, current)
+    if target is None:
+        print(f"ROUTING: для {current} нет следующего уровня или запасного инструмента. Решает человек.")
+        return 2
+    if not record_escalation(project, step, kind=kind, source=current, target=target, reason=defect):
+        print(f"ROUTING: шаг {step} уже эскалировался. Второго повтора нет: покажите брак человеку.")
+        return 2
+    print(f"ROUTING: шаг {step}: {current} -> {target}. Причина: {defect}")
+    if kind == "tier":
+        print(f"Повторите шаг один раз: python scripts/strat.py complete --tier {target} ... (или моделью IDE уровня {target}).")
+    else:
+        print(f"Повторите шаг один раз так: {target}.")
+    return 0
 
 
 def project_dir_if_any(token: str) -> Path | None:
@@ -1292,13 +1370,24 @@ def cmd_search(args: argparse.Namespace) -> int:
     step_id = "search:" + hashlib.sha256(query.encode("utf-8")).hexdigest()[:16]
     remember_step(project, step_id, "started", query, None)
     stage = int(load_state(project).get("stage") or 0)
-    try:
-        engine, hits = web_find.search_query(query)
-    except web_find.WebError as exc:
-        remember_step(project, step_id, "failed", query, str(exc))
-        append_log(project, stage, f"Поиск не удался: {query}", grounds=str(exc))
+    engine, hits, failure = _search_once(query)
+    defect = routing.search_defect(len(hits), failure)
+    if defect and not getattr(args, "no_escalate", False):
+        simpler = routing.simplify_query(query)
+        if simpler.casefold() != query.casefold() and record_escalation(
+            project, step_id, kind="tool", source="search", target=f"search «{simpler}»", reason=defect, stage=stage
+        ):
+            print(f"ROUTING: {defect}; один повтор с упрощённым запросом «{simpler}», записан в журнал.")
+            engine2, hits2, failure2 = _search_once(simpler)
+            if hits2 and not failure2:
+                engine, hits, failure, query = engine2, hits2, None, simpler
+        if failure or not hits:
+            print("ROUTING: запасной путь — kb search по локальной базе или fetch по адресу, который дал человек.")
+    if failure:
+        remember_step(project, step_id, "failed", query, failure)
+        append_log(project, stage, f"Поиск не удался: {query}", grounds=failure)
         print(web_find.UNTRUSTED)
-        print(str(exc))
+        print(failure)
         return 1
     text = web_find.format_search(engine, hits)
     remember_step(project, step_id, "done", query, f"{engine}:{len(hits)}")
@@ -1313,6 +1402,14 @@ def cmd_search(args: argparse.Namespace) -> int:
     print(text)
     print(f"Шаг {step_id} записан. Для страницы нужен fetch по адресу из выдачи, не по выдуманному пути.")
     return 0
+
+
+def _search_once(query: str) -> tuple[str, list[dict], str | None]:
+    try:
+        engine, hits = web_find.search_query(query)
+    except web_find.WebError as exc:
+        return "", [], str(exc)
+    return engine, list(hits or []), None
 
 
 def run_pip(argv: list[str]) -> subprocess.CompletedProcess[str]:
@@ -3764,6 +3861,31 @@ def cmd_complete(args: argparse.Namespace) -> int:
     if args.tier and args.role and args.tier != args.role:
         die("--tier и --role указывают разный уровень.")
     project = optional_project(args.project)
+    code, mode, content = _complete_tier(args, tier, prompt, project)
+    defect = routing.completion_defect(mode, content)
+    target = routing.escalation_target("tier", tier)
+    if defect is None or target is None or getattr(args, "no_escalate", False):
+        if defect and target is None and mode != "manual":
+            print(f"ROUTING: брак ({defect}) на уровне {tier}; выше уровня нет, решает человек.")
+        return code
+    step = "complete:" + hashlib.sha256(f"{tier}\n{prompt}".encode("utf-8")).hexdigest()[:16]
+    if not record_escalation(project, step, kind="tier", source=tier, target=target, reason=defect, stage=args.stage):
+        print(f"ROUTING: шаг {step} уже эскалировался; повтор не выполняется, решает человек.")
+        return code
+    print(f"ROUTING: брак на уровне {tier} ({defect}); один повтор на уровне {target}, записан в журнал.")
+    code2, mode2, content2 = _complete_tier(args, target, prompt, project)
+    second = routing.completion_defect(mode2, content2)
+    if second:
+        print(f"ROUTING: уровень {target} тоже дал брак ({second}). Дальше без повторов: решает человек.")
+    if mode2 == "api" and second is None:
+        return code2
+    if mode2 == "manual":
+        print(f"ROUTING: уровень {target} без платного вызова (MODE: manual) — ответьте моделью IDE уровня {target}.")
+    return code
+
+
+def _complete_tier(args: argparse.Namespace, tier: str, prompt: str, project) -> tuple[int, str, str]:
+    """One model call on one tier. Returns (exit code, mode, answer)."""
     key = os.environ.get("STRAT_LLM_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
     if tier == "ide" or not key:
         print("MODE: manual")
@@ -3785,7 +3907,7 @@ def cmd_complete(args: argparse.Namespace) -> int:
             cost=None,
             grounds="MODE: manual. Платный вызов не выполнялся.",
         )
-        return 0
+        return 0, "manual", ""
     model_env = "STRAT_MODEL_STRONG" if tier == "strong" else "STRAT_MODEL_CHEAP"
     model = os.environ.get(model_env)
     if not model:
@@ -3805,7 +3927,7 @@ def cmd_complete(args: argparse.Namespace) -> int:
             cost=None,
             grounds=f"Ключ есть, но не задана {model_env}.",
         )
-        return 0
+        return 0, "manual", ""
     base = os.environ.get("STRAT_LLM_BASE_URL", "https://openrouter.ai/api/v1").rstrip("/")
     body = json.dumps(
         {"model": model, "messages": [{"role": "user", "content": prompt}]},
@@ -3837,7 +3959,7 @@ def cmd_complete(args: argparse.Namespace) -> int:
             cost=None,
             grounds=message,
         )
-        return 1
+        return 1, "error", ""
     choices = payload.get("choices") or []
     content = ""
     if choices:
@@ -3872,7 +3994,7 @@ def cmd_complete(args: argparse.Namespace) -> int:
         cost=cost,
         grounds="Ответ API. Поле cost заполнено только если его прислал провайдер.",
     )
-    return 0
+    return 0, "api", content
 
 
 def _resolve_optional_text(value: str | None, file_value: str | None, label: str, env_name: str) -> str | None:
@@ -4206,6 +4328,124 @@ def _add_inspect_evidence(project: Path, outcome: dict, args: argparse.Namespace
             inspect=outcome["id"],
         )
     )
+
+
+def cmd_trace(args: argparse.Namespace) -> int:
+    """Walk the link graph S -> E -> U -> option -> claim, up (supports) or down (depends)."""
+    project, tokens = take_project(list(args.rest), 1)
+    try:
+        result = kb_graph.trace(project, tokens[0], args.direction, int(args.depth or 6))
+    except ValueError as exc:
+        die(str(exc))
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(kb_graph.format_trace(result))
+    return 0
+
+
+def _rel_or_none(project: Path, path: Path | None) -> str | None:
+    if path is None:
+        return None
+    return inspect_media.rel(project, path)
+
+
+def cmd_media_add(args: argparse.Namespace) -> int:
+    """Audio/video intake: sidecar transcript, local recognizer if installed, else a recorded gap."""
+    project, tokens = take_project(list(args.rest), 1, write=True)
+    try:
+        path = inspect_media.require_inside(project, tokens[0])
+        transcript = inspect_media.require_inside(project, args.transcript) if args.transcript else None
+    except inspect_media.InspectError as exc:
+        die(str(exc))
+    if not path.is_file():
+        die(f"Файл не найден: {tokens[0]}")
+    try:
+        info = media.prepare(project, path, transcript=transcript, allow_auto=not args.no_auto)
+    except media.MediaError as exc:
+        die(str(exc))
+    for note in info["notes"]:
+        print(note)
+    transcript_path = info.get("transcript")
+    inspect_args = argparse.Namespace(
+        rest=[project.name], html=None, image=None, pdf=None,
+        av=str(path), transcript=str(transcript_path) if transcript_path else None,
+        description=None, description_file=None, synthetic=bool(args.synthetic), force=False,
+        claim=None, claim_file=None, quote=None, quote_file=None, etype="fact", confidence="med",
+    )
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        cmd_inspect(inspect_args)
+    output = buffer.getvalue()
+    print(output, end="" if output.endswith("\n") else "\n")
+    found = dict(re.findall(r"^(inspect_id|source_id|report): (\S+)$", output, re.M))
+    inspect_id = found.get("inspect_id")
+    if not inspect_id:
+        die("Разбор записи не зарегистрирован: inspect не вернул inspect_id.")
+    folder = project / "inspect" / inspect_id
+    origin = info.get("origin") or "none"
+    segments: list[dict] = []
+    if transcript_path is not None:
+        segments = media.parse_segments(Path(transcript_path).read_text(encoding="utf-8", errors="replace"))
+        media.write_segments(folder, segments, origin)
+    meta = {
+        "inspect_id": inspect_id,
+        "kind": info["kind"],
+        "status": info["status"],
+        "transcript_origin": origin,
+        "transcript_path": _rel_or_none(project, Path(transcript_path)) if transcript_path else None,
+        "backend": info.get("backend"),
+        "segments": len(segments),
+        "frames": [_rel_or_none(project, frame) for frame in info.get("frames") or []],
+        "synthetic": bool(args.synthetic),
+        "notes": info["notes"],
+    }
+    write_json(folder / "media.json", meta)
+    stage = int(load_state(project).get("stage") or 0)
+    append_log(
+        project,
+        stage,
+        f"media add {path.name}: {info['kind']}, расшифровка {origin}, сегментов {len(segments)}, кадров {len(meta['frames'])}",
+        grounds="; ".join(info["notes"])[:900] or None,
+    )
+    print(f"media: {info['kind']}, статус {info['status']}, происхождение расшифровки: {origin}")
+    if meta["frames"]:
+        print("Кадры для разбора моделью IDE: python scripts/strat.py inspect --image <кадр> --description \"…\"")
+        for frame in meta["frames"][:5]:
+            print(f"- {frame}")
+    if info["status"] != "ready":
+        print("Свидетельства из записи не добавлены: текста нет. Это пробел, а не ошибка.")
+        return 0
+    limit = max(0, int(args.evidence or 0))
+    source_id = found.get("source_id")
+    report_rel = found.get("report") or ""
+    added = 0
+    for seg in segments:
+        if added >= limit or not source_id:
+            break
+        text = str(seg.get("text") or "").strip()
+        if len(text) < 12:
+            continue
+        stamp = media.timecode(seg["start"]) if seg.get("start") is not None else "без метки"
+        origin_label = "автоматическая расшифровка, не проверена человеком" if origin == "auto-transcript" else "расшифровка человека"
+        etype = "synthetic" if args.synthetic else "fact"
+        claim = f"В записи {inspect_id} на {stamp} сказано: {text[:300]} ({origin_label})"
+        evidence_args = argparse.Namespace(
+            project=project.name, claim=claim, claim_file=None, etype=etype, source=source_id,
+            quote=text.splitlines()[0][:300], quote_file=None,
+            locator=f"{report_rel} @ {stamp} ({origin})", locator_file=None,
+            confidence="low" if origin == "auto-transcript" else "med",
+            date=None, depends_on="", analysis=None, metric=None, inspect=inspect_id,
+        )
+        cmd_add_evidence(evidence_args)
+        added += 1
+    if limit == 0 and segments:
+        print(
+            f"Сегментов с таймкодами: {len(segments)} (inspect/{inspect_id}/segments.jsonl). "
+            "Нужные превратите в свидетельства: media add … --evidence N или add-evidence --inspect "
+            f"{inspect_id} --locator \"{report_rel} @ ЧЧ:ММ:СС\"."
+        )
+    return 0
 
 
 def cmd_classify(args: argparse.Namespace) -> int:
@@ -4907,6 +5147,7 @@ def build_parser() -> argparse.ArgumentParser:
     search = sub.add_parser("search", help="найти адреса в открытом поисковике, без ключа")
     search.add_argument("rest", nargs="*", help="[проект] текст запроса")
     search.add_argument("--query-file", help="запрос из файла UTF-8")
+    search.add_argument("--no-escalate", action="store_true", help="без повтора упрощённым запросом")
     search.set_defaults(func=cmd_search)
 
     install = sub.add_parser("install", help="поставить пакет из белого списка после «да» человека")
@@ -5130,7 +5371,16 @@ def build_parser() -> argparse.ArgumentParser:
     complete.add_argument("--prompt-file", help="промпт из файла UTF-8")
     complete.add_argument("--project", help="куда писать журнал вызова; иначе текущий проект, если он один")
     complete.add_argument("--stage", type=int, help="этап журнала; по умолчанию текущий этап проекта")
+    complete.add_argument("--no-escalate", action="store_true", help="не повторять на уровне выше при браке")
     complete.set_defaults(func=cmd_complete)
+
+    reroute = sub.add_parser("reroute", help="брак шага: один записанный повтор уровнем выше или другим инструментом")
+    reroute.add_argument("project", nargs="?")
+    reroute.add_argument("--step", required=True, help="имя шага, например stage5-options")
+    reroute.add_argument("--defect", required=True, help="что не так: ошибки check, пустой поиск, заглушки")
+    reroute.add_argument("--from-tier", choices=("cheap", "strong", "ide"), help="уровень, давший брак (по умолчанию cheap)")
+    reroute.add_argument("--tool", choices=sorted(routing.ALTERNATE_TOOL), help="инструмент, давший брак")
+    reroute.set_defaults(func=cmd_reroute)
 
     classify_cmd = sub.add_parser(
         "classify",
@@ -5169,6 +5419,23 @@ def build_parser() -> argparse.ArgumentParser:
     analyze_cmd.add_argument("--type", dest="etype", default="fact")
     analyze_cmd.add_argument("--confidence", default="med")
     analyze_cmd.set_defaults(func=cmd_analyze)
+
+    trace = sub.add_parser("trace", help="база знаний по связям: на чём держится и что зависит от S/E/U/O")
+    trace.add_argument("rest", nargs="+", help="[проект] узел: S001, E001, U001, O2 или strategy.md:12")
+    trace.add_argument("--direction", choices=("up", "down", "both"), default="both")
+    trace.add_argument("--depth", type=int, default=6)
+    trace.add_argument("--json", action="store_true")
+    trace.set_defaults(func=cmd_trace)
+
+    media_cmd = sub.add_parser("media", help="аудио и видео: расшифровка с таймкодами и честные запасные пути")
+    media_sub = media_cmd.add_subparsers(dest="media_command", required=True)
+    media_add = media_sub.add_parser("add", help="принять запись: готовая расшифровка, локальный whisper или пробел")
+    media_add.add_argument("rest", nargs="+", help="[проект] файл записи внутри проекта")
+    media_add.add_argument("--transcript", help="готовая расшифровка .srt/.vtt/.txt/.md внутри проекта")
+    media_add.add_argument("--no-auto", action="store_true", help="не запускать локальное распознавание")
+    media_add.add_argument("--evidence", type=int, default=0, help="сколько сегментов сразу записать свидетельствами")
+    media_add.add_argument("--synthetic", action="store_true", help="запись синтетическая")
+    media_add.set_defaults(func=cmd_media_add)
 
     inspect_cmd = sub.add_parser("inspect", help="разбор HTML, изображения, PDF или аудио/видео")
     inspect_cmd.add_argument("rest", nargs="*", help="необязательный проект")

@@ -416,6 +416,83 @@ def _bm25(chunks: list[dict], query: str, limit: int) -> list[tuple[float, dict]
     return scored[:limit]
 
 
+RU_SUFFIXES = tuple(
+    sorted(
+        (
+            "иями ями ами ией ией иях ях ах ов ев ей ой ий ый ая яя ое ее ые ие ую юю ом ем им ым "
+            "ого его ому ему ыми ими ость ости остью ение ения ению ением ании ание ания ться тся ешь ет ют ут ит ат ят "
+            "ала ило ала ал ил ла ло ли а я о е ы и у ю ь"
+        ).split(),
+        key=len,
+        reverse=True,
+    )
+)
+EN_SUFFIXES = ("ations", "ation", "ings", "ing", "ers", "er", "ies", "es", "ed", "ly", "s")
+
+# Small, general synonym groups for strategy work. Not tied to any brief.
+SYNONYMS = (
+    ("цена", "стоимость", "тариф", "прайс", "price", "pricing", "плата", "платеж"),
+    ("клиент", "абонент", "пользователь", "покупатель", "customer", "user"),
+    ("отток", "уход", "churn", "отключение"),
+    ("выручка", "доход", "revenue", "arpu"),
+    ("затраты", "расходы", "издержки", "cost", "capex", "opex"),
+    ("конкурент", "соперник", "competitor", "рынок"),
+    ("семья", "семейный", "родитель", "дети", "ребенок", "подросток", "family"),
+    ("безопасность", "защита", "контроль", "security", "safety"),
+    ("рост", "увеличение", "прирост", "growth"),
+    ("подписка", "subscription", "абонемент"),
+)
+
+
+def stem(token: str) -> str:
+    token = token.casefold().replace("ё", "е")
+    if len(token) <= 4:
+        return token
+    suffixes = RU_SUFFIXES if re.search(r"[а-я]", token) else EN_SUFFIXES
+    for suffix in suffixes:
+        if token.endswith(suffix) and len(token) - len(suffix) >= 4:
+            return token[: -len(suffix)]
+    return token
+
+
+def _synonym_stems() -> dict[str, set[str]]:
+    table: dict[str, set[str]] = {}
+    for group in SYNONYMS:
+        stems = {stem(word) for word in group}
+        for item in stems:
+            table.setdefault(item, set()).update(stems)
+    return table
+
+
+def _fuzzy(chunks: list[dict], query: str, limit: int) -> list[tuple[float, dict]]:
+    """Meaning-ish search without packages: stems, synonyms and 5-letter prefixes, idf weighted."""
+    table = _synonym_stems()
+    query_groups: list[set[str]] = []
+    for token in tokenize(query):
+        base = stem(token)
+        group = set(table.get(base, set())) | {base}
+        query_groups.append(group)
+    if not query_groups or not chunks:
+        return []
+    doc_stems = [{stem(t) for t in tokenize(chunk.get("text") or "")} for chunk in chunks]
+    doc_prefixes = [{s[:5] for s in stems if len(s) >= 5} for stems in doc_stems]
+    docs = len(chunks)
+    scored: list[tuple[float, dict]] = []
+    for stems, prefixes, chunk in zip(doc_stems, doc_prefixes, chunks):
+        score = 0.0
+        for group in query_groups:
+            df = sum(1 for other in doc_stems if other & group) or 1
+            idf = math.log(1.0 + docs / df)
+            if stems & group:
+                score += idf
+            elif any(len(g) >= 5 and g[:5] in prefixes for g in group):
+                score += 0.5 * idf
+        if score > 0:
+            scored.append((score, chunk))
+    scored.sort(key=lambda item: (-item[0], str(item[1]["id"])))
+    return scored[:limit]
+
+
 def semantic_available() -> bool:
     try:
         import sentence_transformers  # noqa: F401
@@ -488,18 +565,29 @@ def search(
     if semantic:
         used = embedder if embedder is not None else default_embedder()
         if used is None:
-            method = "bm25"
+            method = "stems"
             note = (
                 "Семантический поиск недоступен: "
                 + optional_packages.missing_message("sentence-transformers")
-                + " Показан полнотекстовый BM25."
+                + " Показан поиск по основам слов и синонимам (без пакетов)."
             )
-            hits = _bm25(chunks, query, limit)
+            hits = _fuzzy(chunks, query, limit)
         else:
             method = "semantic"
-            hits = _semantic(chunks, query, limit, used)
+            try:
+                hits = _semantic(chunks, query, limit, used)
+            except Exception as exc:  # noqa: BLE001 — a broken model must not break search
+                method = "stems"
+                note = f"Семантическая модель не сработала ({type(exc).__name__}). Показан поиск по основам слов."
+                hits = _fuzzy(chunks, query, limit)
     else:
         hits = _bm25(chunks, query, limit)
+        if not hits:
+            fuzzy_hits = _fuzzy(chunks, query, limit)
+            if fuzzy_hits:
+                method = "stems"
+                note = "Точных совпадений слов нет. Показан поиск по основам слов и синонимам."
+                hits = fuzzy_hits
     lines = [
         UNTRUSTED_BANNER,
         "",

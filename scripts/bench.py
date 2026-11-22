@@ -1891,7 +1891,19 @@ def build_parser() -> argparse.ArgumentParser:
     archive_cmd.add_argument("--dest", help="куда класть архив; по умолчанию bench/runs")
     archive_cmd.add_argument("--model-note", default="", help="пометка человека о модели, не показание CLI")
     archive_cmd.set_defaults(func=cmd_archive)
+    case_cmd = sub.add_parser(
+        "case-cost",
+        help="полный кейс: агент против обычного чата, время, токены, рубли по заданной цене (см. docs/comparison.md)",
+    )
+    case_cmd.add_argument("rest", nargs=argparse.REMAINDER, help="проект и флаги scripts/case_compare.py")
+    case_cmd.set_defaults(func=cmd_case_cost)
     return parser
+
+
+def cmd_case_cost(args: argparse.Namespace) -> int:
+    import case_compare
+
+    return case_compare.main(list(args.rest or []))
 
 
 def cmd_archive(args: argparse.Namespace) -> int:

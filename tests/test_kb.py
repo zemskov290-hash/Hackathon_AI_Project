@@ -115,7 +115,7 @@ class KnowledgeBaseTests(unittest.TestCase):
         if importlib.util.find_spec("sentence_transformers") is None:
             fallback = kb.search(self.project, "воскресенье", semantic=True)
             self.assertIn("Семантический поиск недоступен", fallback)
-            self.assertIn("Метод: bm25", fallback)
+            self.assertIn("Метод: stems", fallback)
 
     def test_closed_data_secrets_and_injection_stay_data(self) -> None:
         closed = self.project / "sources" / "closed.md"
