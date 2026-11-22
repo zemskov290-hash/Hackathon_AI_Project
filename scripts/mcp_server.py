@@ -877,6 +877,10 @@ def handle_cost(arguments: dict) -> dict:
         _by_stage, total = strat.aggregate(entries)
         data["total"] = total
         data["estimate_is_not_a_bill"] = True
+        clock = strat.usage_log.journal_minutes(entries)
+        data["journal_minutes"] = round(clock["total"], 1)
+        agent = strat.usage_log.agent_usage(project)
+        data["agent_usage"] = agent["total"] if agent["turns"] else None
     return finish(code, text, data)
 
 

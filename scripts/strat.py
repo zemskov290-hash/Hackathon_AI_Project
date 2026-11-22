@@ -33,6 +33,7 @@ import kb
 import indicators
 import optional_packages
 import source_check
+import usage_log
 import web_find
 
 configure_stdio()
@@ -2811,39 +2812,79 @@ def usage_was_measured(entries: list[dict]) -> bool:
     return False
 
 
-def format_usage(entries: list[dict], total: dict) -> str:
+def format_usage(
+    entries: list[dict], total: dict, project: Path | None = None, agent: dict | None = None
+) -> str:
+    clock = usage_log.journal_minutes(entries)
     minutes = f"минуты {fmt_num(total['minutes'])}"
+    if clock["records"] > 1:
+        minutes += (
+            f" (записал агент); по отметкам времени журнала {usage_log.fmt(clock['total'])} мин"
+            f", пауз длиннее {usage_log.fmt(clock['idle_gap'])} мин: {clock['pauses']}"
+        )
+    if agent is None:
+        agent = usage_log.agent_usage(project) if project is not None else {"turns": []}
+    if agent["turns"]:
+        tokens = agent["total"]
+        return (
+            f"{minutes}. Токены по журналам агента: вход {usage_log.fmt(tokens['input'])}, "
+            f"выход {usage_log.fmt(tokens['output'])}, кэш {usage_log.fmt(tokens['cache_read'])} "
+            f"({len(agent['turns'])} ход.)"
+        )
     if not usage_was_measured(entries):
-        return f"{minutes}. Токены не учитываются в режиме подписки IDE."
+        return (
+            f"{minutes}. Токены не учитываются в режиме подписки IDE: журналов агента с usage нет "
+            "(cost --agent-log)."
+        )
     return (
         f"{minutes}, токены {fmt_num(total['tokens'])}, стоимость {fmt_num(total['cost'])}"
     )
 
 
-def format_cost(project: Path, entries: list[dict], *, show_estimate: bool = True) -> str:
+def format_cost(
+    project: Path,
+    entries: list[dict],
+    *,
+    show_estimate: bool = True,
+    agent_logs: list[str] | None = None,
+) -> str:
     by_stage, total = aggregate(entries)
+    agent = usage_log.agent_usage(project, agent_logs)
     lines = [f"Проект: {project.name}"]
     if not entries:
         lines.append("Затраты не записаны.")
+        lines.extend(usage_log.format_agent_usage(agent))
         if show_estimate:
             lines.extend(format_estimate(entries, 0))
         return "\n".join(lines)
     measured = usage_was_measured(entries)
-    for stage in sorted(by_stage):
-        bucket = by_stage[stage]
+    clock = usage_log.journal_minutes(entries)
+    for stage in sorted(set(by_stage) | set(clock["by_stage"])):
+        bucket = by_stage.get(stage, {"minutes": 0.0, "tokens": 0, "cost": 0.0})
         name = STAGES.get(stage, str(stage))
+        wall = f"; по журналу {usage_log.fmt(clock['by_stage'].get(stage, 0.0))}"
         if measured:
             lines.append(
-                f"Этап {stage} {name}: минуты {fmt_num(bucket['minutes'])}, "
+                f"Этап {stage} {name}: минуты {fmt_num(bucket['minutes'])}{wall}, "
                 f"токены {fmt_num(bucket['tokens'])}, стоимость {fmt_num(bucket['cost'])}"
             )
         else:
-            lines.append(f"Этап {stage} {name}: минуты {fmt_num(bucket['minutes'])}")
-    lines.append(f"Итого: {format_usage(entries, total)}")
+            lines.append(f"Этап {stage} {name}: минуты {fmt_num(bucket['minutes'])}{wall}")
+    lines.append(f"Итого: {format_usage(entries, total, project, agent)}")
+    lines.append(
+        "«минуты» — то, что агент записал в log --minutes; «по журналу» — разница отметок времени "
+        f"соседних записей log.jsonl, паузы длиннее {usage_log.fmt(clock['idle_gap'])} мин не считаются. "
+        "Минуты по журналу относятся к этапу более поздней записи."
+    )
     if measured:
         lines.append("Записанные токены и стоимость — поля журнала, не счёт провайдера.")
+    lines.extend(usage_log.format_agent_usage(agent))
     if show_estimate:
         lines.extend(format_estimate(entries, total["minutes"]))
+        if agent["turns"]:
+            lines.append(
+                "Оценка по символам выше — грубое допущение; при наличии журналов агента верны их числа."
+            )
     return "\n".join(lines)
 
 
@@ -2883,7 +2924,14 @@ def cmd_show(args: argparse.Namespace) -> int:
 
 def cmd_cost(args: argparse.Namespace) -> int:
     project, _tokens = take_project(args.rest, 0)
-    print(format_cost(project, load_log(project), show_estimate=True))
+    print(
+        format_cost(
+            project,
+            load_log(project),
+            show_estimate=True,
+            agent_logs=list(getattr(args, "agent_log", None) or []),
+        )
+    )
     return 0
 
 
@@ -2930,7 +2978,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     )
     entries = load_log(project)
     _by_stage, total = aggregate(entries)
-    print(f"Затраты: {format_usage(entries, total)}")
+    print(f"Затраты: {format_usage(entries, total, project)}")
     print(revision_summary(state))
     options_body = read_text(project / "options.md") or ""
     if "<!-- preliminary -->" in options_body:
@@ -4733,6 +4781,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--estimate",
         action="store_true",
         help="показать оценку по символам и таблице цен; оценка печатается и без флага",
+    )
+    cost.add_argument(
+        "--agent-log",
+        action="append",
+        help=(
+            "журнал хода агента (stream-json или json) или папка с *.jsonl; можно несколько раз. "
+            "Без флага читаются STRAT_AGENT_LOGS и папка agent-logs/ проекта"
+        ),
     )
     cost.set_defaults(func=cmd_cost)
 

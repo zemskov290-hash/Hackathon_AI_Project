@@ -58,6 +58,9 @@ SUBSTANTIVE_NUMBER_FILES = (
     "decisions.md",
 )
 ALLOWED_PROJECT_DIRS = {"sources", "kb", "interviews", "analysis", "inspect"}
+# Turn logs of the agent client (stream-json) for measured tokens and time. Only logs.
+AGENT_LOG_DIR = "agent-logs"
+AGENT_LOG_SUFFIXES = {".jsonl", ".json"}
 CALC_RE = re.compile(
     r"(\d+(?:[.,]\d+)?)\s*[+\-*/×÷]\s*(\d+(?:[.,]\d+)?)\s*=\s*(\d+(?:[.,]\d+)?%?)"
 )
@@ -501,6 +504,8 @@ def review_project_layout(project: Path, add) -> None:
         if not child.is_dir() or child.name.startswith(".") or child.name in ALLOWED_PROJECT_DIRS:
             continue
         files = [path for path in child.rglob("*") if path.is_file()]
+        if child.name == AGENT_LOG_DIR:
+            files = [path for path in files if path.suffix.lower() not in AGENT_LOG_SUFFIXES]
         if not files:
             continue
         shown = ", ".join(path.relative_to(project).as_posix() for path in files[:4])
