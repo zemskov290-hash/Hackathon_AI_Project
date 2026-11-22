@@ -34,6 +34,7 @@ import indicators
 import optional_packages
 import evidence_honesty
 import derivation_check
+import economics_check
 import plan_review
 import source_check
 import tls_fallback
@@ -2695,6 +2696,12 @@ def check_project(project: Path, state: dict | None = None, *, strict: bool = Fa
         add,
         strategy_required=bool(stage_required(state, 6) or promises),
     )
+    registry, registry_error = source_check.load_assumptions(project)
+    if not registry_error:
+        economics_texts = dict(texts)
+        economics_texts["deliverable.md"] = read_text(project / "deliverable.md")
+        economics_check.review_consistency(economics_texts, state, registry, add)
+        economics_check.review_justification(economics_texts, state, registry, add)
 
     low_basis: set[str] = set()
     for name in RECOMMENDATION_FILES:
