@@ -121,6 +121,7 @@ decisions.md  log.md  log.jsonl
 | `reject-revision [проект]` | отклонить пересмотр и не менять выбор |
 | `log [проект] <этап> <сообщение> --minutes --tokens --cost --model --input-chars --output-chars` | дописать `log.md` и `log.jsonl`; символы нужны для оценки, их не путать с полем `--cost` |
 | `cost [проект] --agent-log <файл или папка>` | минуты, которые записал агент, и минуты по отметкам времени `log.jsonl` по этапам; фактические токены (вход, выход, кэш) из журналов хода агента; оценка по `config/model-prices.json` с пометкой, что это не счёт |
+| `python scripts/demo_drive.py --project <id> --turns <папка>` | сценарный прогон демо через cursor-agent: реплики `t1.txt` … `tN.txt`, журнал хода в `agent-logs/` проекта. Останавливается на первом ходе с ошибкой, без итоговой записи `result` или дольше `--turn-timeout`, называет лимит и печатает команду продолжения. `--expect-account` сверяет `agent status`, вход и выход не выполняет |
 | `confirm [проект] brief\|options\|validation` | записать согласие человека; для вариантов нужен `--choice O2` |
 | `advance [проект] <этап>` | закрыть этап, если ворота пройдены |
 | `complete --tier cheap\|strong\|ide` | вызов по `config/routing.json`; без ключа и для `ide` печатает `MODE: manual`. `--role` — прежнее имя для cheap и strong |
@@ -159,6 +160,7 @@ scripts/grounding.py              числа, проверяемые ссылк�
 scripts/derivation_check.py       вывод чисел прогноза: формула, а не только ссылка [U…]
 scripts/plan_review.py            экономика варианта, барьер коммуникации, заглушки, служебные метки
 scripts/usage_log.py              минуты по журналу и токены по журналам ходов агента
+scripts/demo_drive.py             сценарный прогон демо со стопом на первом сбое
 scripts/mcp_server.py             MCP по stdio, те же команды
 scripts/read_material.py          текст из файла, офисные форматы по желанию
 hooks/                            скрипты и как их включить
