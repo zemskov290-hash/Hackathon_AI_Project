@@ -11,9 +11,10 @@ from __future__ import annotations
 import base64
 import os
 import re
+import time
 from html.parser import HTMLParser
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, quote_plus, urljoin, urlparse, urlunparse
+from urllib.parse import parse_qs, quote_plus, urlencode, urljoin, urlparse, urlunparse
 from urllib.request import Request
 
 import tls_fallback
@@ -39,9 +40,16 @@ class WebError(Exception):
         super().__init__(message)
 
 
-def http_get(url: str) -> tuple[int, str]:
-    """Return HTTP status and decoded body. Network failures raise WebError."""
-    request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.1"})
+def http_get(url: str, data: bytes | None = None) -> tuple[int, str]:
+    """Return HTTP status and decoded body. Network failures raise WebError.
+
+    ``data`` turns the request into a form POST (DuckDuckGo's HTML endpoint
+    answers a POST when its GET returns the 202 anti-bot stub).
+    """
+    headers = {"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.1"}
+    if data is not None:
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+    request = Request(url, data=data, headers=headers)
     try:
         with tls_fallback.urlopen(request, timeout=TIMEOUT) as response:
             raw = response.read(LIMIT_BYTES + 1)
@@ -237,6 +245,29 @@ PARSERS = {
     "duckduckgo-lite": parse_duckduckgo_lite,
     "bing": parse_bing_html,
 }
+# Statuses and pages that mean «not now, robot», not «nothing found».
+RETRY_STATUSES = {202, 429, 503}
+ANTI_BOT_RE = re.compile(
+    r"captcha|вы не робот|are you a robot|unusual traffic|anubis|подтвердите, что запросы отправляли вы|"
+    r"verifying your request|anomaly-modal",
+    re.IGNORECASE,
+)
+
+
+def _parser_for(name: str):
+    return PARSERS.get(name[:-5] if name.endswith("-post") else name)
+
+
+def _retry_settings() -> tuple[int, float]:
+    try:
+        retries = max(0, int(os.environ.get("STRAT_SEARCH_RETRIES", "1")))
+    except ValueError:
+        retries = 1
+    try:
+        delay = max(0.0, float(os.environ.get("STRAT_SEARCH_RETRY_DELAY", "2")))
+    except ValueError:
+        delay = 2.0
+    return retries, delay
 
 
 def engine_requests(query: str) -> list[tuple[str, str]]:
@@ -247,39 +278,197 @@ def engine_requests(query: str) -> list[tuple[str, str]]:
         found = []
         for part in raw.split(","):
             name, base = part.split("|", 1)
+            name = name.strip()
+            if name.endswith("-post"):
+                found.append((name, base))
+                continue
             sep = "&" if "?" in base else "?"
-            found.append((name.strip(), f"{base}{sep}q={quoted}"))
+            found.append((name, f"{base}{sep}q={quoted}"))
         return found
     return [
         ("duckduckgo", f"https://html.duckduckgo.com/html/?q={quoted}"),
+        ("duckduckgo-post", "https://html.duckduckgo.com/html/"),
         ("duckduckgo-lite", f"https://lite.duckduckgo.com/lite/?q={quoted}"),
         ("bing", f"https://www.bing.com/search?q={quoted}"),
     ]
 
 
 def search_query(query: str) -> tuple[str, list[dict[str, str]]]:
-    """Try each engine until one returns hits. Does not invent addresses."""
+    """Try each engine until one returns hits. Does not invent addresses.
+
+    A 202/429/503 answer or a captcha page is a refusal of the moment, not an
+    empty result: the same engine is asked again after a pause
+    (``STRAT_SEARCH_RETRIES``, ``STRAT_SEARCH_RETRY_DELAY``), then the next
+    engine. When every engine refuses and the query names a site
+    (``site:beeline.ru`` or ``beeline.ru``), the links published on that
+    site's home page and sitemap are offered instead. Nothing else is guessed.
+    """
     errors: list[str] = []
+    retries, delay = _retry_settings()
     for name, url in engine_requests(query):
-        parser = PARSERS.get(name)
+        parser = _parser_for(name)
         if parser is None:
             errors.append(f"{name}: нет разбора")
             continue
+        data = urlencode({"q": query}).encode("utf-8") if name.endswith("-post") else None
+        for attempt in range(retries + 1):
+            try:
+                status, body = http_get(url, data)
+            except WebError as exc:
+                errors.append(f"{name}: {exc}")
+                break
+            refused = status in RETRY_STATUSES or (status == 200 and ANTI_BOT_RE.search(body[:20000] or "") is not None)
+            if refused:
+                label = f"HTTP {status}" if status != 200 else "страница проверки на робота"
+                if attempt < retries:
+                    time.sleep(delay * (attempt + 1))
+                    continue
+                errors.append(f"{name}: {label}" + (f" (повторов {retries})" if retries else ""))
+                break
+            # An empty 200 page is the same kind of miss as an error status.
+            if status != 200 or not body.strip():
+                errors.append(f"{name}: HTTP {status}")
+                break
+            hits = parser(body)
+            if hits:
+                return name, hits
+            errors.append(f"{name}: пустая выдача")
+            break
+    host = query_host(query)
+    if host:
         try:
-            status, body = http_get(url)
+            hits = site_pages(host, query)
         except WebError as exc:
-            errors.append(f"{name}: {exc}")
-            continue
-        # 202 is an anti-bot stub, not a result page. An empty 200 page is the same kind of miss.
-        if status != 200 or not body.strip():
-            errors.append(f"{name}: HTTP {status}")
-            continue
-        hits = parser(body)
+            errors.append(f"сайт {host}: {exc}")
+            hits = []
         if hits:
-            return name, hits
-        errors.append(f"{name}: пустая выдача")
+            return f"опубликованные ссылки {host}", hits
+        errors.append(f"сайт {host}: на главной и в sitemap нет подходящих ссылок")
     detail = "; ".join(errors) if errors else "движки не настроены"
     raise WebError(f"Поиск не вернул адресов. {detail}. Адреса не выдумываются.")
+
+
+HOST_RE = re.compile(r"(?:site:)?((?:[a-z0-9-]+\.)+[a-z]{2,})(?![\w.-])", re.IGNORECASE)
+TRANSLIT = str.maketrans(
+    {
+        "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e", "ж": "zh", "з": "z",
+        "и": "i", "й": "y", "к": "k", "л": "l", "м": "m", "н": "n", "о": "o", "п": "p", "р": "r",
+        "с": "s", "т": "t", "у": "u", "ф": "f", "х": "h", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "sch",
+        "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+    }
+)
+QUERY_STOP = {"site", "сайт", "условия", "тариф", "тарифы", "для", "как", "что", "www", "http", "https"}
+
+
+def query_host(query: str) -> str:
+    match = HOST_RE.search(query)
+    if not match:
+        return ""
+    host = match.group(1).casefold()
+    if "." not in host or host.endswith((".html", ".htm", ".php")):
+        return ""
+    return host
+
+
+def _query_stems(query: str, host: str) -> set[str]:
+    rest = query.casefold().replace(host, " ").replace("site:", " ")
+    stems: set[str] = set()
+    for word in re.findall(r"[0-9a-zа-яё]{3,}", rest):
+        if word in QUERY_STOP:
+            continue
+        stems.add(word[:5])
+        latin = word.translate(TRANSLIT)
+        if latin != word:
+            stems.add(latin[:5])
+    return stems
+
+
+def _text_stems(text: str) -> set[str]:
+    words = re.findall(r"[0-9a-zа-яё]{3,}", text.casefold())
+    stems = set()
+    for word in words:
+        stems.add(word[:5])
+        stems.add(word.translate(TRANSLIT)[:5])
+    return stems
+
+
+class _LabelledAnchorParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.links: list[tuple[str, str]] = []
+        self._href: str | None = None
+        self._buf: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag != "a":
+            return
+        href = _attr(attrs, "href")
+        if href and not href.startswith(("#", "mailto:", "javascript:", "tel:")):
+            self._href = href
+            self._buf = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "a" and self._href is not None:
+            self.links.append((self._href, re.sub(r"\s+", " ", "".join(self._buf)).strip()))
+            self._href = None
+
+    def handle_data(self, data: str) -> None:
+        if self._href is not None:
+            self._buf.append(data)
+
+
+def site_pages(host: str, query: str, limit: int = 8) -> list[dict[str, str]]:
+    """Links published on the host's home page and sitemaps that share a word with the query."""
+    stems = _query_stems(query, host)
+    if not stems:
+        return []
+    origin = f"https://{host}"
+    published: list[tuple[str, str]] = []
+    status, body = http_get(origin + "/")
+    if status == 200 and body:
+        parser = _LabelledAnchorParser()
+        parser.feed(body)
+        parser.close()
+        for href, label in parser.links:
+            published.append((_clean_url(urljoin(origin + "/", href)), label))
+    sitemaps = [origin + "/sitemap.xml"]
+    try:
+        robots_status, robots = http_get(origin + "/robots.txt")
+    except WebError:
+        robots_status, robots = 0, ""
+    if robots_status == 200 and robots:
+        sitemaps = robots_sitemaps(robots) or sitemaps
+    for site in sitemaps[:2]:
+        try:
+            map_status, xml = http_get(site)
+        except WebError:
+            continue
+        if map_status == 200 and xml:
+            published.extend((loc, "") for loc in sitemap_locs(xml) if not loc.endswith(".xml"))
+    ranked: list[tuple[int, str, str]] = []
+    seen: set[str] = set()
+    for url, label in published:
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"}:
+            continue
+        netloc = parsed.netloc.casefold()
+        if netloc != host and not netloc.endswith("." + host):
+            continue
+        if any(parsed.path.casefold().endswith(item) for item in SKIP_SUFFIXES):
+            continue
+        key = url.rstrip("/")
+        if key in seen:
+            continue
+        score = len(stems & (_text_stems(parsed.path.replace("-", " ").replace("_", " ")) | _text_stems(label)))
+        if score <= 0:
+            continue
+        seen.add(key)
+        ranked.append((score, url, label))
+    ranked.sort(key=lambda item: (-item[0], item[1]))
+    return [
+        {"title": label or url, "url": url, "snippet": "ссылка опубликована на главной или в sitemap сайта"}
+        for _score, url, label in ranked[:limit]
+    ]
 
 
 def path_words(url: str) -> set[str]:

@@ -68,10 +68,11 @@ class ParseTests(unittest.TestCase):
             if previous is not None:
                 os.environ["STRAT_SEARCH_BASES"] = previous
         names = [name for name, _url in requests]
-        self.assertEqual(names, ["duckduckgo", "duckduckgo-lite", "bing"])
+        self.assertEqual(names, ["duckduckgo", "duckduckgo-post", "duckduckgo-lite", "bing"])
         self.assertTrue(requests[0][1].startswith("https://html.duckduckgo.com/html/?q="))
-        self.assertTrue(requests[1][1].startswith("https://lite.duckduckgo.com/lite/?q="))
-        self.assertTrue(requests[2][1].startswith("https://www.bing.com/search?q="))
+        self.assertEqual(requests[1][1], "https://html.duckduckgo.com/html/")
+        self.assertTrue(requests[2][1].startswith("https://lite.duckduckgo.com/lite/?q="))
+        self.assertTrue(requests[3][1].startswith("https://www.bing.com/search?q="))
         self.assertIn("Mozilla", web_find.USER_AGENT)
         self.assertNotIn("strat-factory", web_find.USER_AGENT)
 
