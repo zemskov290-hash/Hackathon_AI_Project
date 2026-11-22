@@ -1098,7 +1098,19 @@ def review(project: Path, texts: dict, sources: list[dict], evidence: list[dict]
                 "с тем же текстом. Числа из этих PDF не проверяются постранично, пока слоя нет.",
             )
         else:
-            add("tooling", optional_packages.missing_message("pypdf") + " Источники: " + listed)
+            # A missing optional package is a gap of this machine, not a defect
+            # of the project. Numbers that may come from these PDFs are reported
+            # below as unverified warnings, not as errors.
+            add(
+                "tooling",
+                optional_packages.missing_message("pypdf")
+                + " Источники: "
+                + listed
+                + ". Пока пакета нет, числа, которые могут идти из этих PDF, не проверены "
+                "(предупреждения number-unverified), но и не считаются ошибкой. "
+                "Без пакета достаточно файла *-extract.txt рядом с PDF.",
+                warning=True,
+            )
     for name, text in documents.items():
         if name != "brief.md":
             _review_years(name, text, allowed_years, add)
@@ -1327,6 +1339,11 @@ def _review_numbers(
     unreadable_pdfs: set[str] | None = None,
 ) -> None:
     label_list = registry_labels(project)
+    # Without pypdf a PDF source is unknown, not empty: a number that may sit
+    # in it cannot be called missing. With pypdf an empty layer stays an error.
+    unverifiable_pdfs = (
+        set(unreadable_pdfs or ()) if not optional_packages.present("pypdf") else set()
+    )
     for lineno, sentence, marker_context in _units_with_marker(text):
         citations = list(CITE_RE.finditer(sentence))
         labels = []
@@ -1442,6 +1459,7 @@ def _review_numbers(
                 source_quantities,
                 add,
                 marker_context=marker_context,
+                unverifiable=unverifiable_pdfs,
             )
 
 
@@ -1513,7 +1531,19 @@ def _report_missing(
     source_quantities,
     add,
     marker_context: str = "",
+    unverifiable: set[str] | None = None,
 ) -> None:
+    unknown = [sid for sid in source_ids if sid and unverifiable and sid in unverifiable]
+    if unknown and not assumption_ids and not _any_marker(sentence, marker_context):
+        shown = ", ".join(f"[{sid}]" for sid in dict.fromkeys(unknown))
+        add(
+            "number-unverified",
+            f"{name}:{lineno}: число {token} не проверено: текст PDF {shown} не прочитан на этой "
+            "машине (нет пакета pypdf). Это не ошибка проекта; поставьте pypdf после «да» "
+            f"человека или положите *-extract.txt рядом с PDF. ({_snippet(sentence)})",
+            warning=True,
+        )
+        return
     hint = ""
     unread = []
     for source_id in source_ids:

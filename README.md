@@ -61,6 +61,7 @@ python scripts/strat.py resume projects/_example
 
 - файл `.env` по образцу `.env.example` — совместимый с OpenRouter API, если нужна маршрутизация дешёвой и сильной модели и точный расход. Без ключа `strat complete` отвечает `MODE: manual` и денег не тратит;
 - пакеты `pypdf`, `python-docx`, `openpyxl`, `pandas`, `matplotlib`, `sentence-transformers` — чтение pdf, docx и xlsx, график и семантический поиск. CSV и JSON считаются без них. Если пакета нет, `check`, `doctor`, `read_material` и `inspect` называют его и просят спросить человека. Ставит только `python scripts/strat.py install <проект> <пакет> --confirmed` после явного «да», версия не ниже границы в `requirements.txt`. Уже установленная совместимая версия не понижается. Голый `pip` запрещён.
+  Без `pypdf` `check` не читает текст PDF-источника. Числа, которые могут идти из такого PDF, он помечает предупреждением `number-unverified` и не считает ошибкой; рядом стоит одно предупреждение `[tooling]` с командой установки. Полная сверка чисел демо-проекта с PDF-брифом требует `pypdf` или файла `<имя>-extract.txt` рядом с PDF. Шум pypdf о починенных ссылках внутри файла («Ignoring wrong pointing object») в вывод не попадает.
 
 Проверка окружения: `python scripts/strat.py doctor`. В строке «Вывод» должно быть `utf-8`: CLI само переключает stdout, отдельная переменная `PYTHONIOENCODING` не нужна. В строке «MCP» должно быть «сервер ответил на initialize».
 

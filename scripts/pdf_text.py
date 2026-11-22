@@ -8,7 +8,19 @@ that sit far apart become the next column.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+
+# pypdf reports recoverable damage in the cross-reference table
+# ("Ignoring wrong pointing object 6 0 (offset 0)") through the logging
+# module. The text is still read; the lines only flood check and status.
+# Real failures still raise and are reported as PdfFailed.
+PYPDF_LOGGER = "pypdf"
+
+
+def quiet_pypdf() -> None:
+    """Keep pypdf warnings about repaired objects out of stdout and stderr."""
+    logging.getLogger(PYPDF_LOGGER).setLevel(logging.ERROR)
 
 # A gap wider than this, in PDF points, starts another cell. A space inside
 # a word or between two words of one header is narrower.
@@ -101,6 +113,7 @@ class PdfFailed(Exception):
 
 def read_pdf_pages(path: Path) -> list[str]:
     """One string per page: the text layer plus a table rebuilt from positions."""
+    quiet_pypdf()
     try:
         from pypdf import PdfReader
     except ImportError as exc:
